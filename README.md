@@ -26,20 +26,30 @@ upaljen.** Radi na iPhone-u i Androidu kroz browser — dodaš na Home Screen i 
 
 > Ovi ključevi **nisu tajna** — Firebase ih po dizajnu šalje browseru. Bazu štite pravila iz koraka 3.
 
-## 2. Objavljivanje na GitHub Pages
+## 2. Sajt
 
-```bash
-git init && git add -A && git commit -m "arena"
-```
+Objavljeno je na **https://kostaking11.github.io/arena/** — to je link koji šalješ društvu.
+Repo: `KostaKing11/arena`, Pages servira granu `main`, folder `/docs`.
 
-```bash
-git remote add origin https://github.com/kostaking11/arena.git && git push -u origin main
-```
-
-Onda na GitHubu: **Settings → Pages → Source: Deploy from a branch → Branch: `main`, folder: `/docs`** → Save.
-
-Za minut-dva sajt je na `https://kostaking11.github.io/arena/`. Pošalji taj link društvu.
 GitHub Pages je automatski HTTPS, što je **obavezno** da bi iPhone uopšte dao lokaciju.
+
+Svaka izmena ide živo za minut-dva:
+
+```bash
+git add -A && git commit -m "sta si menjao" && git push
+```
+
+### Opciono, ali preporučeno: ograniči API ključ
+
+Repo je javan (Pages na besplatnom nalogu to traži), pa je i Firebase config vidljiv. Ključ
+sam po sebi nije tajna, ali pošto je anonimna prijava uključena, ko god ga nađe može da se
+prijavi i dira bazu. Da to suziš:
+
+[console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
+→ izaberi projekat `igre-gladi-irl` → klikni na „Browser key" → **Application restrictions →
+Websites** → dodaj `kostaking11.github.io/*` i `localhost:3000/*` → Save.
+
+Posle toga ključ radi samo sa tvog sajta.
 
 ---
 
