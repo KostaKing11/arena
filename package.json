@@ -5,6 +5,7 @@
   "main": "serve.js",
   "scripts": {
     "dev": "node serve.js",
+    "icons": "node tools/make-icons.js",
     "emu": "firebase emulators:start --only database,auth --project demo-arena",
     "test": "node test/simulate.js",
     "test:fb": "node test/integration.js",

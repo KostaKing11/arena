@@ -53,7 +53,28 @@ Posle toga ključ radi samo sa tvog sajta.
 
 ---
 
-## 3. Kako se igra
+## 3. Instalacija na telefon
+
+Nije App Store, ali izgleda i ponaša se isto — ikona na početnom ekranu, bez adresne trake.
+
+- **Android / Chrome:** otvori link, pa tapni **⬇ Instaliraj kao aplikaciju** na početnom ekranu.
+  Chrome ume i sam da ponudi „Instaliraj aplikaciju" u meniju ⋮.
+- **iPhone / Safari:** tapni **Podeli** (kvadratić sa strelicom, dole) → **Dodaj na početni ekran**.
+  App ti to sam napiše kad te vidi na iPhone-u. *Mora Safari* — Chrome na iPhone-u to ne ume.
+
+Instalirana verzija radi i kad signal zabaguje: `docs/sw.js` drži kod i biblioteke u kešu,
+a uvek prvo pokušava mrežu da ne bi igrao sa starim kodom. Mape i baza se namerno **ne** keširaju.
+
+Ikone se prave iz koda, bez ijedne biblioteke — ako hoćeš druge boje, promeni `BG`/`GOLD`
+u `tools/make-icons.js` i pokreni:
+
+```bash
+npm run icons
+```
+
+> Ako menjaš kod, podigni `VERSION` u `docs/sw.js` da se stari keš obriše kod svih.
+
+## 4. Kako se igra
 
 1. **Domaćin** otvori link → *Napravi arenu* → dobije kod od 5 slova.
 2. Ostali otvore isti link → upišu kod → *Uđi*.
@@ -80,7 +101,7 @@ Posle toga ključ radi samo sa tvog sajta.
 
 ---
 
-## 4. Testiranje bez izlaska napolje
+## 5. Testiranje bez izlaska napolje
 
 U čekaonici imaš **⚡ Test arena** — mala arena oko tvoje lokacije, 5 botova i **simulacija GPS-a**.
 Tapneš po mapi i teleportuješ se (ili hodaš tamo brzinom 1,5 m/s ako u ⋯ → Podešavanja uključiš
@@ -121,11 +142,14 @@ Ako uz to pustiš i emulator, otvori `http://localhost:3000/?emu=1` da ne diraš
 
 ---
 
-## 5. Šta je gde
+## 6. Šta je gde
 
 ```
 docs/                     ← ovo GitHub Pages servira
   index.html              svi ekrani
+  manifest.json           ime, boje i ikone instalirane aplikacije
+  sw.js                   service worker: omogucava "Instaliraj" i rad bez signala
+  icons/                  PNG ikone (pravi ih tools/make-icons.js)
   css/style.css
   js/engine/rules.js      SVA PRAVILA (borba, plen, događaji) — čista logika, bez mreže
   js/net-firebase.js      Firebase sloj: sve što ne može da se predvidi
@@ -136,7 +160,10 @@ docs/                     ← ovo GitHub Pages servira
   js/i18n.js              srpski / engleski
   js/firebase-config.js   ← tvoj config ide ovde
 firebase-rules.json       pravila baze (nalepi u Firebase konzolu)
+tools/make-icons.js       generator PNG ikona, bez biblioteka
 test/simulate.js          30 provera pravila + cela partija sa 10 botova
+test/integration.js       40 provera Firebase sloja protiv emulatora
+test/verify-live.js       provera da je pravi Firebase projekat ispravno podesen
 serve.js                  lokalni statični server
 server/                   prva verzija sa Node serverom. Više se ne koristi i ne može da se
                           pokrene (servirala je folder public/ koji je zamenjen sa docs/).
@@ -153,7 +180,7 @@ predvideti: gde je ko, ko je šta uzeo, i šta se dešava u borbama.
 Borbu presuđuje čista funkcija (`resolveRound`) koju oba telefona izvrše nezavisno i dobiju isti
 rezultat, a upis je zaštićen transakcijom da runda ne bi bila odigrana dvaput.
 
-## 6. Ograničenja — pročitaj ovo
+## 7. Ograničenja — pročitaj ovo
 
 - **Nema zaštite od varanja.** Bez servera, svaki telefon vidi celu bazu, pa neko ko otvori
   browser konzolu može da vidi gde su svi. Za tebe i društvo je to u redu; ako ikad budeš
@@ -170,7 +197,7 @@ rezultat, a upis je zaštićen transakcijom da runda ne bi bila odigrana dvaput.
   Partija od sat vremena sa 12 ljudi troši oko 20 MB. Nećeš ni prići limitu.
 - Sobe starije od 24h se brišu same kad neko napravi novu.
 
-## 7. Bezbednost, ozbiljno
+## 8. Bezbednost, ozbiljno
 
 Igrači trče napolju gledajući u telefon. Dogovorite se unapred gde su granice arene (ne preko
 prometnih ulica), da se ne ulazi na privatne posede, i da niko ne trči po mraku tamo gde može da

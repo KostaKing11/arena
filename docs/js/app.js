@@ -34,6 +34,8 @@ window.addEventListener('DOMContentLoaded', () => {
   wire();
   $('nameInput').value = localStorage.getItem('arena.name') || '';
   $('simToggle').checked = App.sim;
+  registerSW();
+  refreshInstallUI();
 
   Net.on('open', () => { })
     .on('down', () => toast(T('lost'), 'bad'))
@@ -83,8 +85,17 @@ function wire() {
   ['pointerdown', 'keydown'].forEach((e) =>
     document.addEventListener(e, () => Sfx.unlock(), { once: true }));
 
-  $('btnLang').onclick = toggleLang;
-  $('btnLang2').onclick = toggleLang;
+  const relang = () => { toggleLang(); refreshInstallUI(); };
+  $('btnLang').onclick = relang;
+  $('btnLang2').onclick = relang;
+
+  $('btnInstall').onclick = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    try { await installPrompt.userChoice; } catch { /* korisnik zatvorio dijalog */ }
+    installPrompt = null;
+    refreshInstallUI();
+  };
 
   $('btnCreate').onclick = () => {
     const n = name$(); if (!n) return toast(T('needName'), 'bad');
@@ -570,6 +581,57 @@ const Sfx = (() => {
     alarm() { tone(440, 660, 0.25, 'square', 0.18); },
   };
 })();
+
+/* ───────────────────── instalacija na telefon (PWA) ─────────────────────
+   Chrome/Android javi `beforeinstallprompt` i onda pokažemo svoje dugme.
+   iPhone taj događaj nema — tamo se dodaje ručno preko Podeli menija. */
+let installPrompt = null;
+
+const isStandalone = () =>
+  window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+const isIOS = () =>
+  /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+function refreshInstallUI() {
+  const btn = $('btnInstall'), hint = $('iosHint');
+  if (!btn || !hint) return;
+  if (isStandalone()) { btn.hidden = true; hint.hidden = true; return; }
+  if (installPrompt) { btn.hidden = false; hint.hidden = true; return; }
+  btn.hidden = true;
+  hint.hidden = !isIOS();
+  if (isIOS()) hint.innerHTML = T('iosInstall');
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  refreshInstallUI();
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  refreshInstallUI();
+  toast(T('installed'), 'good');
+});
+
+function registerSW() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+    .then((reg) => {
+      reg.addEventListener('updatefound', () => {
+        const sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener('statechange', () => {
+          // nova verzija stigla dok si na sajtu — preuzmi je, ali ne prekidaj partiju
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+            sw.postMessage('SKIP_WAITING');
+            toast(T('updateReady'));
+          }
+        });
+      });
+    })
+    .catch(() => { /* bez SW app radi normalno, samo nema ponude za instalaciju */ });
+}
 
 /* ───────────────────────── ekran da ne zaspi ───────────────────────── */
 let wakeLock = null;
