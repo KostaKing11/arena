@@ -1,0 +1,46 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "rooms": {
+      ".indexOn": ["createdAt"],
+
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "$code.length == 5",
+
+        "createdAt":  { ".validate": "newData.isNumber()" },
+        "hostId":     { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "phase":      { ".validate": "newData.val() == 'lobby' || newData.val() == 'running'" },
+        "seed":       { ".validate": "newData.isString() && newData.val().length <= 16" },
+        "startedAt":  { ".validate": "newData.isNumber()" },
+        "finaleAt":   { ".validate": "newData.isNumber()" },
+
+        "cfg": {
+          "radius0":   { ".validate": "newData.isNumber() && newData.val() >= 60 && newData.val() <= 5000" },
+          "lootCount": { ".validate": "newData.isNumber() && newData.val() >= 4 && newData.val() <= 80" },
+          "deploySec": { ".validate": "newData.isNumber() && newData.val() >= 20 && newData.val() <= 900" }
+        },
+
+        "players": {
+          "$pid": {
+            "name": { ".validate": "newData.isString() && newData.val().length <= 16" },
+            "hp":   { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 400" },
+            "lat":  { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
+            "lng":  { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" }
+          }
+        },
+
+        "feed": {
+          "$k": {
+            "sr":  { ".validate": "newData.isString() && newData.val().length <= 300" },
+            "en":  { ".validate": "newData.isString() && newData.val().length <= 300" },
+            "ts":  { ".validate": "newData.isNumber()" }
+          }
+        }
+      }
+    }
+  }
+}

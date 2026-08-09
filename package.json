@@ -1,0 +1,18 @@
+{
+  "name": "arena-irl",
+  "version": "0.1.0",
+  "description": "Hunger Games IRL - GPS arena game (staticni sajt + Firebase Realtime Database)",
+  "main": "serve.js",
+  "scripts": {
+    "dev": "node serve.js",
+    "emu": "firebase emulators:start --only database,auth --project demo-arena",
+    "test": "node test/simulate.js",
+    "test:fb": "node test/integration.js",
+    "test:live": "node test/verify-live.js"
+  },
+  "devDependencies": {
+    "firebase": "^12.17.1",
+    "firebase-tools": "^15.0.0"
+  },
+  "private": true
+}
