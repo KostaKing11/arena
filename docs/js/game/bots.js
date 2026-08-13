@@ -1,8 +1,16 @@
 /* Botovi za `/arena/test` (§21). Vodi ih domaćinov telefon.
-   Hodaj ka nasumičnoj tački 1,4 m/s, skreni ka predmetu u blizini,
-   napadni igrača na 20 m, beži ispod 30 HP. */
+   Hodaj 1,4 m/s, skreni ka predmetu u blizini, napadni igrača, beži ispod 30 HP.
+
+   Brojke ispod su NAMERNO agresivnije od §21 (koji kaže „napadni na 20 m"):
+   botovi postoje samo da bi se igra mogla isprobati sama, a sa lutanjem po
+   nasumičnim tačkama i čekanjem da im neko priđe do borbe se skoro nikad nije
+   stizalo. Ovo ne menja pravila prave partije — botovi u njoj ne postoje. */
 const Bots = (() => {
   'use strict';
+  const HUNT_M = 120;        // koliko daleko bot traži plen
+  const ATTACK_M = 30;       // na kojoj razdaljini kreće borba
+  const THINK_MS = 6000;     // pauza pre nego što ponovo razmišlja o napadu
+  const FLEE_HP = 30;        // ispod ovoga se ne lovi, nego beži (§21)
   const S = new Map();
   const NAMES = ['Kato', 'Marvel', 'Glimer', 'Treš', 'Foxface', 'Klov', 'Ruta', 'Brutus',
     'Enobarija', 'Fineas', 'Džoana', 'Bister', 'Vajres', 'Sejder', 'Gloss', 'Kašmir'];
@@ -108,9 +116,23 @@ const Bots = (() => {
       }
       if (d.state === 'PREP') { await Store.ref(`players/${pid}`).update(upd); continue; }
 
-      /* — cilj kretanja — */
+      /* — cilj kretanja —
+         Prvo lov. Botovi su ranije samo lutali ka nasumičnoj tački i čekali da
+         im neko priđe na 20 m, pa se u testu do borbe skoro nikad nije stizalo.
+         Sada aktivno idu ka najbližem igraču u dometu `HUNT_M`. */
       let target = null;
       if (zone && U.dist(pos, zone.center) > zone.radiusM * 0.85) target = zone.center;
+      if (!target && (p.hp || 100) >= FLEE_HP) {
+        let prey = null, pd = 1e9;
+        for (const [qid, q] of Object.entries(P)) {
+          if (qid === pid || q.alive === false || !q.pos) continue;
+          if (q.allianceId && q.allianceId === p.allianceId) continue;
+          const m = U.dist(pos, q.pos);
+          if (m < pd && m < HUNT_M) { pd = m; prey = q; }
+        }
+        // predmet tik uz put je i dalje vredniji od trčanja kroz pola arene
+        if (prey) target = { lat: prey.pos.lat, lng: prey.pos.lng };
+      }
       if (!target) {
         let best = null, bd = 1e9;
         for (const [iid, it] of Object.entries(items)) {
@@ -149,14 +171,14 @@ const Bots = (() => {
       upd.distanceWalkedM = Math.round((p.distanceWalkedM || 0) + stepM);
 
       /* — napad na igrača u blizini — */
-      if ((p.hp || 100) >= 30 && d.now > (b.thinkAt || 0)) {
+      if ((p.hp || 100) >= FLEE_HP && d.now > (b.thinkAt || 0)) {
         for (const [qid, q] of Object.entries(P)) {
           if (qid === pid || q.alive === false || q.fightId || q.chaseId || !q.pos) continue;
           if (q.allianceId && q.allianceId === p.allianceId) continue;
           const m = U.dist(np, q.pos);
-          if (m > 20) continue;
+          if (m > ATTACK_M) continue;
           if (Clock.now() - ((p.lastFight || {})[qid] || 0) < R.FIGHT_COOLDOWN_MS) continue;
-          b.thinkAt = d.now + 20000;
+          b.thinkAt = d.now + THINK_MS;
           const band = R.distanceBand(m, false);
           if (band < 0) break;
           const t1 = await Store.ref(`players/${qid}/fightId`).transaction((c) => (c == null ? 'pending' : undefined));

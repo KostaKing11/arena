@@ -484,6 +484,12 @@ const UI = (() => {
   }
 
   /* ═══════════════ PREP faza: idi na startnu tačku (§4) ═══════════════ */
+  /* Ekran pripreme se osvežava svake sekunde. Ako se pri tom prepiše ceo
+     `#deployBody`, kartica klase i sastav arene se iznova crtaju i vidno
+     trepere. Zato skelet ide jednom, a otkucaj menja samo brojke, ugao
+     strelice i stanje dugmeta. */
+  let deployKey = null;
+
   function renderDeploy(d) {
     const me = d.me;
     if (!me) return;
@@ -497,6 +503,24 @@ const UI = (() => {
     const brg = sp && pos ? U.bearing(pos, sp) : 0;
     const rot = Compass.heading != null ? brg - Compass.heading : brg;
 
+    const key = `${me.classId}|${LANG}|${!!Store.meta().census}|${App.TEST}`;
+    if (deployKey !== key) { deployKey = key; buildDeploy(me); }
+
+    $('#depCountLbl').textContent = meta.countdownAtMs ? T('startingIn') : T('prepCountdown');
+    $('#depCount').textContent = U.mmss(left);
+    $('#depArrow').style.transform = `rotate(${rot}deg)`;
+    const dn = $('#depDist');
+    dn.textContent = dist != null ? fmtDist(dist) : '—';
+    dn.className = 'prep-dist' + (close ? ' close' : '');
+    const b = $('#btnArrived');
+    b.disabled = !(close && !me.arrived);
+    b.textContent = me.arrived ? T('arrivedDone') : close ? T('arrivedBtn') : T('arrivedLocked');
+    const w = $('#btnWalkStart');
+    if (w) show(w, !!sp && !me.arrived);
+  }
+
+  function buildDeploy(me) {
+    const census = Store.meta().census;
     $('#deployBody').innerHTML = `
       ${me.classId ? `<div class="class-card">
         <div>${icon(CLASS_ICON[me.classId] || 'user', { size: 56 })}</div>
@@ -506,29 +530,30 @@ const UI = (() => {
         <div class="chip gold" style="margin-top:var(--s3)">${icon(WEAPON_ICON[R.CLASSES[me.classId].weapon], { size: 16 })}${esc(weaponName(R.CLASSES[me.classId].weapon))}</div>
       </div>` : ''}
       <div class="card center stack">
-        <div class="tiny upper dim">${esc(meta.countdownAtMs ? T('startingIn') : T('prepCountdown'))}</div>
-        <div class="display" style="font-size:var(--fs-3xl);color:var(--ember)">${U.mmss(left)}</div>
+        <div class="tiny upper dim" id="depCountLbl"></div>
+        <div class="display" id="depCount" style="font-size:var(--fs-3xl);color:var(--ember)"></div>
       </div>
       <div class="card">
         <div class="prep-nav">
           <div class="tiny upper dim">${esc(T('goToStart'))}</div>
-          <div class="prep-arrow" style="transform:rotate(${rot}deg)">${icon('navigation', { size: 84 })}</div>
-          <div class="prep-dist ${close ? 'close' : ''}">${dist != null ? fmtDist(dist) : '—'}</div>
+          <div class="prep-arrow" id="depArrow">${icon('navigation', { size: 84 })}</div>
+          <div class="prep-dist" id="depDist"></div>
         </div>
-        <button class="action-btn ${close ? '' : ''}" id="btnArrived" ${close && !me.arrived ? '' : 'disabled'}>
-          ${me.arrived ? esc(T('arrivedDone')) : close ? esc(T('arrivedBtn')) : esc(T('arrivedLocked'))}
-        </button>
-        ${App.TEST && sp && !me.arrived ? `<button class="btn ghost full" id="btnWalkStart"
+        <button class="action-btn" id="btnArrived" disabled></button>
+        ${App.TEST ? `<button class="btn ghost full" id="btnWalkStart" hidden
           style="margin-top:var(--s2)">${icon('run', { size: 20 })}<span>${esc(T('testWalkStart'))}</span></button>` : ''}
       </div>
-      ${Store.meta().census ? `<div class="card"><div class="card-title">${esc(T('arenaComposition'))}</div>
-        <div class="row wrap">${Object.entries(Store.meta().census).map(([k, v]) =>
+      ${census ? `<div class="card"><div class="card-title">${esc(T('arenaComposition'))}</div>
+        <div class="row wrap">${Object.entries(census).map(([k, v]) =>
           `<span class="chip">${icon(CLASS_ICON[k], { size: 14 })}${v}× ${esc(clsName(k))}</span>`).join('')}</div></div>` : ''}`;
-    const b = $('#btnArrived');
-    if (b) b.onclick = () => { Store.updateMe({ arrived: true }); Haptics.fire('pickup'); };
+
+    $('#btnArrived').onclick = () => { Store.updateMe({ arrived: true }); Haptics.fire('pickup'); };
     // Bez ovoga se u testu do startne tačke ne stiže — a bez nje partija ne kreće.
     const w = $('#btnWalkStart');
-    if (w) w.onclick = () => { TestWalk.goTo(sp); toast(T('testWalkStart'), 'gold', 'run'); };
+    if (w) w.onclick = () => {
+      const sp = (Store.me() || {}).startPos;
+      if (sp) { TestWalk.goTo(sp); toast(T('testWalkStart'), 'gold', 'run'); }
+    };
   }
 
   /* ═══════════════ ekran igre ═══════════════ */
@@ -633,14 +658,20 @@ const UI = (() => {
     if (amap) {
       if (pos) amap.setMe(pos, Compass.heading);
       if (d.zone) amap.drawZone(d.zone, d.cfg);
-      amap.drawPlayers(visiblePlayers(d));
+      amap.drawPlayers(visiblePlayers(d, true));
       amap.drawItems(Items.visible(d), null);
       amap.drawFire(d.firewall);
       amap.drawWasps(d.wasps);
     }
   }
 
-  function visiblePlayers(d) {
+  /* Ko se uopšte vidi na mapi (§5).
+     Pravilo je usko namerno: protivnika NE vidiš. Vide se samo saveznici, oni
+     koje si sam otkrio (traker, alarm, durbin), i — ako si Strelac — igrači u
+     tvom dometu vida. Snagator je „vidljiv svima" samo na PUNOJ mapi, ne i na
+     minimapi; ranije je iskakao i na minimapi, pa je izgledalo kao da mapa
+     odaje protivnike svima. */
+  function visiblePlayers(d, fullMap) {
     const me = d.me, pos = Geo.pos;
     const out = [];
     const now = d.now;
@@ -657,7 +688,7 @@ const UI = (() => {
       if (cls.blindToMap) continue;                                  // Senka nikoga ne vidi (§5)
       if (p.classId === 'shadow') continue;                          // Senku niko ne vidi
       if (p.hiddenUntilMs > now) continue;
-      const strongVisible = (R.CLASSES[p.classId] || {}).alwaysVisible;
+      const strongVisible = fullMap && (R.CLASSES[p.classId] || {}).alwaysVisible;
       const revealed = p.revealedUntilMs > now || (p.trackedBy === Store.myId && p.trackedUntilMs > now);
       if (strongVisible || revealed || (d.state === 'FINAL_TWO')) { out.push({ id: pid, lat: p.pos.lat, lng: p.pos.lng, kind: 'foe' }); continue; }
       if (cls.playerVisionM && dist <= cls.playerVisionM) out.push({ id: pid, lat: p.pos.lat, lng: p.pos.lng, kind: 'foe' });
@@ -686,7 +717,7 @@ const UI = (() => {
     amap.drawFire(d.firewall);
     amap.drawWasps(d.wasps);
     if (Geo.pos) amap.setMe(Geo.pos, Compass.heading);
-    amap.drawPlayers(visiblePlayers(d));
+    amap.drawPlayers(visiblePlayers(d, true));
     amap.drawItems(Items.visible(d), null);
     setTimeout(() => { if (amap) { amap.refresh(); amap.fitArena(cfg); } }, 80);
 
