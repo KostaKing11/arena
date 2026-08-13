@@ -224,7 +224,10 @@ const Store = (() => {
       distance: distanceBand, hpA: A.hp, hpB: B.hp,
       arrowsA: A.arrows || 0, arrowsB: B.arrows || 0,
       startedAtMs: Clock.now(), deadlineMs: Clock.now() + R.ROUND_MS,
-      moves: null, log: null, effA: null, effB: null,
+      moves: null, log: null,
+      // napitak besa se nosi iz inventara u borbu (§12)
+      effA: (A.effects && A.effects.rage) ? { rageFirstRound: true } : null,
+      effB: (B.effects && B.effects.rage) ? { rageFirstRound: true } : null,
       specialUsedA: false, specialUsedB: false,
       betrayal: !!(meta2 && meta2.betrayal),
     });

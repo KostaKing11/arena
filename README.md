@@ -67,9 +67,10 @@ npm test
 npm run emu
 ```
 
-```bash
-npm run test:fb
-```
+> ⚠️ `npm run test:fb` i `npm run test:live` su pisani za **prethodnu** verziju protokola
+> (globalni `Net`) i ne rade sa novom strukturom iz `SPEC.md`. Stoje u repou kao osnova za
+> prepravku — dok se ne preprave, oslanjaj se na `npm test` i na test u browseru sa emulatorom
+> (`npm run emu` + `npm run dev` + `http://localhost:3000/?emu=1&test=1`).
 
 **Lokalni sajt:** `npm run dev` → `http://localhost:3000`. Uz emulator dodaj `?emu=1`.
 
