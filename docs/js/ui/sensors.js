@@ -68,14 +68,20 @@ const Compass = (() => {
   const listeners = [];
   const samples = [];
 
+  let sawAbsolute = false;
   function handle(e) {
     let h = null, acc = null;
     if (typeof e.webkitCompassHeading === 'number') {           // iOS daje pravi sever
       h = e.webkitCompassHeading;
       acc = e.webkitCompassAccuracy != null ? Math.abs(e.webkitCompassAccuracy) : 15;
+      sawAbsolute = true;
     } else if (e.alpha != null) {
-      h = (360 - e.alpha) % 360;                                 // Android: alpha je suprotan smer
-      acc = e.absolute ? 20 : 35;
+      // Bez `absolute` alpha je u odnosu na proizvoljan početni položaj, ne na
+      // sever — takvo očitavanje sme da se koristi samo ako pravog nema.
+      if (!e.absolute && sawAbsolute) return;
+      if (e.absolute) sawAbsolute = true;
+      h = (360 - e.alpha) % 360;
+      acc = e.absolute ? 20 : 45;
     }
     if (h == null || isNaN(h)) return;
     samples.push(h);
@@ -116,6 +122,7 @@ const Compass = (() => {
     get heading() { return heading; },
     get accuracy() { return accuracy; },
     get available() { return heading != null; },
+    get absolute() { return sawAbsolute; },
   };
 })();
 

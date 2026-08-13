@@ -169,6 +169,8 @@ const I18N = {
     tapWhenGreen: 'Tapni čim pozeleni', tooEarly: 'Prerano!',
     repeatSequence: 'Ponovi niz', hitTargets: 'Pogodi mete', tapRhythm: 'Tapkaj u ritmu',
     quizTitle: 'Kviz o Igrama gladi',
+    detReady: 'Detektor spreman', detLoading: 'Detektor se učitava…',
+    detOff: 'Bez detektora', detNoCompass: 'Nema kompasa', detRelative: '(nije pravi sever)',
   },
 
   en: {
@@ -321,6 +323,8 @@ const I18N = {
     tapWhenGreen: 'Tap the moment it turns green', tooEarly: 'Too early!',
     repeatSequence: 'Repeat the sequence', hitTargets: 'Hit the targets', tapRhythm: 'Tap in rhythm',
     quizTitle: 'Hunger Games quiz',
+    detReady: 'Detector ready', detLoading: 'Loading detector…',
+    detOff: 'No detector', detNoCompass: 'No compass', detRelative: '(not true north)',
   },
 };
 

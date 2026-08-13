@@ -3,7 +3,7 @@
    keš prvo za CDN biblioteke. Baza, prijava i pločice mape se NE keširaju.
    Kad menjaš kod, podigni VERSION. */
 
-const VERSION = 'arena-v4';
+const VERSION = 'arena-v5';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -23,8 +23,10 @@ const PRECACHE = [
 const NEVER = [
   'firebasedatabase.app', 'firebaseio.com',
   'identitytoolkit.googleapis.com', 'securetoken.googleapis.com',
+  // Pločice mape se NE keširaju — za par partija bi pojele stotine megabajta.
+  // Model za detekciju osoba (7 MB) se, naprotiv, kešira namerno: bez toga bi
+  // se povlačio na svako otvaranje aplikacije, preko mobilnog interneta.
   'basemaps.cartocdn.com', 'arcgisonline.com', 'tile.openstreetmap.org',
-  'storage.googleapis.com',          // model za detekciju osoba je prevelik za keš
 ];
 
 self.addEventListener('install', (e) => {

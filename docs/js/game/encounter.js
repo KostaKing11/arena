@@ -118,7 +118,12 @@ const Encounter = (() => {
 
     const ctx = canvas.getContext('2d');
     canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Pregled je uvećan CSS-om, pa i snimak mora da bude isečen na isti deo
+    // slike — inače detektor gleda jedno a igrač vidi drugo, a procena
+    // razdaljine (koja deli visinu zumom) ispadne dvostruko pogrešna.
+    const sw = video.videoWidth / zoom, sh = video.videoHeight / zoom;
+    const sx = (video.videoWidth - sw) / 2, sy = (video.videoHeight - sh) / 2;
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
     const shot = canvas.toDataURL('image/jpeg', 0.5);
 
     const { list, noHeading } = candidatesInCone(d);

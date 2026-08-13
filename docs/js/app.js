@@ -325,16 +325,38 @@ const App = (() => {
         <div class="cam-wrap"><video id="encVid" playsinline muted></video>
           <div class="face-oval" style="background:none"></div></div>
         <canvas id="encCan" hidden></canvas>
+        <div class="row-tight wrap" id="encStatus"></div>
         <p class="tiny dim center" id="encHint">${esc(T('photoHint'))}</p>
         <input type="range" min="1" max="3" step="0.5" value="1" id="encZoomRange">
         <button class="action-btn" id="encShoot">${icon('camera', { size: 26 })}<span>${esc(T('photoShoot'))}</span></button>
         <div id="encList" class="stack"></div>
-      </div>`, { onClose: () => Encounter.stop() });
+      </div>`, { onClose: () => { Encounter.stop(); clearInterval(statusTimer); } });
     camScreen = s;
     Encounter.openCamera($('#encVid', s), 'environment').catch(() => { toast(T('denied'), 'danger'); s.close(); });
-    Encounter.loadDetector().then((ok) => {
-      if (!ok) $('#encHint', s).textContent = T('photoHint');
-    });
+    Encounter.loadDetector();
+
+    // Živi prikaz stanja senzora — bez ovoga ne znaš da li je filter aktivan
+    // ili se tiho preskače, pa ne možeš da protumačiš rezultat.
+    const statusTimer = setInterval(drawStatus, 700);
+    drawStatus();
+    function drawStatus() {
+      const box = $('#encStatus', s);
+      if (!box) return;
+      const st = Encounter.detectorState;
+      const det = st === 'ready' ? ['good', T('detReady')]
+        : st === 'loading' ? ['gold', T('detLoading')]
+        : st === 'failed' ? ['danger', T('detOff')] : ['', T('detLoading')];
+      const h = Compass.heading;
+      const comp = h == null ? ['danger', T('detNoCompass')]
+        : Compass.absolute ? ['good', `${Math.round(h)}° ±${Math.round(Compass.accuracy || 0)}°`]
+          : ['gold', `${Math.round(h)}° ${T('detRelative')}`];
+      const acc = Geo.accuracy;
+      const gps = acc == null ? ['danger', 'GPS —']
+        : acc <= 20 ? ['good', `GPS ±${Math.round(acc)} m`] : ['gold', `GPS ±${Math.round(acc)} m`];
+      const n = Encounter.candidatesInCone(Engine.d).list.length;
+      box.innerHTML = [det, comp, gps, ['', `${icon('users', { size: 13 })}${n}`]]
+        .map(([c, t]) => `<span class="chip ${c}">${t}</span>`).join('');
+    }
     $('#encZoomRange', s).oninput = (e) => {
       const z = Encounter.setZoom(+e.target.value);
       $('#encZoom', s).textContent = z + '×';
@@ -470,7 +492,13 @@ const App = (() => {
       else if (s === 'mentor') UI.renderMentor(d);
       else if (s === 'lobby') { /* lobi se osvežava na promenu sobe */ }
       // §16 — obavezno wake lock dok igra traje
-      if (d.state === 'LIVE' || d.state === 'FINAL_TWO' || d.state === 'PREP') Wake.on();
+      if (d.state === 'LIVE' || d.state === 'FINAL_TWO' || d.state === 'PREP') {
+        Wake.on();
+        // Model za detekciju osoba se povlači ~20 s. Ako bismo čekali prvo
+        // otvaranje kamere, prvi susret bi prošao bez tog filtera — zato ga
+        // vučemo unapred, čim krene priprema.
+        if (Encounter.detectorState === 'idle') Encounter.loadDetector();
+      }
     }
     if (kind === 'sky') UI.showSky(d.atMs);
     if (kind === 'died') { toast(T('youDied'), 'danger', 'skull'); Haptics.fire('death'); }
