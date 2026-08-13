@@ -7,6 +7,7 @@ Statični sajt (GitHub Pages) + Firebase Realtime Database. **Nema servera.**
 
 - **Igra:** https://kostaking11.github.io/arena/
 - **Test sa botovima:** https://kostaking11.github.io/arena/test
+- **Mentor:** `/arena/?room=KOD&mentor=PID` — link se dobija u lobiju ili u meniju (⋯ → Mentorski link)
 
 ---
 
@@ -113,6 +114,19 @@ Igra se napolju, po suncu, u hodu, jednom rukom — to diktira ceo UI:
 - animira se samo ono što nosi napetost: skupljanje zone, odbrojavanje bekstva, nišanjenje, nebo
 - vibracija je deo dizajna: predmet u blizini, zona, top, pogodak, dolazeći hitac
 - ikonice su pravi SVG set, bez ijednog emodžija
+
+## Mentor, sponzor, gledaoci (§17)
+
+Svaki igrač ima **lični** link. Prvi ko ga otvori postaje njegov mentor, svi posle njega su
+gledaoci istog igrača.
+
+- **Mentor** vidi HP, glad, žeđ, oružje i borbe svog tributa uživo. Naklonost publike zarađuje
+  izazovima na svom telefonu: reakcija, Simon, mete koje beže, kviz, ritam.
+- **Cena paketa raste**: 1. paket 1 poen, 2. 3, 3. 6, 4. 10. Voda i hrana idu od 1, medkit i
+  ranac od 3, oružje tek od 6 — znači oružje najranije kao četvrti paket.
+- Paket pada **15 m** od igrača, ne u ruke. Max jedan na 5 minuta. Svima ide „neko je dobio
+  paket" bez imena, igraču piše šta je i od koga.
+- **Gledalac** ima samo dugme „Navijaj" — jednom na 10 minuta, +0.5 naklonosti mentoru.
 
 ## Ograničenja
 
