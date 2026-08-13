@@ -62,9 +62,10 @@
 }
 :root[data-theme="day"] .input { background: #fff; }
 .input:focus { outline: none; border-color: var(--gold); }
+/* Polje za kod, ne naslov — zato obična tipografija sa jasnim okvirom. */
 .input.code {
-  text-align: center; font-family: var(--ff-display); font-size: var(--fs-2xl);
-  letter-spacing: .3em; text-indent: .3em; text-transform: uppercase; min-height: 72px;
+  text-align: center; font-size: var(--fs-xl); font-weight: 800;
+  letter-spacing: .22em; text-indent: .22em; text-transform: uppercase; min-height: var(--tap);
 }
 
 .slider { display: flex; flex-direction: column; gap: var(--s2); }

@@ -66,14 +66,15 @@ const UI = (() => {
       <path d="M60 20 L75 43 L99 50 L80 67 L86 95 L60 80 L34 95 L40 67 L21 50 L45 43 Z"
         fill="none" stroke="var(--ember)" stroke-width="4" stroke-linejoin="round"/>
       <path d="M40 60 Q60 44 80 60 Q60 72 40 60 Z" fill="var(--gold)"/></svg>`;
-    makeEmbers($('#embers'));
+    makeEmbers($('#embers'), 14);
     $('#nameInput').value = localStorage.getItem('arena.name') || '';
     renderHomeAvatar();
-    show($('#testBadge'), testMode);
-    if (testMode) $('#testBadge').textContent = T('testMode');
     $('#btnTheme').textContent = Theme.get() === 'day' ? T('nightMode') : T('dayMode');
+    // Test sa botovima je vidljivo dugme, ne skrivena putanja
+    show($('#btnQuickTest'), testMode);
+    $('#qtIcon').innerHTML = icon('settings', { size: 22 });
   }
-  const renderHomeAvatar = () => { $('#homeAvatar').innerHTML = `<div class="avatar ring">${avatarSvg(myAvatar, 64)}</div>`; };
+  const renderHomeAvatar = () => { $('#homeAvatar').innerHTML = `<span class="avatar ring" style="display:block">${avatarSvg(myAvatar, 56)}</span>`; };
 
   function avatarBuilder() {
     const body = () => `
@@ -113,7 +114,7 @@ const UI = (() => {
     const rec = R.recommendFor(n);
     $('#lobbyCode').textContent = Store.code || '-----';
 
-    const ready = ids.every((id) => P[id].isBot || (P[id].perms && P[id].perms.location && P[id].perms.camera && P[id].hasFace));
+    const ready = ids.every((id) => P[id].isBot || P[id].ready);
     const canStart = n >= R.MIN_PLAYERS && cfg.center && ready;
 
     const playersHtml = ids.map((id) => {
@@ -232,122 +233,148 @@ const UI = (() => {
     try { await navigator.clipboard.writeText(text); toast(T('copied'), 'good', 'check'); } catch { toast(url); }
   }
 
-  /* ═══════════════ priprema: 5 koraka (§3) ═══════════════ */
-  const PREP_STEPS = ['perms', 'compass', 'gps', 'face', 'ready'];
+  /* ═══════════════ dozvole i slika — JEDNOM, pre ulaska u sobu (§3) ═══════════════
+     Ranije je sve ovo stajalo tik pred partiju, pa se dozvole traže u trenutku
+     kad ljudi hoće da igraju. Sada se odradi jednom po telefonu i zapamti. */
+  const ONB_KEY = 'arena.onboarded';
+  const FACE_KEY = 'arena.face';
+  const onboardingDone = () => localStorage.getItem(ONB_KEY) === '1' && !!localStorage.getItem(FACE_KEY);
+
+  function onboarding() {
+    return new Promise((res) => {
+      let step = 0;
+      const s = sheet(null, '<div id="onbBody"></div>', { sticky: true });
+      s.dataset.noback = '1';
+
+      function draw() { [perms, face][step](); }
+      function next() { step = Math.min(1, step + 1); draw(); }
+      draw();                       // tek posle definicija — inače `next` još ne postoji
+
+      function perms() {
+        const p = permState();
+        $('#onbBody', s).innerHTML = `
+          <h2 style="margin-bottom:var(--s2)">${esc(T('permTitle'))}</h2>
+          <p class="dim">${esc(T('permBody'))}</p>
+          <div class="stack" style="margin:var(--s4) 0">
+            ${row('location', T('grantLocation'), 'pin', p.location)}
+            ${row('camera', T('grantCamera'), 'camera', p.camera)}
+            ${row('compass', T('grantCompass'), 'compass', p.compass)}
+          </div>
+          <div class="card" style="border-color:var(--gold);margin-bottom:var(--s3)">
+            <div class="row"><span class="goldc">${icon('alert', { size: 22 })}</span>
+            <p class="grow tiny" style="margin:0">${esc(T('safetyWarn'))}</p></div>
+          </div>
+          <button class="btn primary lg full" id="onbNext" ${p.location && p.camera ? '' : 'disabled'}>${esc(T('continue'))}</button>`;
+        $$('#onbBody .perm-row', s).forEach((b) => b.onclick = async () => { await App.requestPerm(b.dataset.p); perms(); });
+        $('#onbNext', s).onclick = next;
+      }
+      function row(k, label, ic, ok) {
+        return `<button class="perm-row ${ok ? 'ok' : ''}" data-p="${k}">
+          <span class="${ok ? 'goldc' : 'dim'}">${icon(ic, { size: 22 })}</span>
+          <span class="grow" style="text-align:left;font-weight:700">${esc(label)}</span>
+          ${ok ? `<span style="color:var(--good)">${icon('check', { size: 20 })}</span>` : icon('chevronRight', { size: 18 })}
+        </button>`;
+      }
+
+      function face() {
+        $('#onbBody', s).innerHTML = `
+          <h2 style="margin-bottom:var(--s2)">${esc(T('faceTitle'))}</h2>
+          <p class="dim">${esc(T('faceBody'))}</p>
+          <div class="cam-wrap" style="margin:var(--s3) 0"><video id="faceVid" playsinline muted></video><div class="face-oval"></div></div>
+          <canvas id="faceCan" hidden></canvas>
+          <button class="btn primary lg full" id="fShot">${icon('camera', { size: 22 })}<span>${esc(T('faceTake'))}</span></button>`;
+        Encounter.openCamera($('#faceVid', s), 'user').catch(() => toast(T('denied'), 'danger'));
+        $('#fShot', s).onclick = () => {
+          const v = $('#faceVid', s), c = $('#faceCan', s);
+          if (!v.videoWidth) return toast(T('denied'), 'danger');
+          const side = Math.min(v.videoWidth, v.videoHeight);
+          c.width = 240; c.height = 240;
+          c.getContext('2d').drawImage(v, (v.videoWidth - side) / 2, (v.videoHeight - side) / 2, side, side, 0, 0, 240, 240);
+          localStorage.setItem(FACE_KEY, c.toDataURL('image/jpeg', 0.72));
+          localStorage.setItem(ONB_KEY, '1');
+          Encounter.stop();
+          Haptics.fire('pickup');
+          s.close();
+          res(true);
+        };
+      }
+    });
+  }
+  function permState() {
+    const p = JSON.parse(localStorage.getItem('arena.perms') || '{}');
+    return { location: !!p.location, camera: !!p.camera, compass: !!p.compass };
+  }
+
+  /* ═══════════════ pred partiju: samo kompas i GPS ═══════════════ */
+  const PREP_STEPS = ['compass', 'gps'];
   let prepStep = 0;
 
   function renderPrep() {
-    const s = PREP_STEPS[prepStep];
+    const s = PREP_STEPS[prepStep] || 'compass';
     $('#prepSteps').innerHTML = PREP_STEPS.map((_, i) =>
       `<i class="${i < prepStep ? 'done' : i === prepStep ? 'on' : ''}"></i>`).join('');
-    $('#prepStepChip').textContent = `${T('step')} ${prepStep + 1}/5`;
-    ({ perms: stepPerms, compass: stepCompass, gps: stepGps, face: stepFace, ready: stepReady })[s]();
+    $('#prepStepChip').textContent = `${T('step')} ${prepStep + 1}/${PREP_STEPS.length}`;
+    ({ compass: stepCompass, gps: stepGps })[s]();
   }
-  const nextStep = () => { prepStep = Math.min(4, prepStep + 1); renderPrep(); };
+  const nextStep = async () => {
+    if (prepStep < PREP_STEPS.length - 1) { prepStep++; renderPrep(); return; }
+    await Store.updateMe({ ready: true });
+    Screens.go('lobby');
+  };
 
-  function stepPerms() {
-    const me = Store.me() || {}, pe = me.perms || {};
-    $('#prepBody').innerHTML = `
-      <div class="stack-lg">
-        <h2>${esc(T('permTitle'))}</h2>
-        <p class="dim">${esc(T('permBody'))}</p>
-        <div class="stack">
-          ${row('location', T('grantLocation'), 'pin', pe.location)}
-          ${row('camera', T('grantCamera'), 'camera', pe.camera)}
-          ${row('compass', T('grantCompass'), 'compass', pe.compass)}
-          ${row('notif', T('grantNotifications'), 'bell', pe.notif)}
-        </div>
-        <div class="card" style="border-color:var(--gold)">
-          <div class="row"><span class="goldc">${icon('alert', { size: 24 })}</span>
-          <p class="grow" style="margin:0">${esc(T('safetyWarn'))}</p></div>
-        </div>
-        <button class="btn primary lg full" id="pNext" ${pe.location && pe.camera ? '' : 'disabled'}>${esc(T('continue'))}</button>
-      </div>`;
-    function row(k, label, ic, ok) {
-      return `<button class="perm-row ${ok ? 'ok' : ''}" data-p="${k}">
-        <span class="${ok ? 'goldc' : 'dim'}">${icon(ic, { size: 24 })}</span>
-        <span class="grow" style="text-align:left;font-weight:700">${esc(label)}</span>
-        ${ok ? `<span style="color:var(--good)">${icon('check', { size: 22 })}</span>` : icon('chevronRight', { size: 20 })}
-      </button>`;
-    }
-    $$('#prepBody .perm-row').forEach((b) => b.onclick = () => App.requestPerm(b.dataset.p));
-    $('#pNext').onclick = nextStep;
-  }
-
+  /** Kalibracija: meri se STVARNO okretanje telefona, ne izmišljena tačnost.
+      Android tačnost uopšte ne javlja — jedini pošten test je da li se smer
+      menja kad okreneš telefon u krug. */
   function stepCompass() {
-    const acc = Compass.accuracy;
-    const ok = Compass.available && acc != null && acc < 20;
+    const h = Compass.heading, acc = Compass.accuracy, span = Compass.span;
+    const usable = Compass.usable;
+    const turned = span >= 75;
+    const ok = usable && turned;
     $('#prepBody').innerHTML = `
       <div class="stack-lg center">
         <h2>${esc(T('calibTitle'))}</h2>
-        <p class="dim">${esc(T('calibBody'))}</p>
-        <div class="gauge">
-          <div style="color:var(--gold);animation:spinSlow 3s linear infinite">${icon('compass', { size: 92 })}</div>
-          <div class="val ${ok ? 'ok' : ''}">${acc != null ? Math.round(acc) + '°' : '—'}</div>
-          <div class="tiny dim">${esc(T('calibAccuracy'))}</div>
+        <p class="dim">${esc(T('calibTurn'))}</p>
+        <div class="gauge" style="padding:var(--s3) 0">
+          <div style="position:relative;width:150px;height:150px">
+            <svg width="150" height="150" style="position:absolute;inset:0;transform:rotate(-90deg)">
+              <circle cx="75" cy="75" r="66" fill="none" stroke="var(--ink-4)" stroke-width="8"/>
+              <circle cx="75" cy="75" r="66" fill="none" stroke="var(--good)" stroke-width="8" stroke-linecap="round"
+                stroke-dasharray="${2 * Math.PI * 66}" stroke-dashoffset="${2 * Math.PI * 66 * (1 - span / 100)}"/>
+            </svg>
+            <div style="position:absolute;inset:0;display:grid;place-items:center;transform:rotate(${h == null ? 0 : -h}deg);color:var(--ember)">
+              ${icon('navigation', { size: 56 })}</div>
+          </div>
+          <div class="val ${turned ? 'ok' : ''}">${span}%</div>
+          <div class="tiny dim">${h == null ? esc(T('detNoCompass')) : Math.round(h) + '° · ' + (acc != null ? '±' + Math.round(acc) + '°' : esc(T('compassNoAcc')))}</div>
         </div>
+        ${!Compass.sawAnyEvent ? `<div class="card danger"><p class="tiny" style="margin:0">${esc(T('compassNone'))}</p></div>` : ''}
         <button class="btn primary lg full" id="cNext" ${ok ? '' : 'disabled'}>${esc(T('continue'))}</button>
-        <button class="btn ghost full" id="cSkip" hidden>${esc(T('skip'))}</button>
-        <p class="tiny mute" id="cWarn" hidden>${esc(T('calibSkipWarn'))}</p>
+        <button class="btn ghost full" id="cSkip">${esc(T('skip'))}</button>
+        <p class="tiny mute">${esc(T('calibSkipWarn'))}</p>
       </div>`;
     $('#cNext').onclick = () => { Store.updateMe({ 'perms/compass': true }); nextStep(); };
-    $('#cSkip').onclick = nextStep;
-    setTimeout(() => { const b = $('#cSkip'); if (b) { show(b, true); show($('#cWarn'), true); } }, 20000);
+    $('#cSkip').onclick = () => nextStep();
   }
 
   function stepGps() {
     const acc = Geo.accuracy;
-    const ok = acc != null && acc < 20;
+    const ok = acc != null && acc <= 20;
     const bad = acc != null && acc > 30;
     $('#prepBody').innerHTML = `
       <div class="stack-lg center">
         <h2>${esc(T('gpsTitle'))}</h2>
         <p class="dim">${esc(T('gpsBody'))}</p>
         <div class="gauge">
-          <div style="color:${ok ? 'var(--good)' : 'var(--gold)'}">${icon('pin', { size: 92 })}</div>
-          <div class="val ${ok ? 'ok' : bad ? 'bad' : ''}">${acc != null ? '±' + Math.round(acc) + ' m' : '—'}</div>
+          <div style="color:${ok ? 'var(--good)' : 'var(--gold)'}">${icon('pin', { size: 76 })}</div>
+          <div class="val ${ok ? 'ok' : bad ? 'bad' : ''}">${acc != null ? '±' + Math.round(acc) + ' m' : '…'}</div>
           <div class="tiny dim">${esc(T('gpsAccuracy'))}</div>
         </div>
-        ${bad ? `<div class="card danger"><p style="margin:0">${esc(T('gpsGoOutside'))}</p></div>` : ''}
-        <button class="btn primary lg full" id="gNext" ${ok ? '' : 'disabled'}>${esc(T('continue'))}</button>
+        ${bad ? `<div class="card danger"><p class="tiny" style="margin:0">${esc(T('gpsGoOutside'))}</p></div>` : ''}
+        <button class="btn primary lg full" id="gNext" ${ok ? '' : 'disabled'}>${esc(T('imReady'))}</button>
+        <button class="btn ghost full" id="gSkip">${esc(T('skip'))}</button>
       </div>`;
-    $('#gNext').onclick = nextStep;
-  }
-
-  function stepFace() {
-    $('#prepBody').innerHTML = `
-      <div class="stack-lg">
-        <h2>${esc(T('faceTitle'))}</h2>
-        <p class="dim">${esc(T('faceBody'))}</p>
-        <div class="cam-wrap"><video id="faceVid" playsinline muted></video><div class="face-oval"></div></div>
-        <canvas id="faceCan" hidden></canvas>
-        <button class="btn primary lg full" id="fShot">${icon('camera', { size: 24 })}<span>${esc(T('faceTake'))}</span></button>
-      </div>`;
-    Encounter.openCamera($('#faceVid'), 'user').catch(() => toast(T('denied'), 'danger'));
-    $('#fShot').onclick = async () => {
-      const v = $('#faceVid'), c = $('#faceCan');
-      if (!v.videoWidth) return;
-      const side = Math.min(v.videoWidth, v.videoHeight);
-      c.width = 240; c.height = 240;
-      c.getContext('2d').drawImage(v, (v.videoWidth - side) / 2, (v.videoHeight - side) / 2, side, side, 0, 0, 240, 240);
-      const data = c.toDataURL('image/jpeg', 0.72);
-      Encounter.stop();
-      await Store.saveFace(data);
-      Haptics.fire('pickup');
-      nextStep();
-    };
-  }
-
-  function stepReady() {
-    Encounter.stop();
-    $('#prepBody').innerHTML = `
-      <div class="stack-lg center">
-        <div style="color:var(--good)">${icon('check', { size: 84 })}</div>
-        <h2>${esc(T('readyTitle'))}</h2>
-        <p class="dim">${esc(T('readyBody'))}</p>
-        <button class="btn primary lg full" id="rDone">${esc(T('imReady'))}</button>
-      </div>`;
-    $('#rDone').onclick = async () => { await Store.updateMe({ ready: true }); Screens.go('lobby'); };
+    $('#gNext').onclick = () => nextStep();
+    $('#gSkip').onclick = () => nextStep();
   }
 
   /* ═══════════════ PREP faza: idi na startnu tačku (§4) ═══════════════ */
@@ -997,6 +1024,7 @@ const UI = (() => {
 
   return {
     maybeInstallModal, initHome, avatarBuilder, renderHomeAvatar, get avatar() { return myAvatar; },
+    onboarding, onboardingDone, permState, FACE_KEY,
     renderLobby, showQr, shareLink, renderPrep, nextStep, get prepStep() { return prepStep; },
     set prepStep(v) { prepStep = v; }, renderDeploy, ensureMap, renderGame, inventorySheet,
     feedSheet, menuSheet, renderFight, renderChase, showSky, renderGhost, renderEnd, feedText,

@@ -19,7 +19,9 @@ const App = (() => {
     registerSW();
     Nav.init();
     Screens.go('home');
-    UI.maybeInstallModal();
+    // Ponuda za instalaciju tek kad korisnik vidi ekran — ranije je iskakala
+    // istovremeno sa sistemskim pitanjem za lokaciju, pa su se preklapale.
+    setTimeout(() => UI.maybeInstallModal(), 1200);
 
     Store.on('nocfg', () => {
       Screens.go('home');
@@ -33,9 +35,11 @@ const App = (() => {
     const ok = await Store.connect();
     if (!ok) return;
 
-    Geo.on(() => { /* pozicije obrađuje motor */ });
-    Geo.start();
-    Compass.start();
+    // GPS i kompas se NE pale sami na startu — inače telefon pita za lokaciju
+    // pre nego što je korisnik uopšte išta uradio. Pale se u onboarding-u.
+    const p = UI.permState();
+    if (p.location) Geo.start();
+    if (p.compass) Compass.start();
 
     const room = params.get('room');
     if (room) $('#codeInput').value = room.toUpperCase();
@@ -104,6 +108,8 @@ const App = (() => {
     $('#btnCreate').onclick = () => create();
     $('#btnJoin').onclick = () => join();
     $('#btnAvatar').onclick = () => UI.avatarBuilder();
+    $('#btnDiag').onclick = () => { location.href = 'diag.html'; };
+    $('#btnQuickTest').onclick = () => askBotCount();
     $('#btnLang').onclick = () => { toggleLang(); location.reload(); };
     $('#btnTheme').onclick = () => { Theme.toggle(); location.reload(); };
     $('#codeInput').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); });
@@ -139,17 +145,59 @@ const App = (() => {
     return v;
   };
 
+  /** Slika lica se pravi jednom po telefonu i šalje se pri ulasku u sobu. */
+  async function uploadFace() {
+    const data = localStorage.getItem(UI.FACE_KEY);
+    if (data) { try { await Store.saveFace(data); } catch {} }
+    const p = UI.permState();
+    await Store.updateMe({ perms: { location: p.location, camera: p.camera, compass: p.compass } });
+  }
+
   async function create() {
     if (!Store.ready) return toast(T('firebaseMissing'), 'danger');
+    await ensureReadyToPlay();
     const ok = await Store.createRoom(myName(), UI.avatar, { bots: TEST, botCount: 5 });
-    if (ok) { Engine.start(); UI.prepStep = 0; route(); if (TEST) await Bots.seed(5); }
+    if (ok) { await uploadFace(); Engine.start(); UI.prepStep = 0; route(); if (TEST) await Bots.seed(5); }
   }
   async function join() {
     if (!Store.ready) return toast(T('firebaseMissing'), 'danger');
     const c = ($('#codeInput').value || '').toUpperCase().trim();
     if (c.length < 4) return toast(T('enterCode'), 'danger');
+    await ensureReadyToPlay();
     const ok = await Store.joinRoom(c, myName(), UI.avatar);
-    if (ok) { Engine.start(); UI.prepStep = 0; route(); }
+    if (ok) { await uploadFace(); Engine.start(); UI.prepStep = 0; route(); }
+  }
+
+  /* ───────────────── test sa botovima, jednim tapom ─────────────────
+     Ranije je trebalo proći kroz sve isto što i prava partija, pa se do
+     botova nije ni stizalo. Sada ovo napravi arenu oko tebe, doda botove
+     i odmah pokrene igru. */
+  async function quickTest(nBots) {
+    if (!Store.ready) return toast(T('firebaseMissing'), 'danger');
+    await ensureReadyToPlay();
+    toast(T('testStarting'), 'gold', 'settings');
+    const ok = await Store.createRoom(myName() || 'TEST', UI.avatar, { bots: true, botCount: nBots });
+    if (!ok) return;
+    await uploadFace();
+    Engine.start();
+    // sačekaj prvo GPS očitavanje, pa arenu postavi tu gde stojiš
+    const pos = Geo.pos || await new Promise((res) => {
+      const t = setTimeout(() => res(null), 6000);
+      Geo.on((p) => { if (p) { clearTimeout(t); res(p); } });
+    });
+    const center = pos ? { lat: pos.lat, lng: pos.lng } : { lat: 44.8125, lng: 20.4612 };
+    await Store.hostUpdate('config', {
+      center, diameterM: 300, durationMin: 20, prepMinutes: 1,
+      itemDensity: 1, startMode: 'cornucopia', eventsEnabled: true,
+    });
+    await Bots.seed(nBots);
+    await Store.updateMe({ ready: true, arrived: true });
+    await new Promise((r) => setTimeout(r, 900));
+    await startGame();
+    // preskoči odbrojavanje pripreme — u testu se ne šeta do startne tačke
+    await Store.hostUpdate('meta', { countdownAtMs: Clock.now() + 3000 });
+    toast(T('testReady'), 'good', 'check');
+    route();
   }
 
   /* ───────────────── dugme "nazad" ───────────────── */
@@ -176,6 +224,21 @@ const App = (() => {
     }));
   }
 
+  function askBotCount() {
+    const m = modal(`
+      <div class="stack-lg center">
+        <div class="goldc">${icon('settings', { size: 44 })}</div>
+        <h2>${esc(T('testWithBots'))}</h2>
+        <p class="dim">${esc(T('botsCount'))}</p>
+        <div class="row">
+          ${[2, 5, 9].map((n) => `<button class="btn lg grow" data-n="${n}">${n}</button>`).join('')}
+        </div>
+        <button class="btn ghost full" id="qtNo">${esc(T('cancel'))}</button>
+      </div>`);
+    $('#qtNo', m).onclick = () => m.close();
+    $$('[data-n]', m).forEach((b) => b.onclick = () => { m.close(); quickTest(+b.dataset.n); });
+  }
+
   /* ───────────────── rutiranje ───────────────── */
   function route() {
     if (MODE === 'mentor' || MODE === 'spectator') {
@@ -196,8 +259,9 @@ const App = (() => {
     }
 
     if (s === 'LOBBY') {
-      const done = me.perms && me.perms.location && me.perms.camera && me.hasFace;
-      if (!done) { Screens.go('prep'); UI.renderPrep(); }
+      // Dozvole i slika su odrađene pre ulaska; ovde ostaje samo živa provera
+      // kompasa i GPS-a, i to se traži jednom po sobi.
+      if (!me.ready) { Screens.go('prep'); UI.renderPrep(); }
       else { Screens.go('lobby'); UI.renderLobby(); }
       return;
     }
@@ -210,29 +274,42 @@ const App = (() => {
     Screens.go('game');
   }
 
-  /* ───────────────── dozvole (§3) ───────────────── */
+  /* ───────────────── dozvole (§3) ─────────────────
+     Traže se JEDNOM po telefonu, pre ulaska u sobu, i pamte se lokalno. */
+  function savePerm(kind, ok) {
+    const p = JSON.parse(localStorage.getItem('arena.perms') || '{}');
+    p[kind] = !!ok;
+    localStorage.setItem('arena.perms', JSON.stringify(p));
+    if (Store.me()) Store.updateMe({ ['perms/' + kind]: !!ok });
+  }
   async function requestPerm(kind) {
     if (kind === 'location') {
       try {
-        await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 15000 }));
+        await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 20000 }));
         Geo.start();
-        await Store.updateMe({ 'perms/location': true });
-      } catch { toast(T('denied'), 'danger'); }
+        savePerm('location', true);
+      } catch { savePerm('location', false); toast(T('denied'), 'danger'); }
     } else if (kind === 'camera') {
       try {
         const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         s.getTracks().forEach((t) => t.stop());
-        await Store.updateMe({ 'perms/camera': true });
+        savePerm('camera', true);
         Encounter.loadDetector();
-      } catch { toast(T('denied'), 'danger'); }
+      } catch { savePerm('camera', false); toast(T('denied'), 'danger'); }
     } else if (kind === 'compass') {
       const ok = await Compass.request();
-      await Store.updateMe({ 'perms/compass': !!ok });
+      savePerm('compass', !!ok);
       if (!ok) toast(T('denied'), 'danger');
     } else if (kind === 'notif') {
-      try { const r = await Notification.requestPermission(); await Store.updateMe({ 'perms/notif': r === 'granted' }); } catch {}
+      try { const r = await Notification.requestPermission(); savePerm('notif', r === 'granted'); } catch {}
     }
-    UI.renderPrep();
+  }
+
+  /** Sve što treba pre ulaska u sobu: dozvole + slika lica, jednom. */
+  async function ensureReadyToPlay() {
+    if (!UI.onboardingDone()) await UI.onboarding();
+    Geo.start(); Compass.start();
+    return true;
   }
 
   /* ───────────────── start igre (host) ───────────────── */
@@ -553,6 +630,7 @@ const App = (() => {
 
   return {
     boot, route, requestPerm, startGame, playAgain, tryPickup, openEncounter, buyEvent, leaveRoom, goHome,
+    quickTest, askBotCount,
     get TEST() { return TEST; }, get MODE() { return MODE; },
   };
 })();

@@ -10,13 +10,34 @@
 :root[data-theme="day"] #s-home {
   background: radial-gradient(120% 70% at 50% -10%, rgba(196,60,5,.12), transparent 62%), var(--ink-1);
 }
-.brand { text-align: center; padding: var(--s5) 0 var(--s4); }
-.brand .mark { width: 96px; height: 96px; margin: 0 auto var(--s3); }
+/* Naslovni blok je namerno mali: na telefonu od 384×686 CSS px ukras ne sme
+   da gura glavne akcije ispod pregiba. */
+.brand { text-align: center; padding: var(--s3) 0 var(--s2); display: flex; align-items: center; justify-content: center; gap: var(--s3); }
+.brand .mark { width: 52px; height: 52px; flex: none; }
+.brand .mark svg { width: 52px; height: 52px; }
 .brand .logo {
-  font-family: var(--ff-display); font-size: var(--fs-display); font-weight: 800;
-  letter-spacing: .2em; text-indent: .2em; line-height: 1;
+  font-family: var(--ff-display); font-size: clamp(30px, 9vw, 44px); font-weight: 800;
+  letter-spacing: .18em; text-indent: .18em; line-height: 1;
   background: linear-gradient(180deg, var(--gold-hi), var(--ember));
   -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+/* Ime i lik u jednom redu — dva odvojena bloka su trošila pola ekrana. */
+.idcard {
+  display: flex; align-items: center; gap: var(--s3); width: 100%;
+  padding: var(--s2) var(--s3); min-height: 72px;
+  background: var(--ink-2); border: 1px solid var(--line-2); border-radius: var(--r-lg);
+  text-align: left;
+}
+.idcard .namein {
+  width: 100%; background: none; border: 0; padding: 2px 0;
+  font-size: var(--fs-lg); font-weight: 700; color: var(--text); outline: none;
+}
+.idcard .namein::placeholder { color: var(--text-mute); font-weight: 400; }
+.avbtn { flex: none; border-radius: 50%; position: relative; }
+.avbtn::after {
+  content: ''; position: absolute; right: -2px; bottom: -2px; width: 20px; height: 20px;
+  border-radius: 50%; background: var(--ember); border: 2px solid var(--ink-2);
 }
 :root[data-theme="day"] .brand .logo { background: linear-gradient(180deg, var(--ember), var(--ember-lo)); -webkit-background-clip: text; background-clip: text; }
 .brand .tag { color: var(--text-dim); font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: .16em; margin-top: var(--s2); }
@@ -82,7 +103,9 @@
 .gauge .val.ok { color: var(--good); }
 .gauge .val.bad { color: var(--danger); }
 
-.cam-wrap { position: relative; border-radius: var(--r-lg); overflow: hidden; background: #000; aspect-ratio: 3/4; }
+/* Na niskim ekranima slika ne sme da gura dugme "Slikaj" ispod pregiba. */
+.cam-wrap { position: relative; border-radius: var(--r-lg); overflow: hidden; background: #000;
+  aspect-ratio: 3/4; max-height: 44vh; }
 .cam-wrap video, .cam-wrap canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
 .face-oval {
   position: absolute; inset: 0; pointer-events: none;

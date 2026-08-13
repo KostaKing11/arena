@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ARENA — dijagnostika senzora</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0D0B11; color:#F7F1E8; font:16px/1.4 system-ui,sans-serif; padding:16px 14px 40px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { color:#A99E8E; font-size:13px; margin:0 0 18px; }
+  .row { display:flex; justify-content:space-between; gap:10px; padding:11px 12px; background:#151219;
+         border:1px solid rgba(232,182,76,.16); border-radius:12px; margin-bottom:8px; }
+  .k { color:#A99E8E; font-size:13px; }
+  .v { font-weight:700; font-variant-numeric:tabular-nums; text-align:right; }
+  .ok { color:#45C46B; } .warn { color:#E8B64C; } .bad { color:#E03131; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.14em; color:#E8B64C; margin:22px 0 8px; }
+  button { width:100%; min-height:56px; border-radius:14px; border:0; font-size:17px; font-weight:700;
+           background:linear-gradient(160deg,#FF9247,#FF6A1A); color:#1A0C02; margin-bottom:10px; }
+  .dial { width:150px; height:150px; margin:14px auto; position:relative; border:3px solid #2E2739; border-radius:50%; }
+  .needle { position:absolute; left:50%; top:8px; width:4px; height:64px; background:#FF6A1A;
+            transform-origin:50% 100%; margin-left:-2px; border-radius:2px; }
+  code { background:#211C28; padding:2px 6px; border-radius:6px; font-size:12px; }
+</style>
+</head>
+<body>
+<h1>Dijagnostika senzora</h1>
+<p class="sub">Pošalji ovaj ekran ako nešto ne radi. Sve se meri uživo.</p>
+
+<button id="ask">Traži dozvole (kompas + lokacija)</button>
+
+<h2>Kompas</h2>
+<div class="dial"><div class="needle" id="needle"></div></div>
+<div class="row"><span class="k">smer</span><span class="v" id="hdg">—</span></div>
+<div class="row"><span class="k">tačnost koju javlja</span><span class="v" id="acc">—</span></div>
+<div class="row"><span class="k">pravi sever (absolute)</span><span class="v" id="abs">—</span></div>
+<div class="row"><span class="k">tip događaja</span><span class="v" id="evt">—</span></div>
+<div class="row"><span class="k">alpha / beta / gamma</span><span class="v" id="abg">—</span></div>
+<div class="row"><span class="k">webkitCompassHeading</span><span class="v" id="wk">—</span></div>
+<div class="row"><span class="k">događaja primljeno</span><span class="v" id="cnt">0</span></div>
+<div class="row"><span class="k">raspon smera (okreni se u krug)</span><span class="v" id="span">—</span></div>
+
+<h2>GPS</h2>
+<div class="row"><span class="k">tačnost</span><span class="v" id="gacc">—</span></div>
+<div class="row"><span class="k">koordinate</span><span class="v" id="gpos">—</span></div>
+<div class="row"><span class="k">očitavanja</span><span class="v" id="gcnt">0</span></div>
+
+<h2>Okruženje</h2>
+<div class="row"><span class="k">siguran kontekst</span><span class="v" id="sec">—</span></div>
+<div class="row"><span class="k">ekran</span><span class="v" id="scr">—</span></div>
+<div class="row"><span class="k">standalone (instalirano)</span><span class="v" id="pwa">—</span></div>
+<div class="row"><span class="k">kamera</span><span class="v" id="cam">—</span></div>
+<div class="row"><span class="k">vibracija</span><span class="v" id="vib">—</span></div>
+<div class="row"><span class="k">wake lock</span><span class="v" id="wl">—</span></div>
+<p class="sub" style="margin-top:16px">UA: <code id="ua"></code></p>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const set = (id, v, cls) => { const n = $(id); n.textContent = v; n.className = 'v ' + (cls || ''); };
+
+set('sec', isSecureContext ? 'da' : 'NE', isSecureContext ? 'ok' : 'bad');
+set('scr', innerWidth + '×' + innerHeight + ' @' + devicePixelRatio + 'x');
+set('pwa', matchMedia('(display-mode: standalone)').matches ? 'da' : 'ne');
+set('vib', 'vibrate' in navigator ? 'ima' : 'nema', 'vibrate' in navigator ? 'ok' : 'warn');
+set('wl', 'wakeLock' in navigator ? 'ima' : 'nema', 'wakeLock' in navigator ? 'ok' : 'warn');
+$('ua').textContent = navigator.userAgent;
+
+let n = 0, minH = null, maxH = null;
+function onOri(e) {
+  n++;
+  set('cnt', n);
+  set('evt', e.type);
+  const wk = typeof e.webkitCompassHeading === 'number' ? e.webkitCompassHeading : null;
+  set('wk', wk == null ? 'nema (nije iOS)' : wk.toFixed(1) + '°');
+  set('abg', [e.alpha, e.beta, e.gamma].map((x) => (x == null ? '—' : x.toFixed(0))).join(' / '));
+  set('abs', e.absolute ? 'DA' : 'ne', e.absolute ? 'ok' : 'warn');
+
+  let h = wk != null ? wk : (e.alpha != null ? (360 - e.alpha) % 360 : null);
+  if (h == null) return;
+  set('hdg', h.toFixed(1) + '°');
+  if (minH == null || h < minH) minH = h;
+  if (maxH == null || h > maxH) maxH = h;
+  set('span', (maxH - minH).toFixed(0) + '°', (maxH - minH) > 300 ? 'ok' : 'warn');
+  $('needle').style.transform = 'rotate(' + (-h) + 'deg)';
+
+  let acc = null;
+  if (typeof e.webkitCompassAccuracy === 'number') acc = e.webkitCompassAccuracy;
+  set('acc', acc == null ? 'ne javlja' : acc + '°', acc == null ? 'warn' : (acc >= 0 && acc < 25 ? 'ok' : 'bad'));
+}
+
+let gn = 0;
+function startGeo() {
+  if (!navigator.geolocation) return set('gacc', 'nema API', 'bad');
+  navigator.geolocation.watchPosition((p) => {
+    gn++;
+    set('gcnt', gn);
+    const a = p.coords.accuracy;
+    set('gacc', '±' + a.toFixed(0) + ' m', a <= 20 ? 'ok' : a <= 30 ? 'warn' : 'bad');
+    set('gpos', p.coords.latitude.toFixed(5) + ', ' + p.coords.longitude.toFixed(5));
+  }, (err) => set('gacc', 'greška: ' + err.message, 'bad'), { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+}
+
+$('ask').onclick = async () => {
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const r = await DeviceOrientationEvent.requestPermission();
+      if (r !== 'granted') set('hdg', 'odbijeno', 'bad');
+    }
+  } catch (e) { set('hdg', 'greška: ' + e.message, 'bad'); }
+  addEventListener('deviceorientationabsolute', onOri, true);
+  addEventListener('deviceorientation', onOri, true);
+  startGeo();
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const t = s.getVideoTracks()[0];
+    set('cam', t.getSettings().width + '×' + t.getSettings().height, 'ok');
+    s.getTracks().forEach((x) => x.stop());
+  } catch (e) { set('cam', 'greška: ' + e.name, 'bad'); }
+};
+
+// probaj odmah — Android ne traži izričitu dozvolu za kompas
+addEventListener('deviceorientationabsolute', onOri, true);
+addEventListener('deviceorientation', onOri, true);
+startGeo();
+</script>
+</body>
+</html>

@@ -68,12 +68,22 @@ const Compass = (() => {
   const listeners = [];
   const samples = [];
 
-  let sawAbsolute = false;
+  /* Android UOPŠTE ne javlja tačnost kompasa — provereno na uređaju: stiže
+     `deviceorientationabsolute` sa `absolute: true`, ali `webkitCompassAccuracy`
+     ne postoji. Zato se pouzdanost NE sme izvoditi iz izmišljenog broja, nego iz
+     dve stvarne činjenice: da li dobijamo apsolutni smer, i da li se smer menja
+     kad korisnik okrene telefon (to je ono što "osmica" zapravo proverava). */
+  let sawAbsolute = false, sawAnyEvent = false;
+  const seen = new Set();          // koje osmine kruga smo videli
+  let span = 0;
+
   function handle(e) {
     let h = null, acc = null;
+    sawAnyEvent = true;
     if (typeof e.webkitCompassHeading === 'number') {           // iOS daje pravi sever
       h = e.webkitCompassHeading;
-      acc = e.webkitCompassAccuracy != null ? Math.abs(e.webkitCompassAccuracy) : 15;
+      const a = e.webkitCompassAccuracy;
+      acc = (typeof a === 'number' && a >= 0) ? a : null;       // -1 znači nekalibrisan
       sawAbsolute = true;
     } else if (e.alpha != null) {
       // Bez `absolute` alpha je u odnosu na proizvoljan početni položaj, ne na
@@ -81,7 +91,7 @@ const Compass = (() => {
       if (!e.absolute && sawAbsolute) return;
       if (e.absolute) sawAbsolute = true;
       h = (360 - e.alpha) % 360;
-      acc = e.absolute ? 20 : 45;
+      acc = null;                                              // Android ne javlja tačnost
     }
     if (h == null || isNaN(h)) return;
     samples.push(h);
@@ -91,6 +101,8 @@ const Compass = (() => {
     samples.forEach((a) => { x += Math.cos(U.toRad(a)); y += Math.sin(U.toRad(a)); });
     heading = (U.toDeg(Math.atan2(y, x)) + 360) % 360;
     accuracy = acc;
+    seen.add(Math.floor(heading / 45) % 8);
+    span = Math.round((seen.size / 8) * 100);
     listeners.forEach((f) => f(heading, accuracy));
   }
 
@@ -120,9 +132,19 @@ const Compass = (() => {
     request, start, stop,
     on(f) { listeners.push(f); },
     get heading() { return heading; },
-    get accuracy() { return accuracy; },
+    get accuracy() { return accuracy; },          // null = uređaj je ne javlja (Android)
     get available() { return heading != null; },
     get absolute() { return sawAbsolute; },
+    get sawAnyEvent() { return sawAnyEvent; },
+    /** Koliko je korisnik obišao krug, 0–100. Ovo je prava "osmica". */
+    get span() { return span; },
+    /** Sme li se kompas koristiti za konus pri slikanju. */
+    get usable() {
+      if (heading == null) return false;
+      if (accuracy != null) return accuracy < 25;   // iOS javlja pravu tačnost
+      return sawAbsolute;                            // Android: apsolutni smer je dovoljan
+    },
+    resetSpan() { seen.clear(); span = 0; },
   };
 })();
 

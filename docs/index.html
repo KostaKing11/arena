@@ -39,37 +39,36 @@
   <section class="screen" id="s-home">
     <div class="embers" id="embers" aria-hidden="true"></div>
     <div class="scroll">
-      <div class="hold stack-lg">
+      <div class="hold stack">
         <div class="brand">
           <div class="mark" id="brandMark"></div>
           <div class="logo">ARENA</div>
-          <div class="tag" data-i="tagline"></div>
         </div>
 
-        <div class="card stack">
-          <div class="row">
-            <div id="homeAvatar"></div>
-            <div class="grow field">
-              <label class="label" data-i="yourName"></label>
-              <input class="input" id="nameInput" maxlength="16" autocomplete="off" data-i-ph="yourName">
-            </div>
+        <div class="idcard">
+          <button id="btnAvatar" class="avbtn"><span id="homeAvatar"></span></button>
+          <div class="grow">
+            <div class="tiny dim upper" data-i="yourName"></div>
+            <input class="namein" id="nameInput" maxlength="16" autocomplete="off" data-i-ph="yourName">
           </div>
-          <button class="btn ghost" id="btnAvatar"><span data-i="avatarTitle"></span></button>
         </div>
 
         <button class="btn primary lg full" id="btnCreate" data-i="createRoom"></button>
+        <button class="btn gold lg full" id="btnQuickTest" hidden>
+          <span id="qtIcon"></span><span data-i="testWithBots"></span></button>
+
         <div class="or-line"><span data-i="or"></span></div>
-        <div class="stack">
-          <input class="input code" id="codeInput" maxlength="5" autocomplete="off"
-                 autocapitalize="characters" spellcheck="false" data-i-ph="enterCode">
-          <button class="btn lg full" id="btnJoin" data-i="joinRoom"></button>
+        <div class="row">
+          <input class="input code grow" id="codeInput" maxlength="5" autocomplete="off"
+                 autocapitalize="characters" spellcheck="false" data-i-ph="codePh">
+          <button class="btn lg" id="btnJoin" data-i="joinRoom"></button>
         </div>
 
-        <div class="row between">
+        <div class="row between" style="margin-top:var(--s2)">
           <button class="linkbtn" id="btnLang">SR / EN</button>
+          <button class="linkbtn" id="btnDiag">?</button>
           <button class="linkbtn" id="btnTheme"></button>
         </div>
-        <p class="tiny mute center" id="testBadge" hidden></p>
       </div>
     </div>
   </section>

@@ -19,7 +19,7 @@ const I18N = {
 
     /* — početni ekran — */
     yourName: 'Tvoje ime', createRoom: 'Napravi arenu', joinRoom: 'Uđi u arenu',
-    roomCode: 'Kod sobe', enterCode: 'Upiši kod', or: 'ili',
+    roomCode: 'Kod sobe', enterCode: 'Upiši kod', codePh: 'KOD', or: 'ili',
     testMode: 'Test režim sa botovima', avatarTitle: 'Napravi lik',
     skin: 'Ten', hair: 'Kosa', hairColor: 'Boja kose', shirt: 'Majica', body: 'Građa',
     randomize: 'Nasumično',
@@ -171,6 +171,11 @@ const I18N = {
     quizTitle: 'Kviz o Igrama gladi',
     detReady: 'Detektor spreman', detLoading: 'Detektor se učitava…',
     detOff: 'Bez detektora', detNoCompass: 'Nema kompasa', detRelative: '(nije pravi sever)',
+    calibTurn: 'Okreni se polako u krug sa telefonom u ruci, dok se prsten ne popuni.',
+    compassNoAcc: 'telefon ne javlja tačnost',
+    compassNone: 'Telefon ne šalje podatke o smeru. Slikanje protivnika će raditi slabije.',
+    testWithBots: 'Testiraj sa botovima', testStarting: 'Pravim test arenu…',
+    testReady: 'Test arena je spremna', botsCount: 'Botova',
   },
 
   en: {
@@ -188,7 +193,7 @@ const I18N = {
     installed: 'Installed', installUnavailable: 'Chrome is not offering it yet — try the ⋮ menu',
 
     yourName: 'Your name', createRoom: 'Create arena', joinRoom: 'Join arena',
-    roomCode: 'Room code', enterCode: 'Enter code', or: 'or',
+    roomCode: 'Room code', enterCode: 'Enter code', codePh: 'CODE', or: 'or',
     testMode: 'Test mode with bots', avatarTitle: 'Build your tribute',
     skin: 'Skin', hair: 'Hair', hairColor: 'Hair colour', shirt: 'Shirt', body: 'Build',
     randomize: 'Randomise',
@@ -325,6 +330,11 @@ const I18N = {
     quizTitle: 'Hunger Games quiz',
     detReady: 'Detector ready', detLoading: 'Loading detector…',
     detOff: 'No detector', detNoCompass: 'No compass', detRelative: '(not true north)',
+    calibTurn: 'Turn slowly in a full circle holding the phone, until the ring fills.',
+    compassNoAcc: 'phone does not report accuracy',
+    compassNone: 'The phone sends no heading data. Photographing opponents will work poorly.',
+    testWithBots: 'Test with bots', testStarting: 'Building a test arena…',
+    testReady: 'Test arena ready', botsCount: 'Bots',
   },
 };
 
