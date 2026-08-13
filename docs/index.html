@@ -2,20 +2,21 @@
 <html lang="sr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-<meta name="theme-color" content="#0D0B11">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, minimum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0C0B0F">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ARENA">
 <meta name="description" content="Igre gladi uživo, na tvojoj mapi.">
 <link rel="manifest" href="/arena/manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<title>ARENA — Igre gladi IRL</title>
+<title>ARENA</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800&family=Inter:wght@400;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/components.css">
@@ -28,77 +29,79 @@
   <!-- ═══ učitavanje ═══ -->
   <section class="screen on" id="s-boot">
     <div class="scroll" style="display:grid;place-items:center">
-      <div class="center stack">
-        <div class="spinner" style="margin:0 auto"></div>
-        <p class="dim" data-i="loading">Učitavanje…</p>
-      </div>
+      <div class="center stack"><div class="spinner" style="margin:0 auto"></div></div>
     </div>
   </section>
 
   <!-- ═══ početni ═══ -->
   <section class="screen" id="s-home">
-    <div class="embers" id="embers" aria-hidden="true"></div>
     <div class="scroll">
       <div class="hold stack">
         <div class="brand">
           <div class="mark" id="brandMark"></div>
           <div class="logo">ARENA</div>
+          <button class="iconbtn plain" id="btnSettingsHome" data-i-aria="settings"></button>
         </div>
 
         <div class="idcard">
           <button id="btnAvatar" class="avbtn"><span id="homeAvatar"></span></button>
           <div class="grow">
-            <div class="tiny dim upper" data-i="yourName"></div>
+            <div class="upper mute" data-i="yourName"></div>
             <input class="namein" id="nameInput" maxlength="16" autocomplete="off" data-i-ph="yourName">
           </div>
+          <span class="mute" id="idcardEdit"></span>
         </div>
 
         <button class="btn primary lg full" id="btnCreate" data-i="createRoom"></button>
-        <button class="btn gold lg full" id="btnQuickTest" hidden>
-          <span id="qtIcon"></span><span data-i="testWithBots"></span></button>
 
-        <div class="or-line"><span data-i="or"></span></div>
         <div class="row">
           <input class="input code grow" id="codeInput" maxlength="5" autocomplete="off"
                  autocapitalize="characters" spellcheck="false" data-i-ph="codePh">
           <button class="btn lg" id="btnJoin" data-i="joinRoom"></button>
         </div>
 
-        <div class="row between" style="margin-top:var(--s2)">
-          <button class="linkbtn" id="btnLang">SR / EN</button>
-          <button class="linkbtn" id="btnDiag">?</button>
-          <button class="linkbtn" id="btnTheme"></button>
-        </div>
+        <button class="btn ghost full" id="btnQuickTest" hidden>
+          <span id="qtIcon"></span><span data-i="testWithBots"></span></button>
       </div>
     </div>
+  </section>
+
+  <!-- ═══ podešavanja ═══ -->
+  <section class="screen" id="s-settings">
+    <div class="topbar">
+      <button class="iconbtn plain" id="btnSetBack" data-i-aria="back"></button>
+      <div class="grow ttl" data-i="settings"></div>
+    </div>
+    <div class="scroll"><div class="hold stack-lg" id="settingsBody"></div></div>
   </section>
 
   <!-- ═══ lobi ═══ -->
   <section class="screen" id="s-lobby">
     <div class="topbar">
+      <button class="iconbtn plain" id="btnLobbyBack" data-i-aria="back"></button>
       <div class="grow">
-        <div class="tiny dim upper" data-i="roomCode"></div>
+        <div class="upper mute" data-i="roomCode"></div>
         <div class="code-display" id="lobbyCode">-----</div>
       </div>
-      <button class="iconbtn sm" id="btnQr" data-i-aria="showQr"></button>
-      <button class="iconbtn sm" id="btnShare" data-i-aria="share"></button>
+      <button class="iconbtn plain" id="btnQr" data-i-aria="showQr"></button>
+      <button class="iconbtn plain" id="btnShare" data-i-aria="share"></button>
     </div>
     <div class="scroll"><div class="hold stack-lg" id="lobbyBody"></div></div>
   </section>
 
-  <!-- ═══ priprema (5 koraka) ═══ -->
+  <!-- ═══ priprema ═══ -->
   <section class="screen" id="s-prep">
     <div class="topbar">
-      <button class="iconbtn sm" id="btnPrepBack" data-i-aria="back"></button>
-      <div class="grow"><h2 data-i="prepTitle"></h2></div>
+      <button class="iconbtn plain" id="btnPrepBack" data-i-aria="back"></button>
+      <div class="grow ttl" data-i="prepTitle"></div>
       <div class="chip" id="prepStepChip"></div>
     </div>
     <div class="scroll"><div class="hold"><div class="steps" id="prepSteps"></div><div id="prepBody"></div></div></div>
   </section>
 
-  <!-- ═══ PREP faza: idi na startnu tačku ═══ -->
+  <!-- ═══ PREP faza ═══ -->
   <section class="screen" id="s-deploy">
-    <div class="scroll"><div class="hold stack-lg" id="deployBody"></div></div>
+    <div class="scroll"><div class="hold stack" id="deployBody"></div></div>
   </section>
 
   <!-- ═══ igra ═══ -->
@@ -109,35 +112,48 @@
     <div class="zone-flash" id="zoneFlash" aria-hidden="true"></div>
 
     <div class="hud-top">
-      <div class="zonechip" id="zoneChip"></div>
+      <div class="zonechip glass" id="zoneChip"></div>
       <div class="sp"></div>
-      <button class="iconbtn sm" id="btnMenu" data-i-aria="menu"></button>
+      <button class="iconbtn glass" id="btnRecenter" data-i-aria="center"></button>
+      <button class="iconbtn glass" id="btnMenu" data-i-aria="menu"></button>
+    </div>
+
+    <div class="compass glass" id="compass">
+      <div class="strip" id="compassStrip"></div>
+      <div class="center"></div>
     </div>
 
     <div class="hud-bottom">
-      <div class="compass" id="compass" hidden>
-        <div class="strip" id="compassStrip"></div>
-        <div class="needle"></div>
-      </div>
       <div class="vitals" id="vitals"></div>
       <button class="action-btn" id="actionBtn" hidden></button>
       <div class="dock">
-        <button class="dockbtn" id="btnInv"><span class="ico"></span><span data-i="inventory"></span></button>
+        <button class="dockbtn" id="btnInv"></button>
+        <button class="dockbtn" id="btnFeed"></button>
         <button class="camera-btn" id="btnCamera" data-i-aria="camera"></button>
-        <button class="dockbtn" id="btnFeed"><span class="ico"></span><span data-i="feed"></span></button>
+        <button class="dockbtn" id="btnPlayers"></button>
+        <button class="dockbtn" id="btnGhost"></button>
       </div>
     </div>
   </section>
 
   <!-- ═══ borba ═══ -->
   <section class="screen" id="s-fight">
-    <div class="fight-top">
-      <div class="chip danger" id="fightTag"></div>
-      <div class="sp"></div>
-      <div class="round-ring" id="roundRing"></div>
+    <div class="arena-stage" id="arenaStage">
+      <div class="ground"></div><div class="horizon"></div>
+      <div class="cover l" id="coverL"></div><div class="cover r" id="coverR"></div>
+      <div class="fighter-tag me" id="tagMe"></div>
+      <div class="fighter-tag foe" id="tagFoe"></div>
+      <div class="fighter-fig me" id="figMe"></div>
+      <div class="fighter-fig foe" id="figFoe"></div>
+      <div class="dmg-pop me" id="popMe"></div>
+      <div class="dmg-pop foe" id="popFoe"></div>
     </div>
-    <div class="fighters" id="fighters"></div>
-    <div class="distance-track"><div class="dtrack" id="dtrack"></div><div class="range-hint" id="rangeHint"></div></div>
+    <div class="round-bar" id="roundBar">
+      <span class="rn" id="roundNum"></span>
+      <span class="timer"><i id="roundTimer"></i></span>
+    </div>
+    <div class="dtrack" id="dtrack"></div>
+    <div class="range-hint" id="rangeHint"></div>
     <div class="combat-log" id="combatLog"></div>
     <div class="sp"></div>
     <div class="moves" id="moves"></div>
@@ -161,18 +177,19 @@
     </div>
   </section>
 
-  <!-- ═══ duh / tvorac igara ═══ -->
+  <!-- ═══ duh ═══ -->
   <section class="screen" id="s-ghost">
     <div class="topbar">
-      <button class="iconbtn sm" id="btnGhostBack" data-i-aria="back"></button>
-      <div class="grow"><h2 data-i="ghostTitle"></h2></div>
-      <div class="spark-pool" id="sparkPool"></div></div>
+      <button class="iconbtn plain" id="btnGhostBack" data-i-aria="back"></button>
+      <div class="grow ttl" data-i="ghostTitle"></div>
+      <div class="spark-pool" id="sparkPool"></div>
+    </div>
     <div class="scroll"><div class="hold stack-lg" id="ghostBody"></div></div>
   </section>
 
-  <!-- ═══ mentor / gledalac ═══ -->
+  <!-- ═══ mentor ═══ -->
   <section class="screen" id="s-mentor">
-    <div class="topbar"><div class="grow"><h2 id="mentorTitle"></h2></div>
+    <div class="topbar"><div class="grow ttl" id="mentorTitle"></div>
       <div class="chip gold" id="favorChip"></div></div>
     <div class="scroll"><div class="hold stack-lg" id="mentorBody"></div></div>
   </section>
@@ -200,6 +217,7 @@
 <script src="js/net/clock.js"></script>
 <script src="js/net/store.js"></script>
 <script src="js/ui/kit.js"></script>
+<script src="js/ui/avatar.js"></script>
 <script src="js/ui/nav.js"></script>
 <script src="js/ui/sensors.js"></script>
 <script src="js/ui/map.js"></script>

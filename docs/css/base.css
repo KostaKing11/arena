@@ -1,52 +1,60 @@
 /* Osnova: reset, tipografija, raspored ekrana. */
 *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { height: 100%; margin: 0; }
+
+/* Povlačenje nadole NE sme da osvežava stranicu — u instaliranoj aplikaciji to
+   izgleda kao da si zatvorio prozor a zapravo si izgubio partiju. */
+html, body {
+  height: 100%; margin: 0;
+  overscroll-behavior: none;
+  overflow: hidden;
+  touch-action: manipulation;         /* gasi dupli-tap zum */
+}
 body {
   background: var(--ink-1);
   color: var(--text);
   font-family: var(--ff);
   font-size: var(--fs-md);
-  line-height: 1.4;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
-  overscroll-behavior: none;
-  user-select: none;
-  touch-action: manipulation;
+  user-select: none; -webkit-user-select: none;
+  position: fixed; inset: 0;          /* bez pomeranja cele stranice */
 }
+input, textarea { user-select: text; -webkit-user-select: text; }
 input, textarea, select, button { font: inherit; color: inherit; }
 button { background: none; border: 0; padding: 0; cursor: pointer; }
 svg.ic { display: block; flex: none; }
 [hidden] { display: none !important; }
 
-h1, h2, h3 { margin: 0; font-weight: 800; letter-spacing: -.01em; }
+h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -.012em; }
 h1 { font-size: var(--fs-2xl); }
 h2 { font-size: var(--fs-xl); }
 h3 { font-size: var(--fs-lg); }
-p  { margin: 0 0 var(--s3); }
-.display { font-family: var(--ff-display); font-weight: 800; letter-spacing: .1em; }
-.num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
-.dim { color: var(--text-dim); }
-.mute { color: var(--text-mute); }
+p { margin: 0 0 var(--s3); }
+.display { font-family: var(--ff-display); font-weight: 700; letter-spacing: .06em; }
+.num { font-variant-numeric: tabular-nums; }
+.dim { color: var(--text-2); }
+.mute { color: var(--text-3); }
 .tiny { font-size: var(--fs-xs); }
 .small { font-size: var(--fs-sm); }
 .big { font-size: var(--fs-lg); }
-.huge { font-size: var(--fs-2xl); font-weight: 800; }
 .center { text-align: center; }
-.upper { text-transform: uppercase; letter-spacing: .12em; }
-.ember { color: var(--ember); }
-.goldc { color: var(--gold); }
-.dangerc { color: var(--danger); }
+.upper { text-transform: uppercase; letter-spacing: .1em; font-size: var(--fs-xs); }
+.ember { color: var(--ember); } .goldc { color: var(--gold); } .dangerc { color: var(--danger); }
+.bold { font-weight: 700; } .b800 { font-weight: 800; }
 
-/* — kostur aplikacije — */
+/* — kostur — */
 #app { position: fixed; inset: 0; overflow: hidden; }
 .screen { position: absolute; inset: 0; display: none; flex-direction: column; }
 .screen.on { display: flex; }
 .scroll {
   flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
   padding: var(--s4);
-  padding-top: calc(var(--s4) + var(--safe-t));
+  padding-top: calc(var(--s3) + var(--safe-t));
   padding-bottom: calc(var(--s6) + var(--safe-b));
 }
 .stack { display: flex; flex-direction: column; gap: var(--s3); }
+.stack-sm { display: flex; flex-direction: column; gap: var(--s2); }
 .stack-lg { display: flex; flex-direction: column; gap: var(--s5); }
 .row { display: flex; gap: var(--s3); align-items: center; }
 .row-tight { display: flex; gap: var(--s2); align-items: center; }
@@ -54,22 +62,21 @@ p  { margin: 0 0 var(--s3); }
 .wrap { flex-wrap: wrap; }
 .between { justify-content: space-between; }
 .sp { flex: 1; }
+.hold { width: 100%; max-width: 480px; margin: 0 auto; }
 
-/* Sadržaj se ne razvlači na tabletu preko čitljive širine. */
-.hold { width: 100%; max-width: 520px; margin: 0 auto; }
-
-/* — traka na vrhu: samo kontekst, nikad ništa kritično (gornja trećina) — */
+/* — gornja traka — */
 .topbar {
-  display: flex; align-items: center; gap: var(--s3);
-  padding: calc(var(--s3) + var(--safe-t)) var(--s4) var(--s3);
-  background: linear-gradient(180deg, var(--ink-0), rgba(0,0,0,0));
-  min-height: calc(56px + var(--safe-t));
+  display: flex; align-items: center; gap: var(--s2);
+  padding: calc(var(--s2) + var(--safe-t)) var(--s3) var(--s2);
+  min-height: calc(52px + var(--safe-t));
+  border-bottom: 1px solid var(--line-2);
+  background: var(--ink-1);
 }
-:root[data-theme="day"] .topbar { background: linear-gradient(180deg, var(--ink-2), rgba(255,255,255,0)); }
 .topbar h2 { font-size: var(--fs-lg); }
+.topbar .ttl { font-size: var(--fs-md); font-weight: 700; }
 
 .divider { height: 1px; background: var(--line-2); margin: var(--s3) 0; }
+.sep { height: 1px; background: var(--line-2); }
 
-/* — pristupačnost — */
-:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

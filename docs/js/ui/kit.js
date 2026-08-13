@@ -1,4 +1,5 @@
-/* UI kit: DOM sitnice, obaveštenja, fioke, avatar, tema. */
+/* UI kit: DOM sitnice, obaveštenja, fioke, tema. */
+const APP_VERSION = '0.5.0';
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const el = (tag, cls, html) => {
@@ -38,20 +39,49 @@ function toast(msg, kind, iconName) {
 }
 
 /* ───────────────────────── fioke i modali ───────────────────────── */
+/** Fioka odozdo. Zatvara se tapom pored, prevlačenjem nadole i dugmetom nazad. */
 function sheet(title, bodyHtml, opts) {
   opts = opts || {};
   const wrap = el('div', 'sheet');
   wrap.innerHTML = `<div class="sheet-body">
-    <div class="sheet-handle"></div>
-    ${title ? `<h2 class="display" style="margin-bottom:var(--s4)">${esc(title)}</h2>` : ''}
+    <div class="sheet-grab"><i></i></div>
+    ${title ? `<div class="sheet-title">${esc(title)}</div>` : ''}
     <div class="sheet-content"></div>
   </div>`;
   $('.sheet-content', wrap).innerHTML = bodyHtml || '';
-  if (!opts.sticky) wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+  const body = $('.sheet-body', wrap);
   document.body.appendChild(wrap);
+
   function close() { wrap.remove(); opts.onClose && opts.onClose(); }
   wrap.close = close;
-  if (window.Nav) Nav.rearm();          // da hardversko "nazad" zatvori fioku
+  if (!opts.sticky) {
+    wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+    // prevlačenje nadole
+    let y0 = null, dy = 0;
+    const grab = $('.sheet-grab', wrap);
+    const down = (e) => { y0 = e.touches ? e.touches[0].clientY : e.clientY; dy = 0; body.style.transition = 'none'; };
+    const move = (e) => {
+      if (y0 == null) return;
+      const y = e.touches ? e.touches[0].clientY : e.clientY;
+      dy = Math.max(0, y - y0);
+      body.style.transform = `translateY(${dy}px)`;
+      if (e.cancelable) e.preventDefault();
+    };
+    const up = () => {
+      if (y0 == null) return;
+      y0 = null;
+      body.style.transition = 'transform .2s var(--ease)';
+      if (dy > 90) { body.style.transform = 'translateY(100%)'; setTimeout(close, 190); }
+      else body.style.transform = '';
+    };
+    grab.addEventListener('touchstart', down, { passive: true });
+    grab.addEventListener('touchmove', move, { passive: false });
+    grab.addEventListener('touchend', up);
+    grab.addEventListener('mousedown', down);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  }
+  if (window.Nav) Nav.rearm();
   return wrap;
 }
 function modal(bodyHtml, opts) {
@@ -92,40 +122,6 @@ const Screens = {
   },
 };
 
-/* ───────────────────────── avatar ───────────────────────── */
-const AV = {
-  skin: ['#F2C9A0', '#E0A878', '#C68642', '#8D5524', '#5C3317', '#FFE0BD'],
-  hairColor: ['#2B1B12', '#5A3A22', '#A8641E', '#D9B45B', '#E8E2D8', '#7A2E2E'],
-  hair: ['short', 'long', 'bun', 'buzz', 'curly'],
-  shirt: ['#C0392B', '#2F6FB0', '#3B8F5A', '#7A4FA3', '#D08C1A', '#3A3F45'],
-  body: ['slim', 'normal', 'broad'],
-};
-function randomAvatar() {
-  const r = (a) => a[Math.floor(Math.random() * a.length)];
-  return { skin: r(AV.skin), hairColor: r(AV.hairColor), hair: r(AV.hair), shirt: r(AV.shirt), body: r(AV.body) };
-}
-/** SVG lik — koristi se u lobiju, borbi, na kraju. */
-function avatarSvg(a, size) {
-  a = a || randomAvatar();
-  const s = size || 64;
-  const w = a.body === 'broad' ? 40 : a.body === 'slim' ? 28 : 34;
-  const hair = {
-    short: `<path d="M28 30c0-9 7-14 16-14s16 5 16 14c0 0-6-5-16-5s-16 5-16 5Z" fill="${a.hairColor}"/>`,
-    long:  `<path d="M27 30c0-9 8-14 17-14s17 5 17 14v22c-3 2-5-4-5-10 0 0-5 3-12 3s-12-3-12-3c0 6-2 12-5 10V30Z" fill="${a.hairColor}"/>`,
-    bun:   `<circle cx="44" cy="14" r="7" fill="${a.hairColor}"/><path d="M28 31c0-9 7-14 16-14s16 5 16 14c0 0-6-5-16-5s-16 5-16 5Z" fill="${a.hairColor}"/>`,
-    buzz:  `<path d="M29 31c0-8 6-13 15-13s15 5 15 13c0 0-5-3-15-3s-15 3-15 3Z" fill="${a.hairColor}" opacity=".85"/>`,
-    curly: `<g fill="${a.hairColor}"><circle cx="32" cy="24" r="8"/><circle cx="44" cy="19" r="9"/><circle cx="56" cy="24" r="8"/><circle cx="38" cy="20" r="7"/><circle cx="50" cy="20" r="7"/></g>`,
-  }[a.hair] || '';
-  return `<svg viewBox="0 0 88 88" width="${s}" height="${s}" aria-hidden="true">
-    <circle cx="44" cy="44" r="44" fill="var(--ink-3)"/>
-    <path d="M${44 - w} 88c0-14 ${w - 6} -20 ${w} -20s${w} 6 ${w} 20Z" fill="${a.shirt}"/>
-    <circle cx="44" cy="40" r="16" fill="${a.skin}"/>
-    ${hair}
-    <circle cx="38" cy="40" r="2" fill="#2A1E16"/><circle cx="50" cy="40" r="2" fill="#2A1E16"/>
-    <path d="M39 48c2 2 8 2 10 0" stroke="#2A1E16" stroke-width="1.6" fill="none" stroke-linecap="round"/>
-  </svg>`;
-}
-
 /* ───────────────────────── razno ───────────────────────── */
 function fmtDist(m) {
   if (m == null || !isFinite(m)) return '—';
@@ -135,10 +131,11 @@ function bar(kind, val, max) {
   const p = U.clamp((val || 0) / (max || 100), 0, 1);
   return `<div class="bar ${kind}"><i style="transform:scaleX(${p})"></i></div>`;
 }
+/** Jedan vitalni pokazatelj: ikonica, broj, tanka traka. */
 function vitalBox(kind, iconName, val, max, crit) {
-  return `<div class="vitalbox ${crit ? 'crit' : ''}">
-    <div class="top"><span class="vital ${kind}">${icon(iconName, { size: 18 })}</span>
-    <span class="num">${Math.round(val)}</span></div>
+  return `<div class="vitalbox ${kind} ${crit ? 'crit' : ''}">
+    <span class="vi">${icon(iconName, { size: 15 })}</span>
+    <span class="vn num">${Math.round(val)}</span>
     ${bar(kind, val, max)}
   </div>`;
 }

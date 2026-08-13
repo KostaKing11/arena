@@ -61,49 +61,56 @@ const UI = (() => {
 
   /* ═══════════════ početni ekran ═══════════════ */
   function initHome(testMode) {
-    $('#brandMark').innerHTML = `<svg viewBox="0 0 120 120" width="96" height="96">
-      <circle cx="60" cy="60" r="47" fill="none" stroke="var(--gold)" stroke-width="3"/>
-      <path d="M60 20 L75 43 L99 50 L80 67 L86 95 L60 80 L34 95 L40 67 L21 50 L45 43 Z"
-        fill="none" stroke="var(--ember)" stroke-width="4" stroke-linejoin="round"/>
-      <path d="M40 60 Q60 44 80 60 Q60 72 40 60 Z" fill="var(--gold)"/></svg>`;
-    makeEmbers($('#embers'), 14);
+    $('#brandMark').innerHTML = `<svg viewBox="0 0 120 120">
+      <circle cx="60" cy="60" r="50" fill="none" stroke="var(--gold)" stroke-width="5"/>
+      <path d="M60 20 L75 44 L100 50 L81 68 L87 96 L60 81 L33 96 L39 68 L20 50 L45 44 Z"
+        fill="var(--ember)"/></svg>`;
     $('#nameInput').value = localStorage.getItem('arena.name') || '';
+    $('#idcardEdit').innerHTML = icon('chevronRight', { size: 18 });
+    $('#btnSettingsHome').innerHTML = icon('settings', { size: 22 });
     renderHomeAvatar();
-    $('#btnTheme').textContent = Theme.get() === 'day' ? T('nightMode') : T('dayMode');
-    // Test sa botovima je vidljivo dugme, ne skrivena putanja
-    show($('#btnQuickTest'), testMode);
-    $('#qtIcon').innerHTML = icon('settings', { size: 22 });
+    show($('#btnQuickTest'), testMode || devMode());
+    $('#qtIcon').innerHTML = icon('settings', { size: 20 });
   }
-  const renderHomeAvatar = () => { $('#homeAvatar').innerHTML = `<span class="avatar ring" style="display:block">${avatarSvg(myAvatar, 56)}</span>`; };
+  const renderHomeAvatar = () => { $('#homeAvatar').innerHTML = `<span class="avatar" style="display:block">${avatarSvg(myAvatar, 46)}</span>`; };
+  const devMode = () => localStorage.getItem('arena.dev') === '1';
+
+  const HAIR_LBL = { short: 'Kratka', long: 'Duga', bun: 'Punđa', buzz: 'Ošišan', curly: 'Kovrdžava', braid: 'Pletenica' };
+  const HAIR_LBL_EN = { short: 'Short', long: 'Long', bun: 'Bun', buzz: 'Buzz', curly: 'Curly', braid: 'Braid' };
+  const BUILD_LBL = { slim: 'Vitak', normal: 'Srednji', broad: 'Krupan' };
+  const BUILD_LBL_EN = { slim: 'Slim', normal: 'Normal', broad: 'Broad' };
 
   function avatarBuilder() {
-    const body = () => `
-      <div class="avatar-preview"><div class="avatar ring">${avatarSvg(myAvatar, 150)}</div></div>
-      ${group('skin', T('skin'), AV.skin, true)}
-      ${group('hairColor', T('hairColor'), AV.hairColor, true)}
-      ${group('hair', T('hair'), AV.hair, false)}
-      ${group('shirt', T('shirt'), AV.shirt, true)}
-      ${group('body', T('body'), AV.body, false)}
-      <button class="btn ghost full" id="avRand" style="margin-top:var(--s3)">${esc(T('randomize'))}</button>
-      <button class="btn primary lg full" id="avOk" style="margin-top:var(--s2)">${esc(T('continue'))}</button>`;
-    function group(key, label, vals, isColor) {
+    const s = sheet(T('avatarTitle'), '<div id="avBody"></div>');
+    draw();
+    function draw() {
+      $('#avBody', s).innerHTML = `
+        <div class="avatar-preview">${avatarFigure(myAvatar, 180, { weapon: 'fists' })}</div>
+        ${group('skin', T('skin'), AV.skin, 'color')}
+        ${group('hair', T('hair'), AV.hair, 'label')}
+        ${group('hairColor', T('hairColor'), AV.hairColor, 'color')}
+        ${group('top', T('shirt'), AV.top, 'color')}
+        ${group('bottom', T('pants'), AV.bottom, 'color')}
+        ${group('build', T('body'), AV.build, 'label')}
+        <div class="row" style="margin-top:var(--s4)">
+          <button class="btn ghost grow" id="avRand">${esc(T('randomize'))}</button>
+          <button class="btn primary grow" id="avOk">${esc(T('continue'))}</button>
+        </div>`;
+      $$('.opt-row', s).forEach((row) => $$('button', row).forEach((b) => b.onclick = () => {
+        myAvatar[row.dataset.k] = b.dataset.v; saveAvatar(); draw(); renderHomeAvatar();
+      }));
+      $('#avRand', s).onclick = () => { myAvatar = randomAvatar(); saveAvatar(); draw(); renderHomeAvatar(); };
+      $('#avOk', s).onclick = () => { s.close(); renderHomeAvatar(); };
+    }
+    function group(key, label, vals, kind) {
+      const lbl = (v) => (key === 'hair' ? (LANG === 'en' ? HAIR_LBL_EN : HAIR_LBL)[v]
+        : key === 'build' ? (LANG === 'en' ? BUILD_LBL_EN : BUILD_LBL)[v] : v);
       return `<div class="field" style="margin-bottom:var(--s3)"><div class="label">${esc(label)}</div>
         <div class="opt-row" data-k="${key}">${vals.map((v) => `
           <button class="opt ${myAvatar[key] === v ? 'on' : ''}" data-v="${esc(v)}">
-            ${isColor ? `<span class="swatch" style="background:${esc(v)}"></span>` : `<span class="tiny">${esc(v)}</span>`}
+            ${kind === 'color' ? `<span class="swatch" style="background:${esc(v)}"></span>` : `<span class="tiny">${esc(lbl(v))}</span>`}
           </button>`).join('')}</div></div>`;
     }
-    const s = sheet(T('avatarTitle'), body());
-    function wire() {
-      $$('.opt-row', s).forEach((row) => $$('button', row).forEach((b) => b.onclick = () => {
-        myAvatar[row.dataset.k] = b.dataset.v;
-        saveAvatar(); redraw();
-      }));
-      $('#avRand', s).onclick = () => { myAvatar = randomAvatar(); saveAvatar(); redraw(); };
-      $('#avOk', s).onclick = () => { s.close(); renderHomeAvatar(); };
-    }
-    function redraw() { $('.sheet-content', s).innerHTML = body(); wire(); renderHomeAvatar(); }
-    wire();
   }
 
   /* ═══════════════ lobi ═══════════════ */
@@ -456,11 +463,11 @@ const UI = (() => {
     const zc = $('#zoneChip');
     if (z) {
       const nextIn = z.next ? Math.max(0, (z.next.startMs - d.now) / 1000) : 0;
-      zc.className = 'zonechip' + (d.outsideZone ? ' danger' : z.warn ? ' warn' : '');
+      zc.className = 'zonechip glass' + (d.outsideZone ? ' danger' : z.warn || z.shrinking ? ' warn' : '');
       zc.innerHTML = d.outsideZone
-        ? `${icon('alert', { size: 18 })}<span>${esc(T('outsideZone'))} · ${fmtDist(d.distToZone)}</span>`
-        : `${icon('target', { size: 18 })}<span>${esc(T('zonePhase'))} ${z.phase}${z.next ? ' · ' + U.mmss(nextIn) : ''}</span>`;
-    } else zc.innerHTML = `${icon('clock', { size: 18 })}<span>${U.mmss(Math.max(0, (d.endsAtMs - d.now) / 1000))}</span>`;
+        ? `${icon('alert', { size: 15 })}<span>${esc(T('outsideZone'))} · ${fmtDist(d.distToZone)}</span>`
+        : `${icon('target', { size: 15 })}<span>${esc(T('zonePhase'))}${z.phase ? ' ' + z.phase + '/5' : ''}${z.next ? ' · ' + U.mmss(nextIn) : ''}</span>`;
+    } else zc.innerHTML = `${icon('clock', { size: 15 })}<span>${U.mmss(Math.max(0, (d.endsAtMs - d.now) / 1000))}</span>`;
 
     $('#dangerVig').classList.toggle('on', !!d.outsideZone || !!d.inFire || !!d.inWasps);
 
@@ -491,13 +498,21 @@ const UI = (() => {
       if (!act._buzzed) { act._buzzed = true; Haptics.fire('itemNear'); }
     } else { act.hidden = true; act._buzzed = false; }
 
-    // inventar značka
+    // donja traka
+    const dockBtn = (id, ic, label, badge) => {
+      const n = $(id);
+      if (!n) return;
+      n.innerHTML = `${icon(ic, { size: 20 })}<span class="t">${esc(label)}</span>`
+        + (badge ? `<span class="badge">${badge}</span>` : '');
+    };
     const invN = Items.inv(me).length;
-    $('#btnInv').innerHTML = `${icon('backpack', { size: 26 })}<span>${esc(T('inventory'))}</span>` +
-      (invN ? `<span class="badge">${invN}</span>` : '');
-    $('#btnFeed').innerHTML = `${icon('scroll', { size: 26 })}<span>${esc(T('feed'))}</span>`;
-    $('#btnCamera').innerHTML = icon('camera', { size: 40 });
-    $('#btnMenu').innerHTML = icon('menu', { size: 22 });
+    dockBtn('#btnInv', 'backpack', T('inventory'), invN || 0);
+    dockBtn('#btnFeed', 'scroll', T('feed'));
+    dockBtn('#btnPlayers', 'users', T('tributes'), d.aliveCount);
+    dockBtn('#btnGhost', ghost ? 'spark' : 'map', ghost ? T('sparks') : T('map'));
+    $('#btnCamera').innerHTML = icon('camera', { size: 26 });
+    $('#btnMenu').innerHTML = icon('settings', { size: 20 });
+    $('#btnRecenter').innerHTML = icon('crosshair', { size: 20 });
 
     // pogodak / šteta — vibracija i trzaj
     if (lastHp != null && me.hp < lastHp - 0.6) { Haptics.fire('hurt'); }
@@ -529,37 +544,55 @@ const UI = (() => {
     return out;
   }
 
+  /* Prava kompasna traka: crtice na svakih 5°, veće na 15°, strane sveta na 45°.
+     Vidno polje je 120°, pa se traka pomera zajedno sa telefonom. */
+  const CARD_SR = ['S', 'SI', 'I', 'JI', 'J', 'JZ', 'Z', 'SZ'];
+  const CARD_EN = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const FOV = 120;
+
   function renderCompass(d) {
     const c = $('#compass');
     const h = Compass.heading;
-    show(c, h != null);
-    if (h == null) return;
-    const w = c.clientWidth || 320;
-    const pxPerDeg = w / 120;
-    const marks = [];
-    const CARD = LANG === 'en' ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] : ['S', 'SI', 'I', 'JI', 'J', 'JZ', 'Z', 'SZ'];
-    for (let i = 0; i < 8; i++) {
-      const ang = i * 45;
-      const off = U.angleDiff(h, ang);
-      if (Math.abs(off) > 60) continue;
-      marks.push(`<div class="card" style="left:${w / 2 + off * pxPerDeg}px">${CARD[i]}</div>`);
-      marks.push(`<div class="tick" style="left:${w / 2 + off * pxPerDeg}px"></div>`);
+    const strip = $('#compassStrip');
+    if (h == null) {
+      c.classList.add('compass-dead');
+      strip.innerHTML = `<span>${esc(T('detNoCompass'))}</span>`;
+      return;
     }
-    // oznake: zona, saveznici, startna tačka
+    c.classList.remove('compass-dead');
+    const w = c.clientWidth || 340;
+    const ppd = w / FOV;
+    const half = FOV / 2 + 6;
+    const CARD = LANG === 'en' ? CARD_EN : CARD_SR;
+    const out = [];
+
+    // Samo strane sveta — brojevi stepeni su zatrpavali traku.
+    for (let a = 0; a < 360; a += 5) {
+      const off = U.angleDiff(h, a);
+      if (Math.abs(off) > half) continue;
+      const x = w / 2 + off * ppd;
+      const major = a % 45 === 0, mid = a % 15 === 0;
+      out.push(`<i class="tk ${major ? 'major' : mid ? 'mid' : 'minor'}" style="left:${x}px"></i>`);
+      if (major) out.push(`<span class="cd card" style="left:${x}px">${CARD[a / 45]}</span>`);
+    }
+
+    // oznake na traci: zona kad si van nje, saveznici, startna tačka u pripremi
     const pos = Geo.pos;
-    if (pos && d.zone && d.outsideZone) {
-      const off = U.angleDiff(h, U.bearing(pos, d.zone.center));
-      if (Math.abs(off) <= 60) marks.push(`<div class="mk" style="left:${w / 2 + off * pxPerDeg}px;color:var(--danger)">${icon('target', { size: 18 })}</div>`);
-    }
-    if (pos) {
+    const mark = (brg, color, name) => {
+      const off = U.angleDiff(h, brg);
+      if (Math.abs(off) > half) return;
+      out.push(`<span class="mk" style="left:${w / 2 + off * ppd}px;color:${color}">${icon(name, { size: 14 })}</span>`);
+    };
+    if (pos && d.zone && d.outsideZone) mark(U.bearing(pos, d.zone.center), 'var(--danger)', 'target');
+    if (pos && d.me && d.state === 'PREP' && d.me.startPos) mark(U.bearing(pos, d.me.startPos), 'var(--gold)', 'pin');
+    if (pos && d.me) {
       for (const [pid, p] of Object.entries(Store.players())) {
         if (pid === Store.myId || !p.pos || p.alive === false) continue;
-        if (!(p.allianceId && p.allianceId === (d.me.allianceId))) continue;
-        const off = U.angleDiff(h, U.bearing(pos, p.pos));
-        if (Math.abs(off) <= 60) marks.push(`<div class="mk" style="left:${w / 2 + off * pxPerDeg}px;color:var(--good)">${icon('user', { size: 16 })}</div>`);
+        if (!(p.allianceId && p.allianceId === d.me.allianceId)) continue;
+        mark(U.bearing(pos, p.pos), 'var(--ally)', 'user');
       }
     }
-    $('#compassStrip').innerHTML = marks.join('');
+    strip.innerHTML = out.join('');
   }
 
   /* ═══════════════ inventar ═══════════════ */
@@ -603,27 +636,54 @@ const UI = (() => {
     });
   }
 
+  /* ═══════════════ spisak igrača ═══════════════ */
+  function playersSheet() {
+    const me = Store.me() || {};
+    const P = Store.players();
+    const rows = Object.entries(P).sort((a, b) => (a[1].alive === false) - (b[1].alive === false))
+      .map(([pid, p]) => {
+        const ally = p.allianceId && p.allianceId === me.allianceId;
+        const kind = pid === Store.myId ? 'me' : ally ? 'ally' : 'foe';
+        return `<div class="list-item ${p.alive === false ? 'dead' : ''}">
+          <span class="avatar ${p.alive === false ? '' : kind}" style="display:block">${avatarSvg(p.avatar, 34)}</span>
+          <div class="grow"><div class="name">${esc(p.name)}${pid === Store.myId ? ' · ' + esc(T('you')) : ''}</div>
+            <div class="tiny mute">${p.alive === false ? esc(T('youDied')) + (p.place ? ' · ' + p.place + '.' : '')
+              : (p.classId && pid === Store.myId ? esc(clsName(p.classId)) : esc(T('unknown')))}</div></div>
+          ${p.alive === false ? icon('skull', { size: 16 }) : `<span class="chip ${kind === 'ally' ? 'good' : ''}">${p.kills || 0} ${icon('skull', { size: 11 })}</span>`}
+        </div>`;
+      }).join('');
+    sheet(`${T('tributes')} · ${Store.alive().length}/${Object.keys(P).length}`, `<div class="list">${rows}</div>`);
+  }
+
   /* ═══════════════ objave ═══════════════ */
+  /** Objave su rečenice, ne šifre. Ranije je pisalo "prep", "zona", "kosta -". */
   function feedText(f) {
     const P = Store.players();
     const nm = (id) => (P[id] ? P[id].name : T('unknown'));
     switch (f.type) {
-      case 'death': return f.killerId ? `${nm(f.subjectId)} — ${T('diedFrom')} ${nm(f.killerId)}`
-        : `${nm(f.subjectId)} — ${T({ zone: 'diedZone', hunger: 'diedHunger', thirst: 'diedThirst', fire: 'diedFire', trap: 'diedTrap' }[f.cause] || 'diedZone')}`;
-      case 'start': return T('startGame');
-      case 'finalTwo': return T('finalTwo');
-      case 'end': return T('gameOver');
-      case 'legendary': return T('pickupHold') + ' — ' + rarityName('legendary');
-      case 'betrayal': return `${nm(f.subjectId)} → ${nm(f.targetId)}: ${T('actBetray')}`;
-      case 'alliance': return T('allianceAccepted');
-      case 'package': return T('gotPackage');
-      case 'shot': return `${nm(f.subjectId)} → ${nm(f.targetId)} ${f.hit ? '✓' : '✗'}`;
-      case 'event': return eventName(f.eventType);
-      case 'zone': return T('zoneShrinking');
-      case 'alarm': return T('trapHit');
-      default: return f.text || f.type;
+      case 'death':
+        if (f.killerId) return f.cause === 'shot' ? T('fDeathShot', nm(f.subjectId), nm(f.killerId)) : T('fDeathBy', nm(f.subjectId), nm(f.killerId));
+        return T({ zone: 'fDeathZone', hunger: 'fDeathHunger', thirst: 'fDeathThirst', fire: 'fDeathFire', trap: 'fDeathTrap' }[f.cause] || 'fDeathZone', nm(f.subjectId));
+      case 'prep': return T('fPrep');
+      case 'start': return T('fStart');
+      case 'finalTwo': return T('fFinalTwo');
+      case 'end': return f.subjectId ? T('fWinner', nm(f.subjectId)) : T('gameOver');
+      case 'legendary': return T('fLegend');
+      case 'betrayal': return T('fBetray', nm(f.subjectId), nm(f.targetId));
+      case 'alliance': return T('fAlliance');
+      case 'package': return T('fPackage');
+      case 'shot': return T('fShot', nm(f.subjectId), nm(f.targetId), f.hit);
+      case 'event': return f.eventType === 'feast' ? T('fFeast') : T('fEvent', eventName(f.eventType));
+      case 'zone': return T('fZone', f.phase || '', f.diameter || '');
+      case 'alarm': return T('fAlarm');
+      default: return f.text || '';
     }
   }
+  const feedIcon = (f) => ({
+    death: 'skull', start: 'flame', prep: 'clock', finalTwo: 'users', end: 'trophy',
+    legendary: 'box', betrayal: 'knife', alliance: 'handshake', package: 'gift',
+    shot: 'bow', event: 'spark', zone: 'target', alarm: 'bell',
+  }[f.type] || 'scroll');
   function feedSheet() {
     const me = Store.me();
     const ghost = me && me.alive === false;
@@ -632,35 +692,110 @@ const UI = (() => {
       .filter((f) => f.scope !== 'ghosts' || ghost)
       .filter((f) => f.scope !== 'self' || f.subjectId === Store.myId)
       .sort((a, b) => b.atMs - a.atMs).slice(0, 60);
-    sheet(T('feed'), `<div class="stack">${list.map((f) => `
+    const t0 = Store.meta().startedAtMs || 0;
+    sheet(T('feed'), `<div>${list.map((f) => `
       <div class="feed-item ${f.type === 'death' ? 'death' : f.type === 'zone' ? 'zone' : 'event'}">
-        <div>${esc(feedText(f))}</div>
-        <div class="t">${new Date(f.atMs).toLocaleTimeString()}</div>
+        <span class="fic">${icon(feedIcon(f), { size: 16 })}</span>
+        <span class="ft">${esc(feedText(f))}</span>
+        <span class="fw">${t0 ? U.mmss(Math.max(0, (f.atMs - t0) / 1000)) : ''}</span>
       </div>`).join('') || `<p class="dim center">—</p>`}</div>`);
   }
 
-  /* ═══════════════ meni ═══════════════ */
-  function menuSheet() {
+  /* ═══════════════ podešavanja ═══════════════ */
+  let verTaps = 0;
+  function renderSettings() {
+    const inGame = Store.room && Store.state() !== 'LOBBY' && Store.state() !== 'END';
     const host = Store.isHost();
     const paused = !!Store.meta().pausedAtMs;
-    sheet(T('menu'), `<div class="stack">
-      <button class="btn full" id="mTheme">${icon(Theme.get() === 'day' ? 'moon' : 'sun', { size: 22 })}<span>${esc(Theme.get() === 'day' ? T('nightMode') : T('dayMode'))}</span></button>
-      <button class="btn full" id="mLang">SR / EN</button>
-      <button class="btn full" id="mRecenter">${icon('crosshair', { size: 22 })}<span>${esc(T('map'))}</span></button>
-      <button class="btn full" id="mMentor">${icon('users', { size: 22 })}<span>${esc(T('mentorLink'))}</span></button>
-      <label class="switch card"><span>${esc(T('cannon'))} + ${esc(T('menu'))}</span>
-        <input type="checkbox" id="mHap" ${Haptics.enabled ? 'checked' : ''}><span class="track"><span class="knob"></span></span></label>
-      ${host ? `<button class="btn ${paused ? 'good' : 'ghost'} full" id="mPause">${icon(paused ? 'play' : 'pause', { size: 22 })}<span>${esc(paused ? T('resumeGame') : T('pauseGame'))}</span></button>` : ''}
-      <button class="btn danger-ghost full" id="mQuit">${esc(T('quitGame'))}</button>
-    </div>`).close;
-    $('#mTheme').onclick = () => { Theme.toggle(); location.reload(); };
-    $('#mLang').onclick = () => { toggleLang(); location.reload(); };
-    $('#mRecenter').onclick = () => { gmap && gmap.recenter(); };
-    $('#mMentor').onclick = () => UI.mentorLinkSheet(Store.myId);
-    $('#mHap').onchange = (e) => Haptics.setEnabled(e.target.checked);
-    const p = $('#mPause');
-    if (p) p.onclick = () => Store.hostUpdate('meta', { pausedAtMs: paused ? null : Clock.now() });
-    $('#mQuit').onclick = async () => { if (await confirmBox(T('quitConfirm'), T('quitGame'), true)) Engine.die('quit'); };
+    const dev = devMode();
+    const p = permState();
+    const permsOk = p.location && p.camera;
+
+    const row = (id, ic, label, val, extra) => `
+      <button class="rowitem" id="${id}">${icon(ic, { size: 20 })}
+        <span class="lbl">${esc(label)}</span>
+        ${val ? `<span class="val">${esc(val)}</span>` : ''}
+        ${extra || icon('chevronRight', { size: 16 })}</button>`;
+
+    $('#settingsBody').innerHTML = `
+      <div>
+        <div class="card-title">${esc(T('appearance'))}</div>
+        <div class="rows">
+          <div class="rowitem">${icon('sun', { size: 20 })}<span class="lbl">${esc(T('theme'))}</span>
+            <div class="seg" style="width:170px" id="setTheme">
+              <button data-v="night" class="${Theme.get() !== 'day' ? 'on' : ''}">${esc(T('nightMode'))}</button>
+              <button data-v="day" class="${Theme.get() === 'day' ? 'on' : ''}">${esc(T('dayMode'))}</button>
+            </div></div>
+          <div class="rowitem">${icon('scroll', { size: 20 })}<span class="lbl">${esc(T('language'))}</span>
+            <div class="seg" style="width:130px" id="setLang">
+              <button data-v="sr" class="${LANG === 'sr' ? 'on' : ''}">SR</button>
+              <button data-v="en" class="${LANG === 'en' ? 'on' : ''}">EN</button>
+            </div></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card-title">${esc(T('soundVibe'))}</div>
+        <div class="rows">
+          <label class="rowitem">${icon('bell', { size: 20 })}<span class="lbl">${esc(T('haptics'))}</span>
+            <span class="switch"><input type="checkbox" id="setHap" ${Haptics.enabled ? 'checked' : ''}><span class="track"><span class="knob"></span></span></span></label>
+          <label class="rowitem">${icon('flame', { size: 20 })}<span class="lbl">${esc(T('sound'))}</span>
+            <span class="switch"><input type="checkbox" id="setSfx" ${Sfx.enabled ? 'checked' : ''}><span class="track"><span class="knob"></span></span></span></label>
+        </div>
+      </div>
+
+      <div>
+        <div class="card-title">${esc(T('yourTribute'))}</div>
+        <div class="rows">
+          ${row('setAvatar', 'user', T('avatarTitle'))}
+          ${row('setPerms', 'pin', T('checkPerms'), permsOk ? T('granted') : T('denied'))}
+        </div>
+      </div>
+
+      ${inGame ? `<div>
+        <div class="card-title">${esc(T('game'))}</div>
+        <div class="rows">
+          ${row('setMentor', 'users', T('mentorLink'))}
+          ${host ? row('setPause', paused ? 'play' : 'pause', paused ? T('resumeGame') : T('pauseGame')) : ''}
+          <button class="rowitem" id="setQuit">${icon('alert', { size: 20 })}
+            <span class="lbl" style="color:var(--danger)">${esc(T('quitGame'))}</span></button>
+        </div></div>` : ''}
+
+      ${dev ? `<div>
+        <div class="card-title">${esc(T('devOptions'))}</div>
+        <div class="rows">
+          ${row('setBots', 'settings', T('testWithBots'))}
+          ${row('setDiag', 'compass', T('diagnostics'))}
+          ${row('setDevOff', 'x', T('devOff'))}
+        </div></div>` : ''}
+
+      <div>
+        <div class="card-title">${esc(T('about'))}</div>
+        <div class="rows">
+          <button class="rowitem" id="setVer">${icon('trophy', { size: 20 })}
+            <span class="lbl">${esc(T('version'))}</span><span class="val">${APP_VERSION}</span></button>
+          <div class="rowitem"><span class="lbl tiny mute" style="font-weight:400">${esc(T('mapCredit'))}</span></div>
+        </div>
+      </div>`;
+
+    $$('#setTheme button').forEach((b) => b.onclick = () => { Theme.set(b.dataset.v); renderSettings(); });
+    $$('#setLang button').forEach((b) => b.onclick = () => { setLang(b.dataset.v); applyLang(); renderSettings(); });
+    $('#setHap').onchange = (e) => Haptics.setEnabled(e.target.checked);
+    $('#setSfx').onchange = (e) => { Sfx.setEnabled(e.target.checked); Sfx.unlock(); };
+    $('#setAvatar').onclick = () => avatarBuilder();
+    $('#setPerms').onclick = () => App.checkPerms();
+    const mm = $('#setMentor'); if (mm) mm.onclick = () => mentorLinkSheet(Store.myId);
+    const pp = $('#setPause'); if (pp) pp.onclick = () => { Store.hostUpdate('meta', { pausedAtMs: paused ? null : Clock.now() }); renderSettings(); };
+    const qq = $('#setQuit'); if (qq) qq.onclick = async () => { if (await confirmBox(T('quitConfirm'), T('quitGame'), true)) { Engine.die('quit'); App.route(); } };
+    const bb = $('#setBots'); if (bb) bb.onclick = () => App.askBotCount();
+    const dd = $('#setDiag'); if (dd) dd.onclick = () => { location.href = 'diag.html'; };
+    const off = $('#setDevOff'); if (off) off.onclick = () => { localStorage.removeItem('arena.dev'); renderSettings(); UI.initHome(App.TEST); };
+    // Razvojne opcije se otključavaju sa sedam tapova na verziju — kao na telefonu.
+    $('#setVer').onclick = () => {
+      if (devMode()) return;
+      if (++verTaps >= 7) { localStorage.setItem('arena.dev', '1'); verTaps = 0; Haptics.fire('pickup'); toast(T('devOn'), 'good', 'settings'); renderSettings(); UI.initHome(App.TEST); }
+      else if (verTaps >= 4) toast(`${7 - verTaps}`, '', 'settings');
+    };
   }
 
   /* ═══════════════ borba ═══════════════ */
@@ -678,44 +813,43 @@ const UI = (() => {
     const picked = spectate ? false : !!(f.moves || {})[Store.myId];
     const left = Math.max(0, (f.deadlineMs - d.now) / 1000);
 
-    $('#fightTag').innerHTML = spectate
-      ? `${icon('eye', { size: 16 })}<span>${esc(T('spectating'))}</span>`
-      : `${icon('swords', { size: 16 })}<span>${esc(T('fight'))}</span>`;
-    const rr = $('#roundRing');
-    rr.className = 'round-ring' + (left < 4 ? ' urgent' : '');
-    rr.innerHTML = ring(left / (R.ROUND_MS / 1000), 62) + `<div class="n">${f.round}</div>`;
+    // ── likovi na terenu: razmak prati razdaljinu iz borbe ──
+    const near = 6, far = 34;                        // procenti od ivice
+    const t = f.distance / 5;
+    $('#figMe').style.left = (near + (far - near) * t) + '%';
+    $('#figFoe').style.right = (near + (far - near) * t) + '%';
+    $('#figMe').innerHTML = avatarFigure(me.avatar, 132, { weapon: me.weapon });
+    $('#figFoe').innerHTML = avatarFigure(foe.avatar, 132, { weapon: foe.weapon, facing: -1 });
+    $('#coverL').innerHTML = icon('flame', { size: 26 });
+    $('#coverR').innerHTML = icon('box', { size: 26 });
 
-    $('#fighters').innerHTML = `
-      <div class="fighter me" id="fMe">
-        <div class="avatar" style="width:74px;height:74px">${avatarSvg(me.avatar, 74)}</div>
-        <div class="who">${esc(spectate ? (me.name || '?') : T('you'))}</div>
-        <div class="cls">${esc(clsName(me.classId))}</div>
-        <div class="hpnum">${Math.round(myHp)}</div>
-        <div class="dmg-pop" id="popMe"></div>
-      </div>
-      <div class="dim display" style="font-size:var(--fs-lg)">VS</div>
-      <div class="fighter foe" id="fFoe">
-        <div class="avatar" style="width:74px;height:74px">${avatarSvg(foe.avatar, 74)}</div>
-        <div class="who">${esc(foe.name || '?')}</div>
-        <div class="cls">${foe.classId ? esc(clsName(foe.classId)) : '—'}</div>
-        <div class="hpnum">${Math.round(fHp)}</div>
-        <div class="dmg-pop" id="popFoe"></div>
-      </div>`;
+    const tag = (who, name, cls, hp, max) => `
+      <div class="nm">${esc(name)}</div>
+      <div class="cl">${cls ? esc(clsName(cls)) : '—'}</div>
+      <div class="hpline"><span class="hpn">${Math.round(hp)}</span>${bar('hp', hp, max || 100)}</div>`;
+    $('#tagMe').innerHTML = tag('me', spectate ? (me.name || '?') : T('you'), me.classId, myHp, me.maxHp);
+    $('#tagFoe').innerHTML = tag('foe', foe.name || '?', foe.classId, fHp, foe.maxHp);
 
-    // traka razdaljine kao vizuelna skala
+    $('#roundNum').textContent = `${T('round')} ${Math.min(f.round, f.maxRounds || R.MAX_ROUNDS)}/${f.maxRounds || R.MAX_ROUNDS}`;
+    $('#roundBar').className = 'round-bar' + (left < 4 ? ' urgent' : '');
+    $('#roundTimer').style.transform = `scaleX(${U.clamp(left / (R.ROUND_MS / 1000), 0, 1)})`;
+
+    // ── traka razdaljine sa pojasom dometa oružja ──
     const segs = [];
     for (let i = 0; i <= 5; i++) {
       const pct = (i / 5) * 100;
-      const inR = R.inRange(w, i);
-      segs.push(`<div class="seg ${inR ? 'inrange' : ''}" style="left:${pct}%"></div>`);
+      segs.push(`<div class="seg ${R.inRange(w, i) ? 'inrange' : ''}" style="left:${pct}%"></div>`);
       segs.push(`<div class="lbl" style="left:${pct}%">${i}</div>`);
     }
-    $('#dtrack').innerHTML = `<div class="line"></div>${segs.join('')}
-      <div class="pip" style="left:${(f.distance / 5) * 100}%"></div>`;
+    const bandL = (w.min / 5) * 100, bandR = (w.max / 5) * 100;
+    $('#dtrack').innerHTML = `<div class="line"></div>
+      <div class="rngband" style="left:${bandL}%;width:${Math.max(2, bandR - bandL)}%"></div>
+      ${segs.join('')}<div class="pip" style="left:${(f.distance / 5) * 100}%"></div>`;
     const inRange = R.inRange(w, f.distance);
-    $('#rangeHint').className = 'range-hint ' + (inRange ? 'ok' : 'bad');
-    $('#rangeHint').innerHTML = `${esc(weaponName(me.weapon))} · ${w.min}–${w.max} · ` +
-      (inRange ? esc(T('moveAttack')) : esc(T('outOfRange')));
+    $('#rangeHint').className = 'range-hint ' + (inRange ? 'ok' : '');
+    $('#rangeHint').innerHTML = `${icon(WEAPON_ICON[me.weapon] || 'hand', { size: 13, cls: 'inline' })}
+      <b>${esc(weaponName(me.weapon))}</b> · ${esc(T('distance'))} ${w.min}–${w.max} · `
+      + (inRange ? `<b>${esc(T('moveAttack'))}</b>` : esc(T('outOfRange')));
 
     // gledalac vidi sve isto, samo bez dugmadi
     if (spectate) {
@@ -731,7 +865,7 @@ const UI = (() => {
 
     // potezi
     const mk = (m, label, ic, cls) => `<button class="move ${cls || ''}" data-m="${m}" ${picked ? 'disabled' : ''}>
-      ${icon(ic, { size: 28 })}<span>${esc(label)}</span></button>`;
+      ${icon(ic, { size: 22 })}<span>${esc(label)}</span></button>`;
     $('#moves').innerHTML =
       mk('attack', T('moveAttack'), 'swords', 'attack') +
       mk('block', T('moveBlock'), 'shield', 'block') +
@@ -764,8 +898,8 @@ const UI = (() => {
         const mine = l.to === meId;
         const pop = $(mine ? '#popMe' : '#popFoe');
         if (pop) { pop.textContent = '−' + l.dmg; pop.classList.remove('go'); void pop.offsetWidth; pop.classList.add('go'); }
-        const card = $(mine ? '#fMe' : '#fFoe');
-        if (card) { card.classList.remove('hit'); void card.offsetWidth; card.classList.add('hit'); }
+        const fig = $(mine ? '#figMe' : '#figFoe');
+        if (fig) { fig.classList.remove('hit'); void fig.offsetWidth; fig.classList.add('hit'); }
       }
       Haptics.fire('round'); Sfx.hit();
     }
@@ -1027,8 +1161,8 @@ const UI = (() => {
     onboarding, onboardingDone, permState, FACE_KEY,
     renderLobby, showQr, shareLink, renderPrep, nextStep, get prepStep() { return prepStep; },
     set prepStep(v) { prepStep = v; }, renderDeploy, ensureMap, renderGame, inventorySheet,
-    feedSheet, menuSheet, renderFight, renderChase, showSky, renderGhost, renderEnd, feedText,
-    renderMentor,
+    feedSheet, playersSheet, renderFight, renderChase, showSky, renderGhost, renderEnd, feedText,
+    renderMentor, renderSettings, devMode,
     get gmap() { return gmap; },
     get spectateFid() { return spectateFid; },
     set spectateFid(v) { spectateFid = v; lastFightRound = -1; },

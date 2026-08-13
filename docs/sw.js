@@ -3,7 +3,7 @@
    keš prvo za CDN biblioteke. Baza, prijava i pločice mape se NE keširaju.
    Kad menjaš kod, podigni VERSION. */
 
-const VERSION = 'arena-v5';
+const VERSION = 'arena-v6';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -13,7 +13,7 @@ const PRECACHE = [
   'js/firebase-config.js',
   'js/core/util.js', 'js/core/rules.js', 'js/core/i18n.js', 'js/core/icons.js', 'js/core/haptics.js',
   'js/net/clock.js', 'js/net/store.js',
-  'js/ui/kit.js', 'js/ui/nav.js', 'js/ui/sensors.js', 'js/ui/map.js', 'js/ui/screens.js',
+  'js/ui/kit.js', 'js/ui/avatar.js', 'js/ui/nav.js', 'js/ui/sensors.js', 'js/ui/map.js', 'js/ui/screens.js',
   'js/game/engine.js', 'js/game/items.js', 'js/game/combat.js', 'js/game/encounter.js',
   'js/game/mentor.js', 'js/game/bots.js',
   'js/app.js',

@@ -17,7 +17,7 @@ const TILES_DAY = {
 function makeMap(elId, opts) {
   opts = opts || {};
   const map = L.map(elId, {
-    zoomControl: false, attributionControl: true, tap: true,
+    zoomControl: false, attributionControl: false, tap: true,
     zoomSnap: 0.25, preferCanvas: true,
   }).setView([44.8125, 20.4612], opts.zoom || 17);
 
@@ -42,35 +42,56 @@ function makeMap(elId, opts) {
   map.on('move zoom', drawFog);
   setTimeout(() => map.invalidateSize(), 150);
 
-  /* Magla rata: rupa tačno oko igrača, sve dalje potamni. */
+  /* Magla rata je atmosfera, a NE pravilo — šta se stvarno vidi određuju podaci
+     (Items.visible). Zato je otvor mnogo širi od dometa vida: ranije je pri
+     vidu od 15 m rupa bila ~46 px na ekranu od 740, pa je mapa izgledala
+     pokvareno. Sada se vidi teren, a plen i dalje samo u pravom dometu. */
+  const FOG_REVEAL = 3.2;
   function drawFog() {
     const fog = document.getElementById('fog');
     if (!fog) return;
     if (fullMap || !lastMe) { fog.style.background = 'transparent'; return; }
     const p = map.latLngToContainerPoint(lastMe);
-    const mpp = 40075016.686 * Math.cos(U.toRad(lastMe.lat)) / (256 * Math.pow(2, map.getZoom()));
-    const r = Math.max(46, visionM / mpp);
-    const dark = getComputedStyle(document.documentElement).getPropertyValue('--fog').trim() || 'rgba(5,4,8,.88)';
+    const r = Math.max(110, visionM / metersPerPx() * FOG_REVEAL);
+    const dark = getComputedStyle(document.documentElement).getPropertyValue('--fog').trim() || 'rgba(6,5,10,.72)';
+    const soft = dark.replace(/[\d.]+\)$/, '.28)');
     fog.style.background =
-      `radial-gradient(circle ${r * 2.4}px at ${p.x}px ${p.y}px, rgba(0,0,0,0) 0, rgba(0,0,0,0) ${r}px,` +
-      ` ${dark.replace(/[\d.]+\)$/, '.45)')} ${r * 1.15}px, ${dark} ${r * 1.75}px)`;
+      `radial-gradient(circle ${r * 2.1}px at ${p.x}px ${p.y}px, rgba(0,0,0,0) 0, rgba(0,0,0,0) ${r * .55}px,`
+      + ` ${soft} ${r * .9}px, ${dark} ${r * 1.5}px)`;
+  }
+  const metersPerPx = () =>
+    40075016.686 * Math.cos(U.toRad(lastMe ? lastMe.lat : 45)) / (256 * Math.pow(2, map.getZoom()));
+
+  /** Zum se bira tako da krug vidljivosti zauzme razuman deo ekrana. */
+  function autoZoom() {
+    if (!lastMe || fullMap) return;
+    const px = Math.min(map.getSize().x, map.getSize().y) * 0.34;
+    const want = visionM * FOG_REVEAL * 0.55;
+    let z = Math.log2(40075016.686 * Math.cos(U.toRad(lastMe.lat)) * px / (256 * want));
+    z = U.clamp(Math.round(z * 4) / 4, 15, 19);
+    if (Math.abs(map.getZoom() - z) > 0.3) map.setZoom(z, { animate: false });
   }
 
   function setMe(pos, headingDeg) {
     if (!pos) return;
+    const first = !lastMe;
     lastMe = L.latLng(pos.lat, pos.lng);
-    if (!L_.me) L_.me = L.marker(lastMe, { icon: div('mk-me'), zIndexOffset: 1000, interactive: false }).addTo(map);
+    if (!L_.me) L_.me = L.marker(lastMe, { icon: div('mk-me', '<i class="dir"></i>'), zIndexOffset: 1000, interactive: false }).addTo(map);
     else L_.me.setLatLng(lastMe);
-    if (headingDeg != null) {
-      const n = L_.me.getElement() && L_.me.getElement().firstChild;
-      if (n) n.style.transform = `rotate(${headingDeg}deg)`;
+    const node = L_.me.getElement() && L_.me.getElement().querySelector('.dir');
+    if (node) node.style.display = headingDeg == null ? 'none' : '';
+    if (node && headingDeg != null) {
+      const el2 = L_.me.getElement().firstChild;
+      el2.style.transform = `rotate(${headingDeg}deg)`;
     }
-    if (follow) map.setView(lastMe, map.getZoom(), { animate: true, duration: 0.35 });
+    if (first) autoZoom();
+    if (follow) map.setView(lastMe, map.getZoom(), { animate: !first, duration: 0.3 });
     drawFog();
   }
   function recenter(z) {
     follow = true;
-    if (lastMe) map.setView(lastMe, z || 17, { animate: true });
+    autoZoom();
+    if (lastMe) map.setView(lastMe, z || map.getZoom(), { animate: true });
   }
 
   /* — zona: crta se glatko, bez skokova (§14) — */
@@ -125,15 +146,15 @@ function makeMap(elId, opts) {
     for (const [id, m] of L_.items) if (!seen.has(id)) { map.removeLayer(m); L_.items.delete(id); }
   }
 
+  /* Ti si zelen, protivnici crveni, saveznici plavi — bez razmišljanja. */
   function drawPlayers(list) {
     const seen = new Set();
     for (const p of list) {
       seen.add(p.id);
-      const cls = `mk-player ${p.kind}`;
+      const cls = `mk-p ${p.kind}`;
       let m = L_.players.get(p.id);
-      const html = p.kind === 'dead' ? icon('skull', { size: 13 }) : (p.kind === 'unconscious' ? icon('alert', { size: 13 }) : '');
-      if (!m) { m = L.marker([p.lat, p.lng], { icon: div(cls, html), interactive: false }).addTo(map); L_.players.set(p.id, m); }
-      else { m.setLatLng([p.lat, p.lng]); if (m._cls !== cls) m.setIcon(div(cls, html)); }
+      if (!m) { m = L.marker([p.lat, p.lng], { icon: div(cls), interactive: false }).addTo(map); L_.players.set(p.id, m); }
+      else { m.setLatLng([p.lat, p.lng]); if (m._cls !== cls) m.setIcon(div(cls)); }
       m._cls = cls;
     }
     for (const [id, m] of L_.players) if (!seen.has(id)) { map.removeLayer(m); L_.players.delete(id); }
@@ -151,8 +172,8 @@ function makeMap(elId, opts) {
 
   return {
     map, setMe, recenter, drawZone, drawFire, drawWasps, drawItems, drawPlayers, drawTraps, setStart, drawFog,
-    setVision(v) { visionM = v; drawFog(); },
-    setFull(v) { fullMap = v; drawFog(); },
+    setVision(v) { if (v === visionM) return; visionM = v; autoZoom(); drawFog(); },
+    setFull(v) { if (v === fullMap) return; fullMap = v; drawFog(); },
     get isFull() { return fullMap; },
     get following() { return follow; },
     fitArena(cfg) {

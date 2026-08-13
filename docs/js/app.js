@@ -103,27 +103,65 @@ const App = (() => {
   }
 
   function wireStatic() {
-    $('#btnQr').innerHTML = icon('qr', { size: 22 });
-    $('#btnShare').innerHTML = icon('share', { size: 22 });
+    const ib = (sel, name, fn) => { const n = $(sel); if (!n) return; n.innerHTML = icon(name, { size: 22 }); if (fn) n.onclick = fn; };
+    ib('#btnQr', 'qr', () => UI.showQr());
+    ib('#btnShare', 'share', () => UI.shareLink());
+    ib('#btnSetBack', 'chevronLeft', () => Nav.back());
+    ib('#btnLobbyBack', 'chevronLeft', () => Nav.back());
+    ib('#btnPrepBack', 'chevronLeft', () => Nav.back());
+    ib('#btnGhostBack', 'chevronLeft', () => Nav.back());
+    ib('#btnSettingsHome', 'settings', () => openSettings());
+
     $('#btnCreate').onclick = () => create();
     $('#btnJoin').onclick = () => join();
     $('#btnAvatar').onclick = () => UI.avatarBuilder();
-    $('#btnDiag').onclick = () => { location.href = 'diag.html'; };
     $('#btnQuickTest').onclick = () => askBotCount();
-    $('#btnLang').onclick = () => { toggleLang(); location.reload(); };
-    $('#btnTheme').onclick = () => { Theme.toggle(); location.reload(); };
     $('#codeInput').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); });
-    $('#btnQr').onclick = () => UI.showQr();
-    $('#btnShare').onclick = () => UI.shareLink();
+
     $('#btnInv').onclick = () => UI.inventorySheet();
     $('#btnFeed').onclick = () => UI.feedSheet();
-    $('#btnMenu').onclick = () => UI.menuSheet();
+    $('#btnPlayers').onclick = () => UI.playersSheet();
+    $('#btnGhost').onclick = () => { const me = Store.me(); if (me && me.alive === false) { Screens.go('ghost'); UI.renderGhost(Engine.d); } else UI.gmap && UI.gmap.recenter(); };
+    $('#btnMenu').onclick = () => openSettings();
+    $('#btnRecenter').onclick = () => UI.gmap && UI.gmap.recenter();
     $('#btnCamera').onclick = () => openEncounter();
-    ['pointerdown', 'keydown'].forEach((e) => document.addEventListener(e, () => Sfx.unlock(), { once: true }));
+
+    ['pointerdown', 'keydown'].forEach((e) => document.addEventListener(e, () => { Sfx.unlock(); goFullscreen(); }, { once: true }));
+    // Zumiranje prstima gasi doživljaj i pomera HUD — igra je fiksnog razmera.
+    document.addEventListener('gesturestart', (e) => e.preventDefault());
+    document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
     window.addEventListener('beforeunload', (e) => {
       const s = Store.state();
       if (s === 'LIVE' || s === 'FINAL_TWO') { e.preventDefault(); e.returnValue = T('leaveWarning'); }
     });
+  }
+
+  /** Pun ekran — bez statusne trake i navigacionih dugmadi. */
+  function goFullscreen() {
+    try {
+      const el = document.documentElement;
+      if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+    } catch {}
+  }
+
+  let settingsFrom = 'home';
+  function openSettings() {
+    settingsFrom = Screens.cur === 'settings' ? settingsFrom : Screens.cur;
+    Screens.go('settings');
+    UI.renderSettings();
+  }
+
+  /** "Proveri dozvole" iz podešavanja — traži samo ono što fali. */
+  async function checkPerms() {
+    for (const k of ['location', 'camera', 'compass']) {
+      if (!UI.permState()[k]) await requestPerm(k);
+    }
+    const p = UI.permState();
+    if (p.location) Geo.start();
+    if (p.compass) Compass.start();
+    toast(p.location && p.camera ? T('permsAllGood') : T('denied'), p.location && p.camera ? 'good' : 'danger',
+      p.location && p.camera ? 'check' : 'alert');
+    UI.renderSettings();
   }
 
   function registerSW() {
@@ -202,11 +240,7 @@ const App = (() => {
 
   /* ───────────────── dugme "nazad" ───────────────── */
   function wireBack() {
-    $('#btnPrepBack').innerHTML = icon('chevronLeft', { size: 22 });
-    $('#btnGhostBack').innerHTML = icon('chevronLeft', { size: 22 });
-    $('#btnPrepBack').onclick = () => Nav.back();
-    $('#btnGhostBack').onclick = () => Nav.back();
-
+    Nav.on('settings', () => { Screens.go(settingsFrom || 'home'); if (settingsFrom === 'lobby') UI.renderLobby(); });
     // Iz pripreme se ide korak unazad; sa prvog koraka — napolje iz sobe.
     Nav.on('prep', () => {
       if (UI.prepStep > 0) { UI.prepStep = UI.prepStep - 1; UI.renderPrep(); }
@@ -266,6 +300,7 @@ const App = (() => {
       return;
     }
     if (s === 'PREP') { Screens.go('deploy'); return; }
+    if (Screens.cur === 'settings') return;                  // podešavanja se ne prekidaju
     if (s === 'END') { Screens.go('end'); UI.renderEnd(); return; }
 
     if (me.fightId && Store.fights()[me.fightId] && Store.fights()[me.fightId].state === 'live') { Screens.go('fight'); return; }
@@ -630,7 +665,7 @@ const App = (() => {
 
   return {
     boot, route, requestPerm, startGame, playAgain, tryPickup, openEncounter, buyEvent, leaveRoom, goHome,
-    quickTest, askBotCount,
+    quickTest, askBotCount, openSettings, checkPerms, goFullscreen,
     get TEST() { return TEST; }, get MODE() { return MODE; },
   };
 })();
