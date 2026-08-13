@@ -1,0 +1,111 @@
+/* Ekrani pre igre: početni, instalacija, lobi, priprema. */
+
+/* ───────────────────────── početni ───────────────────────── */
+#s-home {
+  background:
+    radial-gradient(120% 70% at 50% -10%, rgba(255,106,26,.20), transparent 62%),
+    radial-gradient(90% 60% at 50% 110%, rgba(232,182,76,.10), transparent 60%),
+    var(--ink-1);
+}
+:root[data-theme="day"] #s-home {
+  background: radial-gradient(120% 70% at 50% -10%, rgba(196,60,5,.12), transparent 62%), var(--ink-1);
+}
+.brand { text-align: center; padding: var(--s5) 0 var(--s4); }
+.brand .mark { width: 96px; height: 96px; margin: 0 auto var(--s3); }
+.brand .logo {
+  font-family: var(--ff-display); font-size: var(--fs-display); font-weight: 800;
+  letter-spacing: .2em; text-indent: .2em; line-height: 1;
+  background: linear-gradient(180deg, var(--gold-hi), var(--ember));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+:root[data-theme="day"] .brand .logo { background: linear-gradient(180deg, var(--ember), var(--ember-lo)); -webkit-background-clip: text; background-clip: text; }
+.brand .tag { color: var(--text-dim); font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: .16em; margin-top: var(--s2); }
+
+.embers { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.embers i {
+  position: absolute; bottom: -10px; width: 3px; height: 3px; border-radius: 50%;
+  background: var(--gold-hi); box-shadow: 0 0 8px var(--ember); opacity: 0;
+  animation: rise linear infinite;
+}
+:root[data-theme="day"] .embers { display: none; }
+@keyframes rise {
+  0% { opacity: 0; transform: translateY(0) scale(.6); }
+  12% { opacity: .9; }
+  100% { opacity: 0; transform: translateY(-100vh) translateX(var(--dx,20px)) scale(1.1); }
+}
+
+.or-line { display: flex; align-items: center; gap: var(--s3); color: var(--text-mute); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .2em; }
+.or-line::before, .or-line::after { content: ''; flex: 1; height: 1px; background: var(--line-2); }
+
+/* ───────────────────────── izbor lika ───────────────────────── */
+.avatar-preview { display: grid; place-items: center; padding: var(--s4) 0; }
+.avatar-preview svg { width: 150px; height: 150px; }
+.opt-row { display: flex; gap: var(--s2); overflow-x: auto; padding-bottom: var(--s2); scrollbar-width: none; }
+.opt-row::-webkit-scrollbar { display: none; }
+.opt {
+  min-width: 56px; height: 56px; border-radius: var(--r-md);
+  border: 2px solid var(--line); background: var(--ink-2);
+  display: grid; place-items: center; flex: none; font-weight: 700;
+}
+.opt.on { border-color: var(--ember); box-shadow: var(--sh-glow); }
+.swatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(0,0,0,.25); }
+
+/* ───────────────────────── lobi ───────────────────────── */
+.code-display {
+  font-family: var(--ff-display); font-size: var(--fs-3xl); font-weight: 800;
+  letter-spacing: .22em; text-indent: .22em; color: var(--gold-hi); line-height: 1;
+}
+:root[data-theme="day"] .code-display { color: var(--gold); }
+.qr-wrap { display: grid; place-items: center; gap: var(--s3); padding: var(--s4) 0; }
+.qr-wrap canvas, .qr-wrap svg { width: min(70vw, 280px); height: auto; background: #fff; padding: 12px; border-radius: var(--r-md); }
+
+.player-row { display: flex; align-items: center; gap: var(--s3); min-height: 68px; padding: var(--s2) var(--s3); background: var(--ink-2); border: 1px solid var(--line-2); border-radius: var(--r-md); }
+.player-row .statuses { display: flex; gap: 6px; }
+.player-row .st { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--ink-4); color: var(--text-mute); }
+.player-row .st.ok { background: rgba(69,196,107,.2); color: var(--good); }
+:root[data-theme="day"] .player-row .st.ok { background: rgba(23,114,47,.16); }
+
+.setup-map { height: 260px; border-radius: var(--r-lg); overflow: hidden; border: 2px solid var(--line); background: var(--map-bg); }
+
+/* ───────────────────────── priprema (5 koraka) ───────────────────────── */
+.steps { display: flex; gap: 6px; padding: 0 0 var(--s4); }
+.steps i { flex: 1; height: 5px; border-radius: 3px; background: var(--ink-4); }
+.steps i.done { background: var(--good); }
+.steps i.on { background: var(--ember); }
+
+.perm-row { display: flex; align-items: center; gap: var(--s3); min-height: var(--tap); padding: var(--s2) var(--s3); border-radius: var(--r-md); background: var(--ink-2); border: 1px solid var(--line-2); }
+.perm-row.ok { border-color: var(--good); }
+.perm-row.bad { border-color: var(--danger); }
+
+.gauge { display: grid; place-items: center; padding: var(--s5) 0; }
+.gauge .val { font-family: var(--ff-display); font-size: var(--fs-3xl); font-weight: 800; }
+.gauge .val.ok { color: var(--good); }
+.gauge .val.bad { color: var(--danger); }
+
+.cam-wrap { position: relative; border-radius: var(--r-lg); overflow: hidden; background: #000; aspect-ratio: 3/4; }
+.cam-wrap video, .cam-wrap canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
+.face-oval {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 34% 26% at 50% 44%, transparent 98%, rgba(0,0,0,.6) 100%);
+}
+.face-oval::after {
+  content: ''; position: absolute; left: 16%; top: 18%; width: 68%; height: 52%;
+  border: 3px dashed var(--gold); border-radius: 50%;
+}
+
+.class-card {
+  border-radius: var(--r-xl); padding: var(--s5); text-align: center;
+  background: linear-gradient(160deg, var(--ink-3), var(--ink-2));
+  border: 2px solid var(--gold);
+  animation: classReveal .6s var(--ease-out) both;
+}
+@keyframes classReveal { from { opacity: 0; transform: translateY(18px) scale(.94); } }
+.class-card .ic { margin: 0 auto var(--s3); color: var(--gold-hi); }
+:root[data-theme="day"] .class-card .ic { color: var(--gold); }
+.class-card h2 { font-family: var(--ff-display); letter-spacing: .08em; }
+
+/* ───────────────────────── PREP navigacija do tačke ───────────────────────── */
+.prep-nav { display: grid; place-items: center; gap: var(--s3); padding: var(--s5) 0; }
+.prep-arrow { color: var(--ember); transition: transform .35s var(--ease); }
+.prep-dist { font-family: var(--ff-display); font-size: var(--fs-3xl); font-weight: 800; }
+.prep-dist.close { color: var(--good); }

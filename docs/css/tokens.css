@@ -1,0 +1,124 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOKENI — jedna izražajna paleta i jedna skala.
+
+   Igra se igra napolju, po suncu, u hodu, jednom rukom. Zato:
+   · sve je krupnije nego što je uobičajeno za web
+   · kontrast je jak i u noćnom i u dnevnom režimu
+   · dugmad su najmanje 56 px visine, glavna 64
+   · crvena je rezervisana ISKLJUČIVO za opasnost, nikad za ukras
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* — noćna tema (podrazumevana): ugljenisano crna, žar, zlato — */
+  --ink-0:  #07060A;
+  --ink-1:  #0D0B11;
+  --ink-2:  #151219;
+  --ink-3:  #201B28;
+  --ink-4:  #2E2739;
+  --line:   rgba(232,182,76,.16);
+  --line-2: rgba(255,255,255,.08);
+
+  --ember:    #FF6A1A;
+  --ember-hi: #FF9247;
+  --ember-lo: #B8430A;
+  --gold:     #E8B64C;
+  --gold-hi:  #FFD37A;
+  --danger:   #E03131;
+  --danger-hi:#FF6B6B;
+  --good:     #45C46B;
+
+  --text:     #F7F1E8;
+  --text-dim: #A99E8E;
+  --text-mute:#6E6659;
+  --on-ember: #1A0C02;
+
+  /* retkosti zadržavaju svoje boje u obe teme */
+  --r-common:    #9AA3AD;
+  --r-uncommon:  #45C46B;
+  --r-rare:      #3B82F6;
+  --r-epic:      #A855F7;
+  --r-legendary: #E8B64C;
+
+  --hp:     #E03131;
+  --hunger: #E8873C;
+  --thirst: #3BA7F6;
+
+  /* mapa */
+  --map-bg: #0B0A0E;
+  --fog:    rgba(5,4,8,.88);
+
+  /* tipografija — krupno, da se čita u hodu */
+  --fs-xs: 13px; --fs-sm: 15px; --fs-md: 17px; --fs-lg: 21px;
+  --fs-xl: 27px; --fs-2xl: 36px; --fs-3xl: 48px;
+  --fs-display: clamp(46px, 15vw, 76px);
+  --ff: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  --ff-display: 'Cinzel', Georgia, serif;
+
+  /* prostor */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 22px; --s6: 30px; --s7: 42px;
+  --r-sm: 10px; --r-md: 14px; --r-lg: 20px; --r-xl: 28px; --r-pill: 999px;
+
+  --tap: 56px;          /* minimalna visina dugmeta */
+  --tap-lg: 64px;       /* glavna akcija */
+
+  --sh-1: 0 2px 10px rgba(0,0,0,.4);
+  --sh-2: 0 8px 30px rgba(0,0,0,.55);
+  --sh-glow: 0 0 26px rgba(255,106,26,.35);
+
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+
+  --ease: cubic-bezier(.2,.8,.3,1);
+  --ease-out: cubic-bezier(.16,1,.3,1);
+}
+
+/* — dnevni režim: visok kontrast za jako sunce —
+   Ne "svetla tema" radi lepote, nego da se ekran vidi na 12h po suncu:
+   bela podloga, skoro crn tekst, tamnije akcente da prođu kontrast. */
+:root[data-theme="day"] {
+  --ink-0:  #FFFFFF;
+  --ink-1:  #FFFFFF;
+  --ink-2:  #F1ECE3;
+  --ink-3:  #E2DACC;
+  --ink-4:  #CFC4B2;
+  --line:   rgba(20,16,13,.28);
+  --line-2: rgba(20,16,13,.16);
+
+  --ember:    #C43C05;
+  --ember-hi: #E2540F;
+  --ember-lo: #8A2A03;
+  --gold:     #7A5510;
+  --gold-hi:  #A97613;
+  --danger:   #B3140F;
+  --danger-hi:#8E0F0B;
+  --good:     #17722F;
+
+  --text:     #14100D;
+  --text-dim: #453D33;
+  --text-mute:#6B6155;
+  --on-ember: #FFFFFF;
+
+  --r-common:    #4E565E;
+  --r-uncommon:  #17722F;
+  --r-rare:      #14509E;
+  --r-epic:      #6B21A8;
+  --r-legendary: #7A5510;
+
+  --hp:     #B3140F;
+  --hunger: #9A4E06;
+  --thirst: #14509E;
+
+  --map-bg: #EFEAE1;
+  --fog:    rgba(255,255,255,.86);
+
+  --sh-1: 0 2px 8px rgba(20,16,13,.18);
+  --sh-2: 0 10px 28px rgba(20,16,13,.22);
+  --sh-glow: 0 0 0 3px rgba(196,60,5,.25);
+}
+
+/* Kad je dan, mapa se posvetli i pojača kontrast da se vidi po suncu. */
+:root[data-theme="day"] .leaflet-tile { filter: contrast(1.15) saturate(.85) brightness(1.05); }
+:root:not([data-theme="day"]) .leaflet-tile { filter: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

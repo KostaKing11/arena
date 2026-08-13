@@ -3,295 +3,209 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-<meta name="theme-color" content="#0a0a0c">
+<meta name="theme-color" content="#0D0B11">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ARENA">
-<link rel="manifest" href="manifest.json">
+<meta name="description" content="Igre gladi uživo, na tvojoj mapi.">
+<link rel="manifest" href="/arena/manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>ARENA — Igre gladi IRL</title>
+
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800&family=Inter:wght@400;600;700;800&display=swap">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/screens.css">
+<link rel="stylesheet" href="css/game.css">
 </head>
 <body>
-
 <div id="app">
 
-  <!-- ══════════════════════════ POČETNI EKRAN ══════════════════════════ -->
-  <section class="screen active" id="s-home">
-    <div class="embers" aria-hidden="true"></div>
-    <div class="home-wrap">
-      <div class="crest">
-        <svg viewBox="0 0 120 120" class="mockingjay" aria-hidden="true">
-          <circle cx="60" cy="60" r="55" fill="none" stroke="url(#g1)" stroke-width="2"/>
-          <path d="M60 22 L74 44 L96 50 L78 66 L84 92 L60 78 L36 92 L42 66 L24 50 L46 44 Z"
-                fill="none" stroke="url(#g1)" stroke-width="2.5" stroke-linejoin="round"/>
-          <path d="M40 60 Q60 40 80 60 Q60 74 40 60 Z" fill="url(#g1)" opacity=".85"/>
-          <defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#ffcf6b"/><stop offset="1" stop-color="#ff6a1a"/>
-          </linearGradient></defs>
-        </svg>
+  <!-- ═══ učitavanje ═══ -->
+  <section class="screen on" id="s-boot">
+    <div class="scroll" style="display:grid;place-items:center">
+      <div class="center stack">
+        <div class="spinner" style="margin:0 auto"></div>
+        <p class="dim" data-i="loading">Učitavanje…</p>
       </div>
-      <h1 class="logo">ARENA</h1>
-      <p class="tagline" data-i="tagline">Igre gladi — uživo, na tvojoj mapi</p>
-
-      <div class="panel home-panel">
-        <label class="fld">
-          <span data-i="yourName">Tvoje ime</span>
-          <input id="nameInput" maxlength="16" placeholder="Tribut" autocomplete="off">
-        </label>
-        <button class="btn primary big" id="btnCreate" data-i="createArena">Napravi arenu</button>
-        <div class="or"><span data-i="or">ili</span></div>
-        <div class="join-row">
-          <input id="codeInput" class="code-input" maxlength="5" placeholder="KOD" autocomplete="off"
-                 autocapitalize="characters" spellcheck="false">
-          <button class="btn ghost" id="btnJoin" data-i="join">Uđi</button>
-        </div>
-      </div>
-
-      <button class="btn ghost install" id="btnInstall" hidden>
-        <span class="dl">⬇</span> <span data-i="installApp">Instaliraj kao aplikaciju</span>
-      </button>
-      <p class="ios-hint" id="iosHint" hidden></p>
-
-      <button class="linkbtn" id="btnLang">SR / EN</button>
-      <p class="foot-note" data-i="footNote">Igra se napolju. Telefon je samo tvoj kompas, inventar i oružje.</p>
     </div>
   </section>
 
-  <!-- ══════════════════════════ ČEKAONICA ══════════════════════════ -->
+  <!-- ═══ početni ═══ -->
+  <section class="screen" id="s-home">
+    <div class="embers" id="embers" aria-hidden="true"></div>
+    <div class="scroll">
+      <div class="hold stack-lg">
+        <div class="brand">
+          <div class="mark" id="brandMark"></div>
+          <div class="logo">ARENA</div>
+          <div class="tag" data-i="tagline"></div>
+        </div>
+
+        <div class="card stack">
+          <div class="row">
+            <div id="homeAvatar"></div>
+            <div class="grow field">
+              <label class="label" data-i="yourName"></label>
+              <input class="input" id="nameInput" maxlength="16" autocomplete="off" data-i-ph="yourName">
+            </div>
+          </div>
+          <button class="btn ghost" id="btnAvatar"><span data-i="avatarTitle"></span></button>
+        </div>
+
+        <button class="btn primary lg full" id="btnCreate" data-i="createRoom"></button>
+        <div class="or-line"><span data-i="or"></span></div>
+        <div class="stack">
+          <input class="input code" id="codeInput" maxlength="5" autocomplete="off"
+                 autocapitalize="characters" spellcheck="false" data-i-ph="enterCode">
+          <button class="btn lg full" id="btnJoin" data-i="joinRoom"></button>
+        </div>
+
+        <div class="row between">
+          <button class="linkbtn" id="btnLang">SR / EN</button>
+          <button class="linkbtn" id="btnTheme"></button>
+        </div>
+        <p class="tiny mute center" id="testBadge" hidden></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ lobi ═══ -->
   <section class="screen" id="s-lobby">
-    <header class="bar">
-      <div>
-        <div class="bar-label" data-i="roomCode">Kod sobe</div>
-        <div class="room-code" id="roomCode">-----</div>
+    <div class="topbar">
+      <div class="grow">
+        <div class="tiny dim upper" data-i="roomCode"></div>
+        <div class="code-display" id="lobbyCode">-----</div>
       </div>
-      <button class="btn tiny ghost" id="btnShare" data-i="share">Podeli</button>
-      <button class="btn tiny danger" id="btnLeave" data-i="leave">Izađi</button>
-    </header>
-
-    <div class="lobby-body">
-      <div class="panel">
-        <h3 class="ph"><span data-i="tributes">Tributi</span> <b id="playerCount">0</b></h3>
-        <ul class="roster" id="lobbyRoster"></ul>
-      </div>
-
-      <div class="panel host-only">
-        <h3 class="ph" data-i="arenaSetup">Postavka arene</h3>
-        <div id="setupMap" class="minimap"></div>
-        <p class="hint" data-i="tapMap">Tapni na mapu da postaviš centar arene (kornukopiju), ili koristi svoju lokaciju.</p>
-        <button class="btn ghost tiny" id="btnMyLoc" data-i="useMyLoc">📍 Moja lokacija kao centar</button>
-
-        <label class="fld range">
-          <span><span data-i="radius">Prečnik arene</span> <b id="radLbl">800 m</b></span>
-          <input type="range" id="radius" min="60" max="2000" step="20" value="400">
-        </label>
-        <label class="fld range">
-          <span><span data-i="lootCount">Broj predmeta</span> <b id="lootLbl">24</b></span>
-          <input type="range" id="lootCount" min="6" max="60" step="2" value="24">
-        </label>
-        <label class="fld range">
-          <span><span data-i="deployTime">Vreme za raspored</span> <b id="depLbl">3 min</b></span>
-          <input type="range" id="deploySec" min="30" max="600" step="30" value="180">
-        </label>
-
-        <div class="seg" id="lootMode">
-          <button class="on" data-v="cornucopia" data-i="modeCorn">Kornukopija</button>
-          <button data-v="scattered" data-i="modeScatter">Rasuto</button>
-        </div>
-        <label class="chk"><input type="checkbox" id="shrink" checked> <span data-i="shrinkOpt">Arena se skuplja tokom igre</span></label>
-
-        <div class="row">
-          <button class="btn ghost" id="btnBots">🤖 <span data-i="addBots">Dodaj botove</span></button>
-          <button class="btn ghost" id="btnDemo" data-i="demoArena">⚡ Test arena</button>
-        </div>
-        <button class="btn primary big" id="btnStart" data-i="startGames">Pokreni igre</button>
-      </div>
-
-      <div class="panel guest-only">
-        <p class="waiting"><span class="pulse"></span> <span data-i="waitHost">Čekamo domaćina da pokrene igre…</span></p>
-        <p class="hint" data-i="waitHint">Obavezno dozvoli pristup lokaciji kad te telefon pita.</p>
-      </div>
+      <button class="iconbtn sm" id="btnQr" data-i-aria="showQr"></button>
+      <button class="iconbtn sm" id="btnShare" data-i-aria="share"></button>
     </div>
+    <div class="scroll"><div class="hold stack-lg" id="lobbyBody"></div></div>
   </section>
 
-  <!-- ══════════════════════════ IGRA ══════════════════════════ -->
+  <!-- ═══ priprema (5 koraka) ═══ -->
+  <section class="screen" id="s-prep">
+    <div class="topbar">
+      <div class="grow"><h2 data-i="prepTitle"></h2></div>
+      <div class="chip" id="prepStepChip"></div>
+    </div>
+    <div class="scroll"><div class="hold"><div class="steps" id="prepSteps"></div><div id="prepBody"></div></div></div>
+  </section>
+
+  <!-- ═══ PREP faza: idi na startnu tačku ═══ -->
+  <section class="screen" id="s-deploy">
+    <div class="scroll"><div class="hold stack-lg" id="deployBody"></div></div>
+  </section>
+
+  <!-- ═══ igra ═══ -->
   <section class="screen" id="s-game">
-    <div id="gameMap"></div>
+    <div id="gamemap"></div>
     <div class="fog" id="fog" aria-hidden="true"></div>
-    <div class="vignette" aria-hidden="true"></div>
+    <div class="danger-vignette" id="dangerVig" aria-hidden="true"></div>
+    <div class="zone-flash" id="zoneFlash" aria-hidden="true"></div>
 
-    <!-- gornji HUD -->
     <div class="hud-top">
-      <div class="hud-left">
-        <div class="statline">
-          <span class="tag" id="phaseTag">—</span>
-          <span class="alive" id="aliveTag">—</span>
-        </div>
-        <div class="hpbar"><i id="hpFill"></i><span id="hpTxt">100</span></div>
-        <div class="stats">
-          <span class="st atk">⚔ <b id="stAtk">0</b></span>
-          <span class="st def">🛡 <b id="stDef">0</b></span>
-          <span class="st kil">💀 <b id="stKil">0</b></span>
-        </div>
-      </div>
-      <div class="hud-right">
-        <button class="icobtn" id="btnMenu">⋯</button>
-      </div>
+      <div class="zonechip" id="zoneChip"></div>
+      <div class="sp"></div>
+      <button class="iconbtn sm" id="btnMenu" data-i-aria="menu"></button>
     </div>
 
-    <div class="deploy-card" id="deployCard">
-      <div class="dc-count" id="dcCount">--:--</div>
-      <div class="dc-label" data-i="goToSpawn">Idi na svoju startnu poziciju</div>
-      <div class="dc-arrow"><span id="dcArrow">↑</span></div>
-      <div class="dc-dist" id="dcDist">— m</div>
-    </div>
-
-    <div class="ticker" id="ticker"></div>
-
-    <!-- kontakti -->
-    <div class="contacts" id="contacts"></div>
-
-    <!-- donji HUD -->
     <div class="hud-bottom">
-      <button class="act-btn loot" id="btnLoot" hidden></button>
+      <div class="compass" id="compass" hidden>
+        <div class="strip" id="compassStrip"></div>
+        <div class="needle"></div>
+      </div>
+      <div class="vitals" id="vitals"></div>
+      <button class="action-btn" id="actionBtn" hidden></button>
       <div class="dock">
-        <button class="dockbtn" id="btnInv">🎒<span data-i="inventory">Inventar</span></button>
-        <button class="dockbtn" id="btnCenter">🎯<span data-i="center">Centriraj</span></button>
-        <button class="dockbtn" id="btnFeed">📜<span data-i="feed">Objave</span></button>
+        <button class="dockbtn" id="btnInv"><span class="ico"></span><span data-i="inventory"></span></button>
+        <button class="camera-btn" id="btnCamera" data-i-aria="camera"></button>
+        <button class="dockbtn" id="btnFeed"><span class="ico"></span><span data-i="feed"></span></button>
       </div>
     </div>
-
-    <div class="fog-hint" id="visionHint"></div>
   </section>
 
-  <!-- ══════════════════════════ OVERLAY-i ══════════════════════════ -->
-
-  <div class="sheet" id="sheetInv" hidden>
-    <div class="sheet-in">
-      <h3 data-i="inventory">Inventar</h3>
-      <div class="inv-grid" id="invGrid"></div>
-      <p class="hint" id="invHint"></p>
-      <button class="btn ghost" data-close data-i="close">Zatvori</button>
+  <!-- ═══ borba ═══ -->
+  <section class="screen" id="s-fight">
+    <div class="fight-top">
+      <div class="chip danger" id="fightTag"></div>
+      <div class="sp"></div>
+      <div class="round-ring" id="roundRing"></div>
     </div>
-  </div>
+    <div class="fighters" id="fighters"></div>
+    <div class="distance-track"><div class="dtrack" id="dtrack"></div><div class="range-hint" id="rangeHint"></div></div>
+    <div class="combat-log" id="combatLog"></div>
+    <div class="sp"></div>
+    <div class="moves" id="moves"></div>
+    <div class="fight-extra" id="fightExtra"></div>
+  </section>
 
-  <div class="sheet" id="sheetFeed" hidden>
-    <div class="sheet-in">
-      <h3 data-i="feed">Objave iz arene</h3>
-      <ul class="feedlist" id="feedList"></ul>
-      <h3 data-i="tributes">Tributi</h3>
-      <ul class="roster" id="gameRoster"></ul>
-      <button class="btn ghost" data-close data-i="close">Zatvori</button>
-    </div>
-  </div>
+  <!-- ═══ bekstvo ═══ -->
+  <section class="screen" id="s-chase">
+    <div class="scroll"><div class="hold center stack-lg" id="chaseBody"></div></div>
+  </section>
 
-  <div class="sheet" id="sheetMenu" hidden>
-    <div class="sheet-in">
-      <h3 data-i="settings">Podešavanja</h3>
-      <label class="chk"><input type="checkbox" id="simToggle"> <span data-i="simMode">Simulacija GPS-a (test na kompjuteru)</span></label>
-      <p class="hint" data-i="simHint">Kad je uključeno, tapni po mapi da pomeriš svog igrača umesto pravog GPS-a.</p>
-      <label class="chk"><input type="checkbox" id="walkToggle"> <span data-i="autoWalk">Automatsko hodanje ka tapnutoj tački</span></label>
-      <button class="btn ghost" id="btnLang2">SR / EN</button>
-      <button class="btn danger" id="btnQuit" data-i="quitGame">Napusti arenu</button>
-      <button class="btn ghost" data-close data-i="close">Zatvori</button>
-    </div>
-  </div>
-
-  <!-- izazov za predmet -->
-  <div class="modal" id="modalChallenge" hidden>
-    <div class="modal-in challenge">
-      <div class="ch-head">
-        <span class="ch-kind" id="chKind">—</span>
-        <span class="ch-time" id="chTime">—</span>
-      </div>
-      <h3 id="chTitle">—</h3>
-      <p class="ch-sub" id="chSub">—</p>
-      <div id="chStage" class="ch-stage"></div>
-      <button class="btn ghost tiny" id="chAbort" data-i="giveUp">Odustani</button>
-    </div>
-  </div>
-
-  <!-- borba -->
-  <div class="modal combatmodal" id="modalCombat" hidden>
-    <div class="modal-in combat">
-      <div class="cb-head">
-        <span id="cbRound">RUNDA 1/5</span>
-        <span class="cb-timer"><i id="cbTimerFill"></i></span>
-      </div>
-      <div class="cb-meet" id="cbMeet"></div>
-
-      <div class="fighters">
-        <div class="fighter you">
-          <div class="fname" id="cbYouName">Ti</div>
-          <div class="fhp"><i id="cbYouHp"></i></div>
-          <div class="fnum" id="cbYouNum">100</div>
-          <div class="fdmg" id="cbYouDmg"></div>
-        </div>
-        <div class="vs">VS</div>
-        <div class="fighter foe">
-          <div class="fname" id="cbFoeName">Protivnik</div>
-          <div class="fhp"><i id="cbFoeHp"></i></div>
-          <div class="fnum" id="cbFoeNum">100</div>
-          <div class="fdmg" id="cbFoeDmg"></div>
-        </div>
-      </div>
-
-      <div class="cb-log" id="cbLog"></div>
-
-      <div class="moves" id="cbMoves">
-        <button class="move" data-m="attack"><span>⚔️</span><b data-i="mAttack">Napad</b><i data-i="mAttackH">jači od varke</i></button>
-        <button class="move" data-m="block"><span>🛡️</span><b data-i="mBlock">Blok</b><i data-i="mBlockH">jači od napada</i></button>
-        <button class="move" data-m="feint"><span>🌀</span><b data-i="mFeint">Varka</b><i data-i="mFeintH">jača od bloka</i></button>
-      </div>
-      <div class="use-row" id="cbItems"></div>
-      <div class="cb-wait" id="cbWait" hidden data-i="waitFoe">Čekamo protivnika…</div>
-      <div class="cb-result" id="cbResult" hidden></div>
-    </div>
-  </div>
-
-  <!-- ponuda saveza -->
-  <div class="modal" id="modalAlly" hidden>
-    <div class="modal-in">
-      <h3 data-i="allyOffer">Ponuda saveza</h3>
-      <p id="allyTxt">—</p>
-      <div class="row">
-        <button class="btn primary" id="allyYes" data-i="accept">Prihvati</button>
-        <button class="btn ghost" id="allyNo" data-i="decline">Odbij</button>
+  <!-- ═══ nebo ═══ -->
+  <section class="screen" id="s-sky">
+    <div class="sky-stars" id="skyStars"></div>
+    <div class="scroll" style="display:grid;place-items:center">
+      <div class="center stack-lg">
+        <h2 class="display" data-i="skyTitle"></h2>
+        <p class="dim" data-i="skyBody"></p>
+        <div class="sky-faces" id="skyFaces"></div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- eliminacija / kraj -->
-  <div class="modal" id="modalEnd" hidden>
-    <div class="modal-in endcard" id="endCard">
-      <div class="end-icon" id="endIcon">💀</div>
-      <h2 id="endTitle">—</h2>
-      <p id="endSub">—</p>
-      <div class="end-stats" id="endStats"></div>
-      <button class="btn ghost" id="endWatch" data-i="watchOn">Gledaj dalje</button>
-      <button class="btn primary" id="endHome" data-i="backHome">Nazad na početak</button>
-    </div>
-  </div>
+  <!-- ═══ duh / tvorac igara ═══ -->
+  <section class="screen" id="s-ghost">
+    <div class="topbar"><div class="grow"><h2 data-i="ghostTitle"></h2></div>
+      <div class="spark-pool" id="sparkPool"></div></div>
+    <div class="scroll"><div class="hold stack-lg" id="ghostBody"></div></div>
+  </section>
+
+  <!-- ═══ mentor / gledalac ═══ -->
+  <section class="screen" id="s-mentor">
+    <div class="topbar"><div class="grow"><h2 id="mentorTitle"></h2></div>
+      <div class="chip gold" id="favorChip"></div></div>
+    <div class="scroll"><div class="hold stack-lg" id="mentorBody"></div></div>
+  </section>
+
+  <!-- ═══ kraj ═══ -->
+  <section class="screen" id="s-end">
+    <div class="scroll"><div class="hold stack-lg" id="endBody"></div></div>
+  </section>
 
   <div class="toasts" id="toasts"></div>
-  <div class="flash" id="flash"></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+
 <script src="js/firebase-config.js"></script>
-<script src="js/engine/rules.js"></script>
-<script src="js/bots.js"></script>
-<script src="js/i18n.js"></script>
-<script src="js/net-firebase.js"></script>
-<script src="js/mapview.js"></script>
-<script src="js/challenges.js"></script>
+<script src="js/core/util.js"></script>
+<script src="js/core/rules.js"></script>
+<script src="js/core/i18n.js"></script>
+<script src="js/core/icons.js"></script>
+<script src="js/core/haptics.js"></script>
+<script src="js/net/clock.js"></script>
+<script src="js/net/store.js"></script>
+<script src="js/ui/kit.js"></script>
+<script src="js/ui/sensors.js"></script>
+<script src="js/ui/map.js"></script>
+<script src="js/game/engine.js"></script>
+<script src="js/game/items.js"></script>
+<script src="js/game/combat.js"></script>
+<script src="js/game/encounter.js"></script>
+<script src="js/game/bots.js"></script>
+<script src="js/ui/screens.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

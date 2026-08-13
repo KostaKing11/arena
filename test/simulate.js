@@ -1,295 +1,221 @@
 'use strict';
-/* Headless provera pravila iz docs/js/engine/rules.js — istog fajla koji rade telefoni.
-   Koristi virtuelni sat, pa cela partija prođe za delić sekunde.
-   Pokretanje:  npm test                                                        */
+/* Provera pravila iz docs/js/core/rules.js — istog fajla koji rade telefoni.
+   Bez mreže, bez browsera.   npm test                                       */
 
-const R = require('../docs/js/engine/rules.js');
+const U = require('../docs/js/core/util.js');
+const R = require('../docs/js/core/rules.js');
 
-let failures = 0;
-function check(name, cond, extra) {
-  if (cond) console.log(`  ✔ ${name}`);
-  else { failures++; console.log(`  ✖ ${name}${extra ? '  → ' + extra : ''}`); }
+let fail = 0;
+const ok = (n, c, e) => { if (c) console.log(`  OK   ${n}`); else { fail++; console.log(`  FAIL ${n}${e ? '  -> ' + e : ''}`); } };
+const cfg = {
+  center: { lat: 44.8125, lng: 20.4612 }, diameterM: 500, durationMin: 45,
+  itemDensity: 1, prepMinutes: 10, startMode: 'cornucopia', eventsEnabled: true,
+};
+const T0 = 1800000000000;
+
+console.log('\n1. Determinizam (svi telefoni moraju da vide isti svet)');
+{
+  const a = R.buildSchedule('s1', cfg, T0), b = R.buildSchedule('s1', cfg, T0);
+  ok('isti seed -> isti raspored', JSON.stringify(a) === JSON.stringify(b));
+  ok('drugi seed -> drugi raspored', JSON.stringify(R.buildSchedule('s2', cfg, T0)) !== JSON.stringify(a));
+  const i1 = R.generateItems('s1', cfg, 10), i2 = R.generateItems('s1', cfg, 10);
+  ok('isti seed -> isti predmeti', JSON.stringify(i1) === JSON.stringify(i2));
+  const ids = ['p1', 'p2', 'p3', 'p4'];
+  ok('iste startne tacke', JSON.stringify(R.startPoints('s1', cfg, ids)) === JSON.stringify(R.startPoints('s1', cfg, ids)));
+  ok('iste klase', JSON.stringify(R.dealClasses('s1', ids)) === JSON.stringify(R.dealClasses('s1', ids)));
 }
 
-/* ─────────────────── 1. determinizam ─────────────────── */
-console.log('\n1. Determinizam sveta (svi telefoni moraju da vide isto)');
+console.log('\n2. Spil klasa (§5)');
 {
-  const cfg = Object.assign({}, R.DEFAULTS, {
-    center: { lat: 44.8125, lng: 20.4612 }, radius0: 400, lootCount: 24, lootMode: 'cornucopia', deploySec: 180,
-  });
-  const s1 = R.genSchedule('abc123', cfg), s2 = R.genSchedule('abc123', cfg);
-  const l1 = R.genLoot('abc123', cfg, s1), l2 = R.genLoot('abc123', cfg, s2);
-  const roster = ['p1', 'p2', 'p3', 'p4'];
-  const sp1 = R.genSpawns('abc123', roster, cfg), sp2 = R.genSpawns('abc123', roster, cfg);
+  const four = R.dealClasses('x', ['a', 'b', 'c', 'd']);
+  ok('4 igraca -> 4 razlicite klase', new Set(Object.values(four)).size === 4);
+  const c48 = R.classCensus(R.dealClasses('y', Array.from({ length: 45 }, (_, i) => 'p' + i)));
+  const counts = Object.values(c48);
+  ok('45 igraca -> po 5 od svake', counts.length === 9 && counts.every((c) => c === 5), JSON.stringify(c48));
+  ok('svaka klasa ima svoje oruzje', R.CLASS_IDS.every((c) => R.WEAPONS[R.CLASSES[c].weapon]));
+  ok('niko ne krece sa predmetima', R.CLASS_IDS.every((c) => !R.CLASSES[c].startItems));
+}
 
-  check('isti seed → isti raspored događaja', JSON.stringify(s1) === JSON.stringify(s2));
-  check('isti seed → isti plen', JSON.stringify(l1) === JSON.stringify(l2));
-  check('isti seed → iste startne pozicije', JSON.stringify(sp1) === JSON.stringify(sp2));
-  check('drugi seed → drugi svet', JSON.stringify(R.genLoot('xyz789', cfg, R.genSchedule('xyz789', cfg))) !== JSON.stringify(l1));
-  check('automatski potez je determinističan', R.autoMove('k1', 3, 'p1') === R.autoMove('k1', 3, 'p1'));
-
-  const corn = l1.filter((l) => l.isCorn && !l.feast).length;
-  check('kornukopija dobija ~40% plena', corn === Math.round(24 * 0.4), `${corn}`);
-  check('svi predmeti su unutar arene',
-    l1.every((l) => R.haversine(l, cfg.center) <= cfg.radius0 * 1.01));
-  check('startne pozicije su razmaknute', (() => {
-    const a = Object.values(sp1);
-    for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++)
-      if (R.haversine(a[i], a[j]) < 30) return false;
+console.log('\n3. Zona (§14)');
+{
+  const s = R.buildSchedule('z', cfg, T0);
+  ok('tacno 5 faza', s.zone.length === 5, String(s.zone.length));
+  const pct = s.zone.map((z) => z.radiusM / (cfg.diameterM / 2));
+  ok('procenti 65/42/25/12', Math.abs(pct[0] - .65) < .02 && Math.abs(pct[1] - .42) < .02
+    && Math.abs(pct[2] - .25) < .02 && Math.abs(pct[3] - .12) < .02, pct.map((p) => p.toFixed(2)).join(','));
+  ok('poslednja faza je 40 m precnika', s.zone[4].radiusM === 20);
+  ok('poslednja faza je na kornukopiji',
+    Math.abs(s.zone[4].centerLat - cfg.center.lat) < 1e-9 && Math.abs(s.zone[4].centerLng - cfg.center.lng) < 1e-9);
+  ok('steta raste 2/4/7/12/20', s.zone.map((z) => z.dmgPer10s).join(',') === '2,4,7,12,20');
+  ok('upozorenje 30 s pre pocetka skupljanja', s.zone.every((z) => z.startMs - z.warnAtMs === 30000));
+  ok('skuplja se postepeno, ne skokom', s.zone.every((z) => z.atMs > z.startMs));
+  // sredina skupljanja mora dati radijus izmedju stare i nove vrednosti
+  const z0 = s.zone[0], mid = (z0.startMs + z0.atMs) / 2;
+  const zm = R.zoneAt(s, cfg, mid);
+  ok('u toku skupljanja radijus je izmedju', zm.radiusM < cfg.diameterM / 2 && zm.radiusM > z0.radiusM, Math.round(zm.radiusM));
+  ok('centri se priblizavaju pravom centru', (() => {
+    let prev = Infinity;
+    for (const z of s.zone) { const d = U.dist({ lat: z.centerLat, lng: z.centerLng }, cfg.center); if (d > prev + 25) return false; prev = d; }
     return true;
   })());
-  check('gozbe se pojavljuju tek u svom trenutku',
-    l1.filter((l) => l.feast).every((l) => l.availableAt > 0));
 }
 
-/* ─────────────────── 2. borba: papir-kamen-makaze ─────────────────── */
-console.log('\n2. Pravila borbe');
+console.log('\n4. Predmeti (§12, §13)');
 {
-  const mk = () => ({
-    id: 'k1', ids: ['A', 'B'], hp: { A: 100, B: 100 }, maxHp: { A: 100, B: 100 },
-    st: { A: {}, B: {} }, round: 1, maxRounds: 5, isFinal: false,
-  });
-  const stats = { A: { atk: 0, def: 0 }, B: { atk: 0, def: 0 } };
-  const play = (ma, mb) => R.resolveRound(mk(),
-    { A: { kind: 'move', move: ma }, B: { kind: 'move', move: mb } }, stats);
-
-  const wins = { attack: 'feint', feint: 'block', block: 'attack' };
-  let ok = true, detail = '';
-  for (const a of R.MOVES) for (const b of R.MOVES) {
-    const r = play(a, b);
-    if (a === b) { if (r.line.dmg.A !== 4 || r.line.dmg.B !== 4) { ok = false; detail = `${a}=${b}`; } }
-    else if (wins[a] === b) { if (!(r.line.dmg.B > 0 && r.line.dmg.A === 0)) { ok = false; detail = `${a}>${b}`; } }
-    else if (!(r.line.dmg.A > 0 && r.line.dmg.B === 0)) { ok = false; detail = `${b}>${a}`; }
-  }
-  check('napad > varka > blok > napad', ok, detail);
-  check('isti potez → obojica gube po malo', play('attack', 'attack').line.dmg.A === 4);
-
-  const strong = R.resolveRound(mk(), { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'feint' } },
-    { A: { atk: 15, def: 0 }, B: { atk: 0, def: 0 } });
-  const weak = play('attack', 'feint');
-  check('oružje povećava štetu', strong.line.dmg.B > weak.line.dmg.B, `${strong.line.dmg.B} vs ${weak.line.dmg.B}`);
-
-  const armored = R.resolveRound(mk(), { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'feint' } },
-    { A: { atk: 0, def: 0 }, B: { atk: 0, def: 12 } });
-  check('oklop smanjuje štetu', armored.line.dmg.B < weak.line.dmg.B, `${armored.line.dmg.B} vs ${weak.line.dmg.B}`);
-
-  const heal = R.resolveRound(
-    Object.assign(mk(), { hp: { A: 50, B: 100 } }),
-    { A: { kind: 'item', itemId: 'bandage' }, B: { kind: 'move', move: 'attack' } }, stats);
-  check('zavoji leče, ali te te runde tuku upola', heal.hp.A > 50 && heal.line.dmg.A > 0);
-
-  const stun = R.resolveRound(mk(), { A: { kind: 'item', itemId: 'trap' }, B: { kind: 'move', move: 'attack' } }, stats);
-  check('zamka omamljuje protivnika za sledeću rundu', stun.st.B.stun === 0 || stun.st.B.stun >= 0);
-
-  const dead = R.resolveRound(
-    Object.assign(mk(), { hp: { A: 5, B: 100 } }),
-    { A: { kind: 'move', move: 'block' }, B: { kind: 'move', move: 'feint' } }, stats);
-  check('borba se završava kad neko padne', dead.over && dead.winnerId === 'B' && dead.loserId === 'A');
-
-  const tie = R.resolveRound(
-    Object.assign(mk(), { round: 5, hp: { A: 60, B: 60 } }),
-    { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'attack' } }, stats);
-  check('nerešeno posle poslednje runde → obojica prežive', tie.over && !tie.winnerId);
-
-  const tieFinal = R.resolveRound(
-    Object.assign(mk(), { round: 7, maxRounds: 7, isFinal: true, hp: { A: 60, B: 60 } }),
-    { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'attack' } }, stats);
-  check('finale se produžava dok nema pobednika', !tieFinal.over && tieFinal.extend === 3);
-}
-
-/* ─────────────────── 3. svet izveden iz vremena ─────────────────── */
-console.log('\n3. Arena kroz vreme');
-{
-  const cfg = Object.assign({}, R.DEFAULTS, { center: { lat: 44.8125, lng: 20.4612 }, radius0: 400, deploySec: 60 });
-  const sch = R.genSchedule('seed42', cfg);
-  const shrinks = sch.filter((e) => e.kind === 'shrink');
-  check('ima događaja skupljanja', shrinks.length > 0);
-  check('arena se samo smanjuje',
-    shrinks.every((e, i) => i === 0 || e.radius <= shrinks[i - 1].radius));
-  check('arena ne padne ispod poda', shrinks.every((e) => e.radius >= Math.round(400 * 0.3)));
-  check('pre prvog događaja prečnik je početni', R.arenaRadiusAt(cfg, sch, 0) === 400);
-  check('posle svih događaja prečnik je poslednji',
-    R.arenaRadiusAt(cfg, sch, 3 * 3600 * 1000) === shrinks[shrinks.length - 1].radius);
-  check('zabranjena zona je aktivna tek posle 5 min', (() => {
-    const ev = sch.find((e) => e.kind === 'evac');
-    if (!ev) return true;
-    const h = R.hazardsAt(sch, ev.at)[0];
-    return h && h.activeAt === ev.at + 300000;
-  })());
-  check('faza: raspored → aktivno → finale → kraj',
-    R.phaseAt(cfg, 1000, 5) === 'deploy' && R.phaseAt(cfg, 90000, 5) === 'active' &&
-    R.phaseAt(cfg, 90000, 2) === 'finale' && R.phaseAt(cfg, 90000, 1) === 'ended');
-}
-
-/* ─────────────────── 4. cela partija ─────────────────── */
-console.log('\n4. Cela partija sa 10 botova (virtuelni sat)');
-{
-  const cfg = Object.assign({}, R.DEFAULTS, {
-    center: { lat: 44.8125, lng: 20.4612 }, radius0: 250,
-    lootCount: 24, lootMode: 'cornucopia', deploySec: 30, shrink: true,
-  });
-  const seed = 'game' + 7;
-  const schedule = R.genSchedule(seed, cfg);
-  const loot = R.genLoot(seed, cfg, schedule);
-  const ids = Array.from({ length: 10 }, (_, i) => 'p' + i);
-  const spawns = R.genSpawns(seed, ids, cfg);
-  const taken = {};
-  const combats = {};
-  const feed = [];
-  const P = {};
-  ids.forEach((id) => {
-    P[id] = {
-      id, name: 'Bot' + id.slice(1), alive: true, hp: 100, items: [], kills: 0,
-      pos: Object.assign({}, spawns[id]), cooldownUntil: 0, combatId: null, place: 0,
-      speed: 2.5 + Math.random() * 2, aggression: 0.3 + Math.random() * 0.5,
-      greed: 0.4 + Math.random() * 0.5, waypoint: null, hpAt: 0, sponsors: {},
-    };
-  });
-  const aliveArr = () => ids.map((i) => P[i]).filter((p) => p.alive);
-  const statsOf = (p) => { const s = R.statsOf(p.items); return { atk: s.atk, def: s.def, maxHp: 100 + s.hp }; };
-  const say = (t, s) => feed.push(`[${Math.round(t / 1000)}s] ${s}`);
-
-  const T0 = 1700000000000;
-  let t = T0, ended = false, guard = 0;
-
-  while (!ended && guard++ < 20000) {
-    t += 1000;
-    const el = t - T0;
-    const radius = R.arenaRadiusAt(cfg, schedule, el);
-    const hazards = R.hazardsAt(schedule, el);
-    const alive = aliveArr();
-    if (alive.length <= 1) { ended = true; break; }
-
-    // sponzori
-    for (const ev of schedule) {
-      if (ev.kind !== 'sponsor' || el < ev.at) continue;
-      const tgt = R.sponsorTarget(ev, alive.map((p) => p.id).sort());
-      if (tgt && !P[tgt].sponsors[ev.i]) { P[tgt].sponsors[ev.i] = 1; P[tgt].items.push(ev.itemId); }
+  const items = R.generateItems('it', cfg, 12);
+  ok('ukupno = igraci x 12', items.length === 144, String(items.length));
+  const corn = items.filter((i) => i.pool === 'corn');
+  ok('30% u kornukopiji', Math.abs(corn.length / items.length - .3) < .02);
+  ok('kornukopija je u krugu 40 m', corn.every((i) => U.dist(i, cfg.center) <= R.CORN_RADIUS_M + 1));
+  ok('nista u poslednjih 20 m uz ivicu',
+    items.every((i) => U.dist(i, cfg.center) <= cfg.diameterM / 2 - R.EDGE_MARGIN_M + 1));
+  const scat = items.filter((i) => i.pool === 'scatter');
+  let minS = Infinity;
+  for (let i = 0; i < scat.length; i++) for (let j = i + 1; j < scat.length; j++) minS = Math.min(minS, U.dist(scat[i], scat[j]));
+  ok('min 12 m izmedju rasutih', minS >= 11.9, Math.round(minS) + ' m');
+  ok('stack: obicno 3, neobicno 2, retko 1',
+    R.stackLimit('berries') === 3 && R.stackLimit('bread') === 2 && R.stackLimit('driedMeat') === 1);
+  ok('radijus kupljenja je 10 m', R.PICKUP_RADIUS_M === 10);
+  ok('nijedan predmet nije bez tipa', items.every((i) => !!i.type && !!R.ITEMS[i.type]));
+  ok('svaka retkost ima sta da izvuce u oba bazena', (() => {
+    for (const pool of ['scatter', 'corn']) for (const r of Object.keys(R.RARITY)) {
+      if (!R.ITEM_IDS.some((id) => R.ITEMS[id].rarity === r && (R.ITEMS[id].pool === pool || R.ITEMS[id].pool === 'both'))) return false;
     }
-    if (el < cfg.deploySec * 1000) continue;
-
-    for (const p of alive) {
-      // borba
-      if (p.combatId) {
-        const c = combats[p.combatId];
-        if (!c || c.over) { p.combatId = null; continue; }
-        if (!c.moves[c.round]) c.moves[c.round] = {};
-        if (!c.moves[c.round][p.id] && Math.random() < 0.5) {
-          c.moves[c.round][p.id] = { kind: 'move', move: R.MOVES[Math.floor(Math.random() * 3)] };
-        }
-        const mv = c.moves[c.round];
-        if (!(mv[c.ids[0]] && mv[c.ids[1]]) && t < c.endsAt) continue;
-        const res = R.resolveRound(c, mv, { [c.ids[0]]: statsOf(P[c.ids[0]]), [c.ids[1]]: statsOf(P[c.ids[1]]) });
-        c.hp = res.hp; c.st = res.st; c.round++;
-        if (res.extend) c.maxRounds += res.extend;
-        if (res.over) {
-          c.over = true;
-          c.ids.forEach((id) => { P[id].hp = Math.max(1, res.hp[id]); P[id].combatId = null; P[id].cooldownUntil = t + 45000; });
-          if (res.winnerId) {
-            const W = P[res.winnerId], L = P[res.loserId];
-            W.kills++;
-            W.items.push(...L.items.slice(0, Math.ceil(L.items.length / 2)));
-            L.alive = false; L.hp = 0; L.place = aliveArr().length;
-            say(el, `💀 ${L.name} pao od ruke ${W.name}` + (c.isFinal ? ' (FINALE)' : ''));
-          }
-        } else c.endsAt = t + cfg.roundSec * 1000;
-        continue;
-      }
-
-      // šteta od zone
-      if (t - p.hpAt >= 3000) {
-        p.hpAt = t;
-        let dmg = 0;
-        if (R.haversine(p.pos, cfg.center) > radius) dmg += 2;
-        for (const h of hazards) {
-          if (el >= h.activeAt && el < h.until && R.haversine(p.pos, h.center) <= h.radius) dmg += 5;
-        }
-        if (dmg) {
-          p.hp -= dmg;
-          if (p.hp <= 0) { p.alive = false; p.hp = 0; p.place = aliveArr().length; say(el, `💀 ${p.name} nije preživeo arenu`); continue; }
-        } else p.hp = Math.min(statsOf(p).maxHp, p.hp + 0.2);
-      }
-
-      // kretanje
-      let target = null;
-      if (alive.length === 2) target = cfg.center;
-      else if (R.haversine(p.pos, cfg.center) > radius * 0.95) target = cfg.center;
-      else {
-        const hz = hazards.find((h) => el < h.until && R.haversine(p.pos, h.center) <= h.radius * 1.1);
-        if (hz) target = R.destPoint(hz.center, R.bearing(hz.center, p.pos), hz.radius * 1.4);
-        else {
-          let best = null, bd = Infinity;
-          if (Math.random() < p.greed) {
-            for (const l of loot) {
-              if (taken[l.id] || el < l.availableAt) continue;
-              const d = R.haversine(p.pos, l);
-              if (d < bd && d < 300) { bd = d; best = l; }
-            }
-          }
-          if (best) target = { lat: best.lat, lng: best.lng };
-          else {
-            let prey = null, pd = Infinity;
-            for (const q of alive) {
-              if (q.id === p.id) continue;
-              const d = R.haversine(p.pos, q.pos);
-              if (d < pd && d < 200) { pd = d; prey = q; }
-            }
-            if (prey && Math.random() < 0.6) target = prey.pos;
-            else {
-              if (!p.waypoint || R.haversine(p.pos, p.waypoint) < 12) p.waypoint = R.pointInCircle(Math.random, cfg.center, radius * 0.85);
-              target = p.waypoint;
-            }
-          }
-        }
-      }
-      const d = R.haversine(p.pos, target);
-      p.pos = d <= p.speed ? { lat: target.lat, lng: target.lng } : R.destPoint(p.pos, R.bearing(p.pos, target), p.speed);
-
-      // plen
-      const near = loot.find((l) => !taken[l.id] && el >= l.availableAt && R.haversine(p.pos, l) <= cfg.lootReachM);
-      if (near && Math.random() < 0.5) {
-        taken[near.id] = p.id;
-        if (Math.random() < ([0, 0.9, 0.75, 0.6][near.rarity] || 0.8)) p.items.push(near.itemId);
-        else delete taken[near.id];
-      }
-
-      // napad
-      if (t >= p.cooldownUntil && !p.combatId) {
-        for (const q of alive) {
-          if (q.id === p.id || q.combatId || t < q.cooldownUntil) continue;
-          if (R.haversine(p.pos, q.pos) > cfg.engageM) continue;
-          const isFinal = alive.length === 2 && R.haversine(p.pos, cfg.center) <= cfg.finaleReachM;
-          if (!isFinal && Math.random() > p.aggression * 0.5) continue;
-          const cid = 'k' + (guard) + p.id;
-          combats[cid] = {
-            id: cid, ids: [p.id, q.id], isFinal,
-            hp: { [p.id]: p.hp, [q.id]: q.hp },
-            maxHp: { [p.id]: statsOf(p).maxHp, [q.id]: statsOf(q).maxHp },
-            st: { [p.id]: {}, [q.id]: {} }, moves: {}, round: 1,
-            maxRounds: isFinal ? cfg.finalRounds : cfg.combatRounds,
-            endsAt: t + cfg.roundSec * 1000, over: false,
-          };
-          p.combatId = cid; q.combatId = cid;
-          break;
-        }
-      }
-    }
-  }
-
-  const alive = aliveArr();
-  const w = alive[0];
-  feed.slice(-6).forEach((l) => console.log('    ' + l));
-  check('partija se završila pobednikom', alive.length === 1 && !!w,
-    `živih: ${alive.length}, iteracija: ${guard}`);
-  check('svi ostali imaju dodeljeno mesto', ids.filter((i) => !P[i].alive).every((i) => P[i].place > 0));
-  check('nema živog igrača sa 0 života', alive.every((p) => p.hp > 0));
-  check('mesta su jedinstvena', (() => {
-    const pl = ids.filter((i) => !P[i].alive).map((i) => P[i].place);
-    return new Set(pl).size === pl.length;
+    return true;
   })());
-  check('plen je pokupljen', Object.keys(taken).length > 5);
-  if (w) console.log(`    → pobednik ${w.name}: ${w.kills} eliminacija, ${w.items.length} predmeta, ${Math.round(w.hp)} hp, za ${Math.round((t - T0) / 1000)}s igre`);
+  // 500 razlicitih arena — nijedna ne sme da proizvede neispravan predmet
+  ok('generator je stabilan na 500 seedova', (() => {
+    for (let k = 0; k < 500; k++) {
+      const g = R.generateItems('seed' + k, cfg, 3 + (k % 40));
+      if (!g.length || g.some((i) => !i.type || !R.ITEMS[i.type] || !isFinite(i.lat))) return false;
+    }
+    return true;
+  })());
+  ok('hrana i voda se obnavljaju, oruzja ne',
+    R.isRenewable('bread') && R.isRenewable('waterBottle') && !R.isRenewable('wBow') && !R.isRenewable('backpack'));
+  const fit = R.fitItem([{ itemType: 'berries', qty: 2 }], 'berries', 4);
+  ok('dopunjava postojeci stack', fit.mode === 'stack');
+  ok('pun inventar trazi zamenu',
+    R.fitItem([1, 2, 3, 4].map(() => ({ itemType: 'bread', qty: 2 })), 'medkit', 4).mode === 'full');
 }
 
-console.log(failures ? `\n✖ ${failures} provera palo\n` : '\n✔ Sve provere prošle\n');
-process.exit(failures ? 1 : 0);
+console.log('\n5. Oruzja i borba (§6, §8)');
+{
+  const mk = (classId, weapon, hp) => ({ classId, weapon, hp: hp || 100, maxHp: 100 });
+  ok('svako oruzje ima domet', Object.values(R.WEAPONS).every((w) => w.max >= w.min));
+  ok('pesnice 8, trozubac 26', R.WEAPONS.fists.dmg === 8 && R.WEAPONS.trident.dmg === 26);
+  const own = R.attackDamage(mk('archer', 'bow'), 4).dmg;
+  const notOwn = R.attackDamage(mk('hunter', 'bow'), 4).dmg;
+  ok('sa svojom klasom +8', own - notOwn === 8, `${own} vs ${notOwn}`);
+  ok('napad van dometa je promasaj', R.attackDamage(mk('archer', 'bow'), 1).miss === true);
+  ok('strelac slab izbliza', R.classRangeMod('archer', 1) === -8);
+  ok('lovac jak na 1-3, slab na 0', R.classRangeMod('hunter', 2) === 6 && R.classRangeMod('hunter', 0) === -6);
+
+  const P = { A: mk('hunter', 'spear'), B: mk('strong', 'axe') };
+  const base = { a: 'A', b: 'B', distance: 2, hpA: 100, hpB: 100, round: 1, effA: {}, effB: {} };
+  let r = R.resolveRound({ ...base }, { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'block' } }, P);
+  ok('blok smanjuje stetu za 60%', r.hpB > 100 - 26 && r.hpB < 100, String(r.hpB));
+  // kontra radi samo ako je napad stvarno stigao (koplje ima domet 1–3)
+  r = R.resolveRound({ ...base, distance: 1 }, { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'block' } }, P);
+  ok('kontra 6 izbliza', r.hpA === 94, String(r.hpA));
+  r = R.resolveRound({ ...base, distance: 3 }, { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'block' } }, P);
+  ok('nema kontre sa daljine', r.hpA === 100, String(r.hpA));
+  r = R.resolveRound({ ...base }, { A: { kind: 'move', move: 'approach' }, B: { kind: 'move', move: 'approach' } }, P);
+  ok('oba prilaze -> razdaljina -2', r.distance === 0, String(r.distance));
+  r = R.resolveRound({ ...base }, { A: { kind: 'move', move: 'approach' }, B: { kind: 'move', move: 'retreat' } }, P);
+  ok('prilaz i odmak se ponistavaju', r.distance === 2);
+  r = R.resolveRound({ ...base }, { A: null, B: { kind: 'move', move: 'attack' } }, P);
+  ok('ko ne odigra -> automatski blok', r.log.some((l) => l.from === 'A' && l.kind === 'block') || r.hpA > 80);
+  r = R.resolveRound({ ...base, round: 10, hpA: 90, hpB: 90 }, { A: { kind: 'move', move: 'block' }, B: { kind: 'move', move: 'block' } }, P);
+  ok('posle 10 rundi obojica -10 i kraj', r.state === 'done' && r.hpA === 80 && r.hpB === 80, `${r.hpA}/${r.hpB} ${r.state}`);
+  r = R.resolveRound({ ...base, hpB: 5, distance: 2 }, { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'block' } }, P);
+  ok('pad na 0 zavrsava borbu', r.state === 'done' && r.winner === 'A', `${r.hpB} ${r.state}`);
+  // Kretanje se resava PRE napada: protivnik moze da izbegne napad menjanjem razdaljine.
+  r = R.resolveRound({ ...base, distance: 3 }, { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'retreat' } }, P);
+  ok('odmicanjem se izbegava napad', r.hpB === 100 && r.log.some((l) => l.kind === 'miss'), String(r.hpB));
+
+  const PS = { A: mk('shadow', 'knife'), B: mk('gatherer', 'club') };
+  r = R.resolveRound({ ...base, distance: 1 }, { A: { kind: 'special' }, B: { kind: 'move', move: 'attack' } }, PS);
+  ok('Senkin ubod radi 35', r.hpB === 65, String(r.hpB));
+  r = R.resolveRound({ ...base, distance: 1 }, { A: { kind: 'special' }, B: { kind: 'move', move: 'block' } }, PS);
+  ok('Senkin ubod na blok radi 12', r.hpB === 88, String(r.hpB));
+  ok('specijal se trosi', r.specialUsedA === true);
+  const PT = { A: mk('trapper', 'net'), B: mk('hunter', 'spear') };
+  r = R.resolveRound({ ...base }, { A: { kind: 'special' }, B: { kind: 'move', move: 'attack' } }, PT);
+  ok('Uplitanje zakljucava 3 runde', r.effB.lockedRounds === 3, String(r.effB.lockedRounds));
+  const PR = { A: mk('runner', 'sling'), B: mk('hunter', 'spear') };
+  r = R.resolveRound({ ...base }, { A: { kind: 'special' }, B: { kind: 'move', move: 'attack' } }, PR);
+  ok('Trkacev nestanak = bekstvo', r.state === 'chase' && r.fled === 'A');
+}
+
+console.log('\n6. Razdaljina i slikanje (§7)');
+{
+  ok('opsezi 0/1/2/3', [4, 10, 20, 30].map((m) => R.distanceBand(m, false)).join(',') === '0,1,2,3');
+  ok('opseg 4 samo za strelca', R.distanceBand(42, false) === -1 && R.distanceBand(42, true) === 4);
+  ok('konus je +-30 stepeni', R.PHOTO_CONE_DEG === 30);
+  ok('cooldown na neuspelo slikanje 15 s', R.PHOTO_COOLDOWN_MS === 15000);
+  ok('strelac vidi 60, gadja 30', R.PHOTO_MAX_ARCHER_M === 60 && R.RANGED_MAX_M === 30);
+  ok('nisanjenje 8 s, cooldown 90 s', R.RANGED_AIM_MS === 8000 && R.RANGED_COOLDOWN_MS === 90000);
+}
+
+console.log('\n7. Bekstvo (§9)');
+{
+  ok('van 20 m neprekidno 15 s', R.CHASE.escapeRadiusM === 20 && R.CHASE.escapeSec === 15);
+  ok('Trkac bezi za 10 s', R.CLASSES.runner.fleeSeconds === 10);
+  ok('Trkac bez besplatnog udarca', R.CLASSES.runner.freeHitOnFlee === false);
+  ok('Zamkar ne moze da bezi', R.CLASSES.trapper.cannotFlee === true);
+  ok('povratak u borbu na 8 m', R.CHASE.rejoinRadiusM === 8);
+  ok('90 s bez ishoda = pobegao', R.CHASE.timeoutMs === 90000);
+  ok('60 s imuniteta posle bekstva', R.CHASE.immunityMs === 60000);
+}
+
+console.log('\n8. Glad, zed, HP (§11) — iz proteklog vremena, ne tajmerom');
+{
+  const p = { hp: 100, hunger: 100, thirst: 100, maxHp: 100 };
+  let r = R.survivalTick(p, null, 70000, { nowMs: T0 });
+  ok('zed -1 na 7 s', Math.abs(r.thirst - 90) < .01, String(r.thirst));
+  ok('glad -1 na 11 s', Math.abs(r.hunger - (100 - 70 / 11)) < .01, r.hunger.toFixed(2));
+  ok('HP se ne dira dok ima hrane', r.hp === 100);
+  r = R.survivalTick({ ...p, thirst: 0 }, null, 20000, { nowMs: T0 });
+  ok('prazna zed -2 HP na 20 s', Math.abs(r.hp - 98) < .01, String(r.hp));
+  r = R.survivalTick({ ...p, thirst: 0, hunger: 0 }, null, 60000, { nowMs: T0 });
+  ok('glad i zed se sabiraju', Math.abs(r.hp - (100 - 6 - 4)) < .01, String(r.hp));
+  const gat = R.survivalTick(p, R.CLASSES.gatherer, 70000, { nowMs: T0 });
+  ok('Sakupljac 40% sporije', gat.thirst > r.thirst && Math.abs(gat.thirst - 94) < .01, String(gat.thirst));
+  const dr = R.survivalTick(p, null, 70000, { nowMs: T0, drought: true });
+  ok('susa duplo brze', Math.abs(dr.thirst - 80) < .01, String(dr.thirst));
+  const zn = R.survivalTick(p, null, 10000, { nowMs: T0, outsideZone: true, zoneDmgPer10s: 7 });
+  ok('zona radi stetu po 10 s', Math.abs(zn.hp - 93) < .01, String(zn.hp));
+  const st = R.survivalTick(p, R.CLASSES.strong, 10000, { nowMs: T0, outsideZone: true, zoneDmgPer10s: 12 });
+  ok('Snagator trpi upola od zone', Math.abs(st.hp - 94) < .01, String(st.hp));
+  const fr = R.survivalTick(p, null, 60000, { nowMs: T0, frozen: true, outsideZone: true, zoneDmgPer10s: 20 });
+  ok('pauza zamrzava sve', fr.hp === 100 && fr.hunger === 100 && fr.thirst === 100);
+  ok('HP se nikad ne regenerise', R.survivalTick({ ...p, hp: 40 }, null, 600000, { nowMs: T0 }).hp <= 40);
+}
+
+console.log('\n9. Savezi i lobi (§2, §10)');
+{
+  ok('max savez 2/3/4/5', [6, 12, 20, 40].map(R.maxAllianceSize).join(',') === '2,3,4,5');
+  ok('min 3 max 48 igraca', R.MIN_PLAYERS === 3 && R.MAX_PLAYERS === 48);
+  ok('preporuke po broju igraca',
+    R.recommendFor(5).diameterM === 350 && R.recommendFor(10).durationMin === 45 &&
+    R.recommendFor(40).diameterM === 1200);
+}
+
+console.log('\n10. Konzumiranje (§12)');
+{
+  const p = { hp: 50, maxHp: 100, hunger: 40, thirst: 40, classId: 'hunter' };
+  ok('hleb +35 gladi', R.consume(p, 'bread').hunger === 75);
+  ok('izvorska voda +70 zedji, do 100', R.consume(p, 'springWater').thirst === 100);
+  ok('prljava voda -8 HP', R.consume(p, 'dirtyWater').hp === 42);
+  ok('Sakupljacu prljava voda ne skodi', R.consume({ ...p, classId: 'gatherer' }, 'dirtyWater').hp === 50);
+  ok('bilje +15, Lekaru duplo',
+    R.consume(p, 'herbs').hp === 65 && R.consume({ ...p, classId: 'medic' }, 'herbs').hp === 80);
+  ok('mast vraca pun HP', R.consume(p, 'salve').hp === 100);
+  ok('ranac dize kapacitet na 7', R.consume(p, 'backpack').capacity === 7);
+  ok('pojas dize max glad', R.consume(p, 'supplyBelt').maxHungerBonus === 30);
+  ok('Trkac ima +1 slot', R.slotsOf({ classId: 'runner', capacity: 4 }) === 5);
+}
+
+console.log(fail ? `\n${fail} provera palo\n` : `\nSve provere prosle\n`);
+process.exit(fail ? 1 : 0);
