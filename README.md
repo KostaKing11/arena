@@ -3,6 +3,9 @@
 GPS igra u stvarnom svetu. Telefon je mapa, inventar i oružje. Implementacija prati
 [`SPEC.md`](SPEC.md) — ta specifikacija je merodavna, ovaj fajl je uputstvo za pokretanje.
 
+> **Šta je trenutno pokvareno i šta je sledeće: [`TODO.md`](TODO.md).**
+> Tu su i utvrđeni uzroci bagova, da se ne traže dvaput.
+
 Statični sajt (GitHub Pages) + Firebase Realtime Database. **Nema servera.**
 
 - **Igra:** https://kostaking11.github.io/arena/
