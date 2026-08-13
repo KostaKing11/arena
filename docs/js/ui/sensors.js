@@ -159,6 +159,44 @@ const Wake = (() => {
   return { on, off, get active() { return !!lock; } };
 })();
 
+/* ───────────────────────── hodanje tapom (samo test) ─────────────────────────
+   Sa botovima se sedi za stolom, pa GPS ne mrda i partija stoji u mestu.
+   Ovde tap po mapi postaje šetnja: ideš ka tački ljudskim tempom (1,4 m/s),
+   pa zona, glad, predmeti i napadi botova rade tačno kao napolju. Pravi GPS
+   se time gasi (`Geo.simulate`), što u testu i jeste poenta. */
+const TestWalk = (() => {
+  'use strict';
+  const SPEED_MS = 1.4;
+  const TICK_MS = 200;
+  let timer = null, target = null, cur = null;
+
+  function enable() {
+    if (timer) return;
+    timer = setInterval(step, TICK_MS);
+  }
+  function disable() { clearInterval(timer); timer = null; target = null; }
+
+  function goTo(p) {
+    if (!p) return;
+    if (!cur) cur = Geo.pos ? { lat: Geo.pos.lat, lng: Geo.pos.lng } : { lat: p.lat, lng: p.lng };
+    target = { lat: p.lat, lng: p.lng };
+    enable();
+    Haptics.fire('tap');
+  }
+
+  function step() {
+    if (!target) return;
+    if (!cur) { cur = Geo.pos ? { lat: Geo.pos.lat, lng: Geo.pos.lng } : { ...target }; }
+    const left = U.dist(cur, target);
+    const stepM = SPEED_MS * (TICK_MS / 1000);
+    if (left <= stepM) { cur = { ...target }; target = null; }
+    else cur = U.destPoint(cur, U.bearing(cur, target), stepM);
+    Geo.simulate(cur.lat, cur.lng);
+  }
+
+  return { enable, disable, goTo, get walking() { return !!target; } };
+})();
+
 /* ───────────────────────── akcelerometar (protresi telefon) ───────────────────────── */
 const Shake = (() => {
   let last = 0, count = 0, cb = null, running = false;

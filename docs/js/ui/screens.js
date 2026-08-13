@@ -80,7 +80,10 @@ const UI = (() => {
   const BUILD_LBL = { slim: 'Vitak', normal: 'Srednji', broad: 'Krupan' };
   const BUILD_LBL_EN = { slim: 'Slim', normal: 'Normal', broad: 'Broad' };
 
-  function avatarBuilder() {
+  /** `opts.onSave` se zove na svaku promenu — u lobiju time lik ide i u bazu. */
+  function avatarBuilder(opts) {
+    opts = opts || {};
+    const save = () => { saveAvatar(); if (opts.onSave) opts.onSave(myAvatar); };
     const s = sheet(T('avatarTitle'), '<div id="avBody"></div>');
     draw();
     function draw() {
@@ -97,9 +100,9 @@ const UI = (() => {
           <button class="btn primary grow" id="avOk">${esc(T('continue'))}</button>
         </div>`;
       $$('.opt-row', s).forEach((row) => $$('button', row).forEach((b) => b.onclick = () => {
-        myAvatar[row.dataset.k] = b.dataset.v; saveAvatar(); draw(); renderHomeAvatar();
+        myAvatar[row.dataset.k] = b.dataset.v; save(); draw(); renderHomeAvatar();
       }));
-      $('#avRand', s).onclick = () => { myAvatar = randomAvatar(); saveAvatar(); draw(); renderHomeAvatar(); };
+      $('#avRand', s).onclick = () => { myAvatar = randomAvatar(); save(); draw(); renderHomeAvatar(); };
       $('#avOk', s).onclick = () => { s.close(); renderHomeAvatar(); };
     }
     function group(key, label, vals, kind) {
@@ -113,37 +116,37 @@ const UI = (() => {
     }
   }
 
-  /* ═══════════════ lobi ═══════════════ */
+  /* ═══════════════ lobi ═══════════════
+     Lobi se osvežava na SVAKU promenu u sobi, a igrači upisuju poziciju svakih
+     par sekundi. Zato je podeljen na dva dela:
+
+       buildLobby()  — skelet, mapa i klizači; pravi se JEDNOM
+       updateLobby() — brojke, spisak igrača i stanje dugmeta "Pokreni"
+
+     Ranije je sve išlo kroz jedno prepisivanje `#lobbyBody`, pa su klizači
+     pucali usred prevlačenja, a Leaflet je ostajao zakačen za čvor koji
+     sledeće iscrtavanje obriše — zbog toga mapa arene uopšte nije radila. */
+  let lobbyKey = null;
+
   function renderLobby() {
-    const host = Store.isHost(), cfg = Store.config(), P = Store.players();
-    const ids = Object.keys(P);
-    const n = ids.length;
-    const rec = R.recommendFor(n);
-    $('#lobbyCode').textContent = Store.code || '-----';
+    const host = Store.isHost();
+    const key = `${Store.code}|${host}|${LANG}`;
+    if (lobbyKey !== key) { lobbyKey = key; smap = null; buildLobby(host); }
+    updateLobby(host);
+  }
 
-    const ready = ids.every((id) => P[id].isBot || P[id].ready);
-    const canStart = n >= R.MIN_PLAYERS && cfg.center && ready;
+  /** Izlazak iz sobe: sledeći ulazak mora da gradi iznova. */
+  function resetLobby() { lobbyKey = null; smap = null; }
 
-    const playersHtml = ids.map((id) => {
-      const p = P[id];
-      const st = (ok, ic) => `<span class="st ${ok ? 'ok' : ''}">${icon(ic, { size: 15 })}</span>`;
-      const pe = p.perms || {};
-      return `<div class="player-row">
-        <div class="avatar" style="width:44px;height:44px">${p.isBot ? icon('settings', { size: 24 }) : avatarSvg(p.avatar, 44)}</div>
-        <div class="grow"><div class="name">${esc(p.name)}${id === Store.myId ? ' ·' : ''}</div>
-          ${Store.meta().hostId === id ? `<div class="tiny goldc">${esc(T('youAreHost'))}</div>` : ''}</div>
-        <div class="statuses">
-          ${st(pe.location || p.isBot, 'pin')}${st(pe.camera || p.isBot, 'camera')}
-          ${st(pe.compass || p.isBot, 'compass')}${st(p.hasFace || p.isBot, 'portrait')}
-        </div>
-      </div>`;
-    }).join('');
+  function buildLobby(host) {
+    const cfg = Store.config();
+    const rec = R.recommendFor(Object.keys(Store.players()).length || 3);
 
     const hostHtml = !host ? `
       <div class="card center stack"><div class="pulse-dot" style="margin:0 auto"></div>
         <p class="big">${esc(T('waitingHost'))}</p></div>` : `
       <div class="card stack">
-        <div class="card-title">${esc(T('arenaCenter'))}</div>
+        <div class="card-title">${esc(T('arena'))}</div>
         <div class="setup-map" id="setupMap"></div>
         <p class="tiny dim">${esc(T('tapMapCenter'))}</p>
         <button class="btn ghost" id="btnMyLoc">${icon('pin', { size: 20 })}<span>${esc(T('useMyLocation'))}</span></button>
@@ -163,61 +166,140 @@ const UI = (() => {
         ${cfg.botsEnabled ? `<label class="switch"><span>${esc(T('botsOn'))}</span>
           <input type="checkbox" id="cfgBots" checked disabled><span class="track"><span class="knob"></span></span></label>` : ''}
       </div>
-      <button class="btn primary lg full" id="btnStart" ${canStart ? '' : 'disabled'}>${esc(T('startGame'))}</button>
-      ${!canStart ? `<p class="tiny center dim">${esc(n < R.MIN_PLAYERS ? T('needPlayers') : !cfg.center ? T('needCenter') : T('needAllReady'))}</p>` : ''}`;
+      <button class="btn primary lg full" id="btnStart">${esc(T('startGame'))}</button>
+      <p class="tiny center dim" id="startWhy"></p>`;
 
     $('#lobbyBody').innerHTML = `
-      <div class="row between"><div class="chip">${icon('users', { size: 16 })}${n} / ${R.MAX_PLAYERS}</div>
-        <div class="row-tight">
-          <button class="btn sm ghost" id="btnMentorLink">${icon('users', { size: 16 })}<span>${esc(T('mentorTitle'))}</span></button>
-          <button class="btn sm ghost" id="btnLeaveLobby">${esc(T('leaveRoom'))}</button>
-        </div></div>
-      <div class="list">${playersHtml}</div>
+      <div class="row between"><div class="chip" id="lobbyCount"></div>
+        <button class="btn sm ghost" id="btnLeaveLobby">${esc(T('leaveRoom'))}</button>
+      </div>
+      <div class="list" id="lobbyList"></div>
       ${hostHtml}`;
 
     $('#btnLeaveLobby').onclick = () => App.leaveRoom();
-    const ml = $('#btnMentorLink');
-    if (ml) ml.onclick = () => UI.mentorLinkSheet(Store.myId);
     if (host) wireHostConfig();
 
     function slider(key, label, min, max, step, val, unit, recVal) {
-      const off = recVal ? Math.abs(val - recVal) / recVal : 0;
-      return `<div class="slider" data-k="${key}">
+      return `<div class="slider" data-k="${key}" data-rec="${recVal || ''}" data-unit="${esc(unit)}">
         <div class="slider-head"><span class="label">${esc(label)}</span>
-          <span class="slider-val"><span class="v">${val}</span> ${unit}</span></div>
+          <span class="slider-val"><span class="v">${val}</span> ${esc(unit)}</span></div>
         <input type="range" min="${min}" max="${max}" step="${step}" value="${val}">
-        <div class="rec-hint ${off > 1 ? 'warn' : ''}">${recVal ? `${esc(T('recommended'))}: ${recVal} ${unit}` : ''}${off > 1 ? ' — ' + esc(T('tooFarFromRecommended')) : ''}</div>
+        <div class="rec-hint"></div>
       </div>`;
     }
   }
 
+  /* Osvežavanje — dira samo tekst i `disabled`, nikad ne prepisuje čvorove
+     u kojima žive mapa i klizači. */
+  function updateLobby(host) {
+    const cfg = Store.config(), P = Store.players();
+    const ids = Object.keys(P);
+    const n = ids.length;
+    $('#lobbyCode').textContent = Store.code || '-----';
+
+    const cnt = $('#lobbyCount');
+    if (cnt) cnt.innerHTML = `${icon('users', { size: 16 })}${n} / ${R.MAX_PLAYERS}`;
+
+    const list = $('#lobbyList');
+    if (list) {
+      // Moja kartica prva — na njoj menjam lik i sa nje pozivam mentora.
+      const order = ids.slice().sort((a, b) => (a === Store.myId ? -1 : b === Store.myId ? 1 : 0));
+      list.innerHTML = order.map((id) => playerCard(id, P[id])).join('');
+      const av = $('#lobbyMyAvatar');
+      if (av) av.onclick = () => avatarBuilder({ onSave: () => Store.updateMe({ avatar: myAvatar }) });
+      const mb = $('#lobbyMentor');
+      if (mb) mb.onclick = () => UI.mentorLinkSheet(Store.myId);
+    }
+
+    if (!host) return;
+    const ready = ids.every((id) => P[id].isBot || P[id].ready);
+    const canStart = n >= R.MIN_PLAYERS && cfg.center && ready;
+    const bs = $('#btnStart');
+    if (bs) bs.disabled = !canStart;
+    const why = $('#startWhy');
+    if (why) {
+      why.textContent = canStart ? ''
+        : n < R.MIN_PLAYERS ? T('needPlayers') : !cfg.center ? T('needCenter') : T('needAllReady');
+    }
+
+    // preporuke se menjaju sa brojem igrača, pa upozorenje ide ovde
+    const rec = R.recommendFor(n);
+    const recFor = { diameterM: rec.diameterM, durationMin: rec.durationMin, itemDensityPct: 100, prepMinutes: 10 };
+    $$('#lobbyBody .slider').forEach((sl) => {
+      const key = sl.dataset.k, recVal = recFor[key];
+      const inp = $('input', sl);
+      // vrednost se NE dira dok je prst na klizaču
+      if (document.activeElement !== inp && !inp.dataset.dragging) {
+        const v = key === 'itemDensityPct' ? Math.round((cfg.itemDensity || 1) * 100) : cfg[key];
+        if (v != null && +inp.value !== +v) { inp.value = v; $('.v', sl).textContent = v; }
+      }
+      const cur = +inp.value;
+      const off = recVal ? Math.abs(cur - recVal) / recVal : 0;
+      const hint = $('.rec-hint', sl);
+      hint.className = 'rec-hint' + (off > 1 ? ' warn' : '');
+      hint.textContent = (recVal ? `${T('recommended')}: ${recVal} ${sl.dataset.unit}` : '')
+        + (off > 1 ? ' — ' + T('tooFarFromRecommended') : '');
+    });
+
+    if (smap && cfg.center) {
+      smap.drawZone({ center: cfg.center, radiusM: cfg.diameterM / 2, shrinking: false }, cfg);
+    }
+  }
+
+  /** Kartica igrača. Zelena oznaka dozvola je sklonjena — dozvole se traže
+      unapred, pa je na kartici bila samo buka. */
+  function playerCard(id, p) {
+    const mine = id === Store.myId;
+    const isHost = Store.meta().hostId === id;
+    const men = (Store.mentors() || {})[id] || {};
+    const avatar = p.isBot ? icon('settings', { size: 24 }) : avatarSvg(p.avatar, 44);
+    return `<div class="player-row${mine ? ' mine' : ''}">
+        <div class="avatar${mine ? ' tapable' : ''}" ${mine ? 'id="lobbyMyAvatar"' : ''}
+          style="width:44px;height:44px">${avatar}</div>
+        <div class="grow"><div class="name">${esc(p.name)}${mine ? ' · ' + esc(T('you')) : ''}</div>
+          ${isHost ? `<div class="tiny goldc">${esc(T('youAreHost'))}</div>` : ''}</div>
+        ${mine ? `<button class="btn sm ghost" id="lobbyMentor">${icon('users', { size: 16 })}<span>${esc(T('mentorTitle'))}</span></button>` : ''}
+      </div>`
+      // mentor nema lika — manja kartica odmah ispod tvoje (§17)
+      + (mine && men.mentorId ? `<div class="mentor-row">${icon('users', { size: 16 })}
+          <span class="grow"><b>${esc(men.name || T('mentorTitle'))}</b> · ${esc(T('yourMentor'))}</span></div>` : '');
+  }
+
   function wireHostConfig() {
     const cfg = Store.config();
-    if (!smap) {
-      smap = makeMap('setupMap', { zoom: 15 });
-      smap.map.on('click', (e) => {
-        smapCenter = { lat: e.latlng.lat, lng: e.latlng.lng };
-        Store.hostUpdate('config', { center: smapCenter });
-      });
-    } else smap.refresh();
-    if (cfg.center) {
-      smap.drawZone({ center: cfg.center, radiusM: cfg.diameterM / 2, shrinking: false }, cfg);
-      smap.map.setView([cfg.center.lat, cfg.center.lng], 15);
-    }
+    // Mapa se pravi jednom, u čvoru koji od sada niko ne prepisuje.
+    smap = makeMap('setupMap', { zoom: 15, noFog: true });
+    smap.map.on('click', (e) => {
+      smapCenter = { lat: e.latlng.lat, lng: e.latlng.lng };
+      Store.hostUpdate('config', { center: smapCenter });
+    });
+    setTimeout(() => smap && smap.refresh(), 60);
+    if (cfg.center) smap.map.setView([cfg.center.lat, cfg.center.lng], 15);
+
     $('#btnMyLoc').onclick = () => {
       if (!Geo.pos) { toast(T('gpsGoOutside'), 'danger'); return; }
       Store.hostUpdate('config', { center: { lat: Geo.pos.lat, lng: Geo.pos.lng } });
+      smap.map.setView([Geo.pos.lat, Geo.pos.lng], 16);
     };
     $$('#lobbyBody .slider').forEach((sl) => {
       const inp = $('input', sl), key = sl.dataset.k;
+      // zastavica drži osvežavanje dalje od klizača dok traje prevlačenje
+      inp.addEventListener('pointerdown', () => { inp.dataset.dragging = '1'; });
+      ['pointerup', 'pointercancel'].forEach((e) =>
+        inp.addEventListener(e, () => { delete inp.dataset.dragging; }));
       inp.oninput = () => { $('.v', sl).textContent = inp.value; };
       inp.onchange = () => {
+        delete inp.dataset.dragging;
         const v = +inp.value;
         if (key === 'itemDensityPct') Store.hostUpdate('config', { itemDensity: v / 100 });
         else Store.hostUpdate('config', { [key]: v });
       };
     });
-    $$('#segMode button').forEach((b) => b.onclick = () => Store.hostUpdate('config', { startMode: b.dataset.v }));
+    segInit($('#segMode'));
+    $$('#segMode button').forEach((b) => b.onclick = () => {
+      segPick($('#segMode'), b.dataset.v);
+      Store.hostUpdate('config', { startMode: b.dataset.v });
+    });
     const ev = $('#cfgEvents'); if (ev) ev.onchange = () => Store.hostUpdate('config', { eventsEnabled: ev.checked });
     const bs = $('#btnStart'); if (bs) bs.onclick = () => App.startGame();
   }
@@ -291,13 +373,30 @@ const UI = (() => {
           <canvas id="faceCan" hidden></canvas>
           <button class="btn primary lg full" id="fShot">${icon('camera', { size: 22 })}<span>${esc(T('faceTake'))}</span></button>`;
         Encounter.openCamera($('#faceVid', s), 'user').catch(() => toast(T('denied'), 'danger'));
+        /* Isečak prati OVAL sa ekrana, ne ceo kadar — ranije se seklo po
+           sredini celog snimka, pa je lice ispadalo sitno i daleko. Uz to se
+           slika okreće po širini: prednja kamera je daje u ogledalu, a u igri
+           te ostali prepoznaju onako kako te stvarno vide. */
         $('#fShot', s).onclick = () => {
           const v = $('#faceVid', s), c = $('#faceCan', s);
           if (!v.videoWidth) return toast(T('denied'), 'danger');
-          const side = Math.min(v.videoWidth, v.videoHeight);
-          c.width = 240; c.height = 240;
-          c.getContext('2d').drawImage(v, (v.videoWidth - side) / 2, (v.videoHeight - side) / 2, side, side, 0, 0, 240, 240);
-          localStorage.setItem(FACE_KEY, c.toDataURL('image/jpeg', 0.72));
+          const vw = v.videoWidth, vh = v.videoHeight;
+          // deo izvora koji se zaista vidi u okviru 3:4 (object-fit: cover)
+          const k = Math.max(3 / vw, 4 / vh);
+          const visW = 3 / k, visH = 4 / k;
+          const visX = (vw - visW) / 2, visY = (vh - visH) / 2;
+          // vodilja iz CSS-a: 16%–84% po širini, 18%–70% po visini
+          const gw = visW * 0.68, gh = visH * 0.52;
+          const cx = visX + visW * 0.16 + gw / 2, cy = visY + visH * 0.18 + gh / 2;
+          const side = Math.min(Math.max(gw, gh) * 1.15, vw, vh);
+          const sx = U.clamp(cx - side / 2, 0, vw - side);
+          const sy = U.clamp(cy - side / 2, 0, vh - side);
+          const S = 320;
+          c.width = S; c.height = S;
+          const ctx = c.getContext('2d');
+          ctx.translate(S, 0); ctx.scale(-1, 1);
+          ctx.drawImage(v, sx, sy, side, side, 0, 0, S, S);
+          localStorage.setItem(FACE_KEY, c.toDataURL('image/jpeg', 0.78));
           localStorage.setItem(ONB_KEY, '1');
           Encounter.stop();
           Haptics.fire('pickup');
@@ -419,12 +518,17 @@ const UI = (() => {
         <button class="action-btn ${close ? '' : ''}" id="btnArrived" ${close && !me.arrived ? '' : 'disabled'}>
           ${me.arrived ? esc(T('arrivedDone')) : close ? esc(T('arrivedBtn')) : esc(T('arrivedLocked'))}
         </button>
+        ${App.TEST && sp && !me.arrived ? `<button class="btn ghost full" id="btnWalkStart"
+          style="margin-top:var(--s2)">${icon('run', { size: 20 })}<span>${esc(T('testWalkStart'))}</span></button>` : ''}
       </div>
       ${Store.meta().census ? `<div class="card"><div class="card-title">${esc(T('arenaComposition'))}</div>
         <div class="row wrap">${Object.entries(Store.meta().census).map(([k, v]) =>
           `<span class="chip">${icon(CLASS_ICON[k], { size: 14 })}${v}× ${esc(clsName(k))}</span>`).join('')}</div></div>` : ''}`;
     const b = $('#btnArrived');
     if (b) b.onclick = () => { Store.updateMe({ arrived: true }); Haptics.fire('pickup'); };
+    // Bez ovoga se u testu do startne tačke ne stiže — a bez nje partija ne kreće.
+    const w = $('#btnWalkStart');
+    if (w) w.onclick = () => { TestWalk.goTo(sp); toast(T('testWalkStart'), 'gold', 'run'); };
   }
 
   /* ═══════════════ ekran igre ═══════════════ */
@@ -432,6 +536,12 @@ const UI = (() => {
     if (!gmap) {
       gmap = makeMap('gamemap', { zoom: 18 });
       window.addEventListener('arena:mapdrag', () => { const b = $('#btnRecenter'); if (b) b.hidden = false; });
+      // U testu se ne šeta po gradu — tap po mapi te vodi tamo peške (§21).
+      if (App.TEST) {
+        gmap.map.on('click', (e) => TestWalk.goTo({ lat: e.latlng.lat, lng: e.latlng.lng }));
+        TestWalk.enable();
+        toast(T('tapToWalk'), 'gold', 'map');
+      }
     } else gmap.refresh();
     return gmap;
   }
@@ -517,6 +627,17 @@ const UI = (() => {
     // pogodak / šteta — vibracija i trzaj
     if (lastHp != null && me.hp < lastHp - 0.6) { Haptics.fire('hurt'); }
     lastHp = me.hp;
+
+    // Puna mapa je fioka preko ekrana igre, pa ovaj otkucaj i dalje ide —
+    // koristimo ga da se i na njoj vidi kretanje, a ne zamrznuta slika.
+    if (amap) {
+      if (pos) amap.setMe(pos, Compass.heading);
+      if (d.zone) amap.drawZone(d.zone, d.cfg);
+      amap.drawPlayers(visiblePlayers(d));
+      amap.drawItems(Items.visible(d), null);
+      amap.drawFire(d.firewall);
+      amap.drawWasps(d.wasps);
+    }
   }
 
   function visiblePlayers(d) {
@@ -544,44 +665,111 @@ const UI = (() => {
     return out;
   }
 
-  /* Prava kompasna traka: crtice na svakih 5°, veće na 15°, strane sveta na 45°.
-     Vidno polje je 120°, pa se traka pomera zajedno sa telefonom. */
+  /* ═══════════════ puna mapa arene ═══════════════
+     Donje dugme "Mapa" i gornje "Centriraj" su ranije radili istu stvar. Sada
+     gornje vraća pogled na tebe, a ovo otvara pregled CELE arene: granica,
+     zona koja se skuplja, kornukopija i sve što ti je vidljivo. */
+  let amap = null;
+  function arenaMapSheet(d) {
+    const cfg = d.cfg || Store.config();
+    if (!cfg || !cfg.center) { toast(T('needCenter'), 'gold', 'map'); return; }
+    const s = sheet(T('arenaMap'), `
+      <div class="arena-map" id="arenaMapBox"></div>
+      <div class="row-tight wrap" style="margin-top:var(--s3)" id="arenaMapLegend"></div>`,
+      { onClose: () => { amap = null; if (gmap) gmap.drawFog(); } });
+
+    amap = makeMap('arenaMapBox', { zoom: 15, noFog: true });
+    amap.setFull(true);
+    amap.setFollow(false);
+    amap.fitArena(cfg);
+    amap.drawZone(d.zone || { center: cfg.center, radiusM: cfg.diameterM / 2, shrinking: false }, cfg);
+    amap.drawFire(d.firewall);
+    amap.drawWasps(d.wasps);
+    if (Geo.pos) amap.setMe(Geo.pos, Compass.heading);
+    amap.drawPlayers(visiblePlayers(d));
+    amap.drawItems(Items.visible(d), null);
+    setTimeout(() => { if (amap) { amap.refresh(); amap.fitArena(cfg); } }, 80);
+
+    // u testu je pun pregled arene i pravo mesto da zadaš kuda ideš
+    if (App.TEST) {
+      amap.map.on('click', (e) => {
+        TestWalk.goTo({ lat: e.latlng.lat, lng: e.latlng.lng });
+        toast(T('tapToWalk'), 'gold', 'run');
+      });
+    }
+
+    const key = (cls, label) => `<span class="chip"><i class="legend ${cls}"></i>${esc(label)}</span>`;
+    $('#arenaMapLegend', s).innerHTML =
+      key('me', T('you')) + key('foe', T('tributes')) + key('zone', T('zonePhase'))
+      + key('corn', T('modeCornucopia'))
+      + (App.TEST ? `<span class="chip gold">${esc(T('testWalk'))}</span>` : '');
+  }
+
+  /* ═══════════════ kompasna traka ═══════════════
+     Crtice na svakih 5°, veće na 15°, strane sveta na 45°. Vidno polje 120°.
+
+     Traka se crta JEDNOM, kao pojas od dva puna kruga, pa se na svaki događaj
+     kompasa (desetine puta u sekundi) samo pomera preko `translateX`. Ranije
+     se ceo `innerHTML` prepisivao iz otkucaja motora — jednom u sekundi — pa
+     je traka skakala umesto da klizi.
+
+     Oznake (zona, saveznici, startna tačka) su u zasebnom sloju koji se NE
+     pomera: one se računaju iz razlike uglova i osvežavaju na otkucaj. */
   const CARD_SR = ['S', 'SI', 'I', 'JI', 'J', 'JZ', 'Z', 'SZ'];
   const CARD_EN = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   const FOV = 120;
+  let compassKey = null, compassPpd = 0, compassW = 0, compassWired = false;
+
+  /** Pojas se prostire od −180° do 540°, pa nikad ne dolazi do preloma. */
+  function buildCompass() {
+    const c = $('#compass');
+    const w = c.clientWidth || 340;
+    const key = `${w}|${LANG}`;
+    if (compassKey === key) return;
+    compassKey = key; compassW = w; compassPpd = w / FOV;
+    const CARD = LANG === 'en' ? CARD_EN : CARD_SR;
+    const out = [];
+    for (let a = -180; a <= 540; a += 5) {
+      const norm = ((a % 360) + 360) % 360;
+      const x = (a + 180) * compassPpd;
+      const major = norm % 45 === 0, mid = norm % 15 === 0;
+      out.push(`<i class="tk ${major ? 'major' : mid ? 'mid' : 'minor'}" style="left:${x}px"></i>`);
+      if (major) out.push(`<span class="cd" style="left:${x}px">${CARD[norm / 45]}</span>`);
+    }
+    const ticks = $('#compassTicks');
+    ticks.style.width = (720 * compassPpd) + 'px';
+    ticks.innerHTML = out.join('');
+    placeCompass(Compass.heading);
+  }
+
+  /** Jedina stvar koja se dešava na svaki događaj kompasa. */
+  function placeCompass(h) {
+    const strip = $('#compassStrip');
+    if (!strip || h == null || !compassPpd) return;
+    strip.style.transform = `translateX(${compassW / 2 - (h + 180) * compassPpd}px)`;
+  }
 
   function renderCompass(d) {
     const c = $('#compass');
     const h = Compass.heading;
-    const strip = $('#compassStrip');
     if (h == null) {
       c.classList.add('compass-dead');
-      strip.innerHTML = `<span>${esc(T('detNoCompass'))}</span>`;
+      $('#compassMarks').innerHTML = `<span class="dead-lbl">${esc(T('detNoCompass'))}</span>`;
       return;
     }
     c.classList.remove('compass-dead');
-    const w = c.clientWidth || 340;
-    const ppd = w / FOV;
+    if (!compassWired) { compassWired = true; Compass.on((hh) => placeCompass(hh)); }
+    buildCompass();
+    placeCompass(h);
+
+    // oznake: zona kad si van nje, saveznici, startna tačka u pripremi
     const half = FOV / 2 + 6;
-    const CARD = LANG === 'en' ? CARD_EN : CARD_SR;
-    const out = [];
-
-    // Samo strane sveta — brojevi stepeni su zatrpavali traku.
-    for (let a = 0; a < 360; a += 5) {
-      const off = U.angleDiff(h, a);
-      if (Math.abs(off) > half) continue;
-      const x = w / 2 + off * ppd;
-      const major = a % 45 === 0, mid = a % 15 === 0;
-      out.push(`<i class="tk ${major ? 'major' : mid ? 'mid' : 'minor'}" style="left:${x}px"></i>`);
-      if (major) out.push(`<span class="cd card" style="left:${x}px">${CARD[a / 45]}</span>`);
-    }
-
-    // oznake na traci: zona kad si van nje, saveznici, startna tačka u pripremi
     const pos = Geo.pos;
+    const out = [];
     const mark = (brg, color, name) => {
       const off = U.angleDiff(h, brg);
       if (Math.abs(off) > half) return;
-      out.push(`<span class="mk" style="left:${w / 2 + off * ppd}px;color:${color}">${icon(name, { size: 14 })}</span>`);
+      out.push(`<span class="mk" style="left:${compassW / 2 + off * compassPpd}px;color:${color}">${icon(name, { size: 14 })}</span>`);
     };
     if (pos && d.zone && d.outsideZone) mark(U.bearing(pos, d.zone.center), 'var(--danger)', 'target');
     if (pos && d.me && d.state === 'PREP' && d.me.startPos) mark(U.bearing(pos, d.me.startPos), 'var(--gold)', 'pin');
@@ -592,7 +780,7 @@ const UI = (() => {
         mark(U.bearing(pos, p.pos), 'var(--ally)', 'user');
       }
     }
-    strip.innerHTML = out.join('');
+    $('#compassMarks').innerHTML = out.join('');
   }
 
   /* ═══════════════ inventar ═══════════════ */
@@ -778,8 +966,13 @@ const UI = (() => {
         </div>
       </div>`;
 
-    $$('#setTheme button').forEach((b) => b.onclick = () => { Theme.set(b.dataset.v); renderSettings(); });
-    $$('#setLang button').forEach((b) => b.onclick = () => { setLang(b.dataset.v); applyLang(); renderSettings(); });
+    segInit($('#setTheme')); segInit($('#setLang'));
+    // Tema se menja bez ponovnog iscrtavanja — pločica ima šta da otklizi.
+    $$('#setTheme button').forEach((b) => b.onclick = () => { Theme.set(b.dataset.v); segPick($('#setTheme'), b.dataset.v); });
+    // Jezik menja sav tekst, pa se ekran iscrtava tek kad pločica stigne.
+    $$('#setLang button').forEach((b) => b.onclick = () => segPick($('#setLang'), b.dataset.v, () => {
+      setLang(b.dataset.v); applyLang(); renderSettings();
+    }));
     $('#setHap').onchange = (e) => Haptics.setEnabled(e.target.checked);
     $('#setSfx').onchange = (e) => { Sfx.setEnabled(e.target.checked); Sfx.unlock(); };
     $('#setAvatar').onclick = () => avatarBuilder();
@@ -814,10 +1007,13 @@ const UI = (() => {
     const left = Math.max(0, (f.deadlineMs - d.now) / 1000);
 
     // ── likovi na terenu: razmak prati razdaljinu iz borbe ──
+    // Razdaljina 0 = jedan drugom u lice (blizu sredine), 5 = svako na svojoj
+    // ivici. Ranije je bilo obrnuto, pa je primicanje izgledalo kao odmicanje.
     const near = 6, far = 34;                        // procenti od ivice
     const t = f.distance / 5;
-    $('#figMe').style.left = (near + (far - near) * t) + '%';
-    $('#figFoe').style.right = (near + (far - near) * t) + '%';
+    const edgePct = (far - (far - near) * t) + '%';
+    $('#figMe').style.left = edgePct;
+    $('#figFoe').style.right = edgePct;
     $('#figMe').innerHTML = avatarFigure(me.avatar, 132, { weapon: me.weapon });
     $('#figFoe').innerHTML = avatarFigure(foe.avatar, 132, { weapon: foe.weapon, facing: -1 });
     $('#coverL').innerHTML = icon('flame', { size: 26 });
@@ -847,9 +1043,21 @@ const UI = (() => {
       ${segs.join('')}<div class="pip" style="left:${(f.distance / 5) * 100}%"></div>`;
     const inRange = R.inRange(w, f.distance);
     $('#rangeHint').className = 'range-hint ' + (inRange ? 'ok' : '');
-    $('#rangeHint').innerHTML = `${icon(WEAPON_ICON[me.weapon] || 'hand', { size: 13, cls: 'inline' })}
-      <b>${esc(weaponName(me.weapon))}</b> · ${esc(T('distance'))} ${w.min}–${w.max} · `
-      + (inRange ? `<b>${esc(T('moveAttack'))}</b>` : esc(T('outOfRange')));
+    $('#rangeHint').innerHTML =
+      `<span>${esc(T('distNow'))} <b>${f.distance}</b> · `
+      + `${icon(WEAPON_ICON[me.weapon] || 'hand', { size: 13, cls: 'inline' })}`
+      + `${esc(weaponName(me.weapon))} ${w.min}–${w.max} · `
+      + (inRange ? `<b>${esc(T('moveAttack'))}</b>` : esc(T('outOfRange'))) + '</span>'
+      + `<button class="helpdot" id="fightHelp" aria-label="?">?</button>`;
+    $('#fightHelp').onclick = () => {
+      const m = modal(`
+        <div class="stack">
+          <h2>${esc(T('fightHelp'))}</h2>
+          <p class="dim" style="line-height:1.65;white-space:pre-line">${esc(T('fightHelpBody'))}</p>
+          <button class="btn primary full" id="fhOk">${esc(T('ok'))}</button>
+        </div>`);
+      $('#fhOk', m).onclick = () => m.close();
+    };
 
     // gledalac vidi sve isto, samo bez dugmadi
     if (spectate) {
@@ -863,14 +1071,31 @@ const UI = (() => {
       return;
     }
 
-    // potezi
-    const mk = (m, label, ic, cls) => `<button class="move ${cls || ''}" data-m="${m}" ${picked ? 'disabled' : ''}>
-      ${icon(ic, { size: 22 })}<span>${esc(label)}</span></button>`;
+    /* ── potezi ──
+       Iz same reči "Priđi" se ne vidi šta se dešava, pa svako dugme ispod
+       naslova nosi konkretan ishod: koliko šteta, ili sa koje razdaljine na
+       koju te vodi. Nemoguć potez je ugašen, a ne tiho bez efekta. */
+    const dist = f.distance;
+    const hit = R.attackDamage(me, dist, {});
+    const sub = {
+      attack: hit.miss ? T('outOfRange') : `−${hit.dmg} ${T('hpShort')}`,
+      block: T('blockSub'),
+      approach: dist <= 0 ? T('alreadyClosest') : `${dist} → ${dist - 1}`,
+      retreat: dist >= 5 ? T('alreadyFarthest') : `${dist} → ${dist + 1}`,
+    };
+    const off = {
+      attack: hit.miss, block: false,
+      approach: dist <= 0, retreat: dist >= 5,
+    };
+    const mk = (m, label, ic, cls) => `<button class="move ${cls || ''}" data-m="${m}"
+      ${picked || off[m] ? 'disabled' : ''}>
+      ${icon(ic, { size: 22 })}<span>${esc(label)}</span>
+      <span class="sub">${esc(sub[m])}</span></button>`;
     $('#moves').innerHTML =
       mk('attack', T('moveAttack'), 'swords', 'attack') +
       mk('block', T('moveBlock'), 'shield', 'block') +
-      mk('approach', T('moveApproach'), 'chevronUp') +
-      mk('retreat', T('moveRetreat'), 'chevronDown');
+      mk('approach', T('moveApproach'), 'stepIn', 'step') +
+      mk('retreat', T('moveRetreat'), 'stepOut', 'step');
     $$('#moves .move').forEach((b) => b.onclick = () => { Combat.submit('move', b.dataset.m); b.classList.add('on'); });
 
     const sp = R.SPECIALS[me.classId];
@@ -1159,7 +1384,7 @@ const UI = (() => {
   return {
     maybeInstallModal, initHome, avatarBuilder, renderHomeAvatar, get avatar() { return myAvatar; },
     onboarding, onboardingDone, permState, FACE_KEY,
-    renderLobby, showQr, shareLink, renderPrep, nextStep, get prepStep() { return prepStep; },
+    renderLobby, resetLobby, showQr, shareLink, arenaMapSheet, renderPrep, nextStep, get prepStep() { return prepStep; },
     set prepStep(v) { prepStep = v; }, renderDeploy, ensureMap, renderGame, inventorySheet,
     feedSheet, playersSheet, renderFight, renderChase, showSky, renderGhost, renderEnd, feedText,
     renderMentor, renderSettings, devMode,

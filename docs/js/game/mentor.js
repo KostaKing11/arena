@@ -24,6 +24,11 @@ const Mentor = (() => {
   async function claim(pid) {
     targetPid = pid;
     const t = await Store.mentorRef(pid).child('mentorId').transaction((cur) => (cur == null ? myId : undefined));
+    // Ime ide uz mesto mentora — bez njega igraču u lobiju piše samo "mentor".
+    if (t.committed) {
+      const nm = (localStorage.getItem('arena.name') || '').trim().slice(0, 16);
+      await Store.mentorRef(pid).child('name').set(nm || T('mentorTitle'));
+    }
     if (t.committed) { mode = 'mentor'; return 'mentor'; }
     const cur = t.snapshot.val();
     mode = cur === myId ? 'mentor' : 'spectator';

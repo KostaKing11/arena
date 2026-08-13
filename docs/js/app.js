@@ -98,6 +98,7 @@ const App = (() => {
   /** Izlazak iz sobe iz bilo kog ekrana pre početka igre. */
   async function leaveRoom() {
     if (!(await confirmBox(T('leaveConfirm'), T('leaveRoom'), true))) return;
+    UI.resetLobby();
     await Store.leave(true);
     goHome();
   }
@@ -121,9 +122,15 @@ const App = (() => {
     $('#btnInv').onclick = () => UI.inventorySheet();
     $('#btnFeed').onclick = () => UI.feedSheet();
     $('#btnPlayers').onclick = () => UI.playersSheet();
-    $('#btnGhost').onclick = () => { const me = Store.me(); if (me && me.alive === false) { Screens.go('ghost'); UI.renderGhost(Engine.d); } else UI.gmap && UI.gmap.recenter(); };
+    // Gornje dugme vraća pogled na tebe, donje otvara pregled cele arene —
+    // ranije su oba radila isto, pa je jedno bilo bez svrhe.
+    $('#btnGhost').onclick = () => {
+      const me = Store.me();
+      if (me && me.alive === false) { Screens.go('ghost'); UI.renderGhost(Engine.d); return; }
+      UI.arenaMapSheet(Engine.d);
+    };
     $('#btnMenu').onclick = () => openSettings();
-    $('#btnRecenter').onclick = () => UI.gmap && UI.gmap.recenter();
+    $('#btnRecenter').onclick = () => { if (UI.gmap) { UI.gmap.recenter(); Haptics.fire('tap'); } };
     $('#btnCamera').onclick = () => openEncounter();
 
     ['pointerdown', 'keydown'].forEach((e) => document.addEventListener(e, () => { Sfx.unlock(); goFullscreen(); }, { once: true }));

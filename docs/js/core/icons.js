@@ -12,8 +12,12 @@ const ICONS = {
   bell: 'M12 3a5 5 0 0 0-5 5c0 4-2 5-2 7h14c0-2-2-3-2-7a5 5 0 0 0-5-5Z M10 18a2 2 0 0 0 4 0',
 
   /* — vitalni — */
-  heart: 'M12 20s-7-4.4-7-9.2A4 4 0 0 1 12 8a4 4 0 0 1 7-2.6c1.4 1.6 1 4-.4 5.6C17 13.4 12 20 12 20Z',
-  meat: 'M7.5 16.5 5 19M8.5 15.5a4.5 4.5 0 1 1 6.4-6.4l3.6 3.6a4.5 4.5 0 0 1-6.4 6.4Z M6.6 17.4l-1.9.5.5-1.9',
+  /* Puno srce sa jasnim usekom — ranije je gornji luk bio spljošten pa je na
+     malim veličinama ličilo na mrlju. */
+  heart: 'M12 20.6 4.8 13.4a4.6 4.6 0 0 1 0-6.5 4.6 4.6 0 0 1 6.5 0l.7.7.7-.7a4.6 4.6 0 0 1 6.5 0 4.6 4.6 0 0 1 0 6.5L12 20.6Z',
+  /* Glad = batak: meso gore, dve kosti dole. Stari oblik je bio bezoblična
+     mrlja koju niko nije prepoznavao. */
+  meat: 'M10.6 13.4a5 5 0 1 1 7.1-7.1 5 5 0 0 1-7.1 7.1Z M10.6 13.4 7 17 M7 17a2 2 0 1 0-2.6 2.6A2 2 0 1 0 7 17Z',
   droplet: 'M12 3c3.5 4.2 6 7.1 6 10a6 6 0 0 1-12 0c0-2.9 2.5-5.8 6-10Z',
   skull: 'M12 3a8 8 0 0 0-8 8c0 2.6 1.4 4.2 2.5 5.1V19a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2.9C18.6 15.2 20 13.6 20 11a8 8 0 0 0-8-8Z M9 12a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z M15 12a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z M10.5 16.5h3',
 
@@ -21,6 +25,9 @@ const ICONS = {
   swords: 'M14.5 3H21v6.5L11 19.5 4.5 13 14.5 3Z M3 21l3.5-3.5 M16 8l2 2',
   shield: 'M12 3 20 6v5.5c0 4.6-3.4 8-8 9.5-4.6-1.5-8-4.9-8-9.5V6l8-3Z',
   arrowLeftRight: 'M8 7 4 11l4 4 M4 11h16 M16 17l4-4-4-4',
+  /* primicanje/odmicanje: strelice ka sredini i od sredine — čita se bez teksta */
+  stepIn: 'M12 4v16 M3 12h6 M6.5 8.5 10 12l-3.5 3.5 M21 12h-6 M17.5 8.5 14 12l3.5 3.5',
+  stepOut: 'M12 4v16 M9 12H3 M6.5 8.5 3 12l3.5 3.5 M15 12h6 M17.5 8.5 21 12l-3.5 3.5',
   chevronUp: 'M6 15l6-6 6 6',
   chevronDown: 'M6 9l6 6 6-6',
   chevronRight: 'M9 6l6 6-6 6',
@@ -32,15 +39,17 @@ const ICONS = {
   target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z M12 13.2a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4Z',
 
   /* — oružja — */
-  bow: 'M5 20 19 6 M18 4h3v3 M6 5a12 12 0 0 1 13 13 M6 5 4 19l14-1',
-  knife: 'M4 20 12 12 M20 4 12 12l-3-3 8-6 3 3Z M7 15l2 2',
-  axe: 'M4 20 11 13 M14 3l7 5-4 5-7-3 4-7Z',
-  spear: 'M4 20 20 4 M20 4h-4M20 4v4 M8 16l-3 1 1-3',
-  trident: 'M12 21V8 M6 3v5a6 6 0 0 0 12 0V3 M12 3v5 M9 21h6',
-  club: 'M5 19 10 14 M17 4a4 4 0 0 1 3 3c0 3-3.5 6.5-6 8l-2-2c1.5-2.5 5-6 5-9Z',
-  net: 'M4 4h16v16H4z M4 9h16 M4 14h16 M9 4v16 M14 4v16',
-  sling: 'M8 4 12 14l4-10 M12 14v6 M8 20h8',
-  blowgun: 'M3 18 21 6 M19 5l2 2 M6 15l2 2',
+  /* Oružja: svako se mora prepoznati kao silueta na 20 px u donjoj traci —
+     zato luk ima tetivu i strelu, mreža visi kao mreža, a praćka ima račve. */
+  bow: 'M7 3a13 13 0 0 1 0 18 M7 3l0 18 M4 12h16 M17 9l3 3-3 3',
+  knife: 'M4.5 19.5 11 13 M13.5 10.5 20 4l-1.5 6-4 4.5-1-4Z M6.5 15.5l2 2',
+  axe: 'M4 20 12 12 M13 3l7.5 4.5-4 6-8-3.5L13 3Z M12 12l1.5 1.5',
+  spear: 'M4.5 19.5 18 6 M17 3l4 4-3 1-2-2 1-3Z M8 16l-3.5 1.2L5.8 14',
+  trident: 'M12 21v-9 M6.5 4v3.5a5.5 5.5 0 0 0 11 0V4 M12 3.5V12 M6.5 4l0-1.2 M17.5 4V2.8 M12 3.5V2.4 M9.5 21h5',
+  club: 'M4.5 19.5 9.5 14.5 M13.5 4.5a4.8 4.8 0 0 1 6 6c-1.4 2.4-4 4.6-6.2 6l-3.4-3.4c1.4-2.2 3.6-4.8 6-6.2Z M14 10.5l2 2',
+  net: 'M4 5h16 M6 5c-.5 6 1.5 11 6 14 4.5-3 6.5-8 6-14 M8.5 8.5h7 M9.5 12.5h5 M12 5v13 M9 5.5 15 18 M15 5.5 9 18',
+  sling: 'M8.5 3 10 9 M15.5 3 14 9 M10 9a2.4 2.4 0 0 0 4 0 M12 11v5 M8.5 21c0-2.5 1.5-4.5 3.5-5 2 .5 3.5 2.5 3.5 5',
+  blowgun: 'M3.5 18.5 20.5 5.5 M18.5 4l2 1.5-1.5 2 M6 16l1.5 1.5 M11 13.5l1.5-2.5',
   arrows: 'M4 20 20 4 M20 4h-5M20 4v5 M4 20h4M4 20v-4',
 
   /* — predmeti i inventar — */
@@ -78,7 +87,11 @@ const ICONS = {
   menu: 'M12 6.5a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8Zm0 7a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8Zm0 7a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8Z',
   settings: 'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z M19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.5H9l-.3 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.4 2.4-1c.5.4 1.1.8 1.7 1l.3 2.6h6l.3-2.6c.6-.2 1.2-.6 1.7-1l2.4 1 2-3.4-2-1.5Z',
   share: 'M18 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z M6 15a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z M18 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z M8.2 11.4l7.6-3.8 M8.2 13.6l7.6 3.8',
-  qr: 'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h2v2h-2z M18 14h2v2h-2z M14 18h2v2h-2z M18 18h2v2h-2z',
+  /* QR: tri ugaona okvira sa jezgrom, plus nekoliko modula u četvrtom uglu.
+     Stara verzija je bila sedam praznih kvadrata i čitala se kao mreža. */
+  qr: 'M3.5 3.5h6v6h-6z M6.2 6.2h.6v.6h-.6z M14.5 3.5h6v6h-6z M17.2 6.2h.6v.6h-.6z '
+    + 'M3.5 14.5h6v6h-6z M6.2 17.2h.6v.6h-.6z '
+    + 'M14 14.2h1.6v1.6H14z M19.4 14.2h1v1h-1z M17.6 17.6h3.2v3.2h-3.2z M14.2 19.6h1.4v1.2h-1.4z',
   download: 'M12 3v12 M7 11l5 5 5-5 M4 20h16',
   trash: 'M4 7h16 M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2 M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13 M10 11v6M14 11v6',
   clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z M12 7v5.5l3.5 2',

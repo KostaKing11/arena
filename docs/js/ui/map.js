@@ -48,6 +48,9 @@ function makeMap(elId, opts) {
      pokvareno. Sada se vidi teren, a plen i dalje samo u pravom dometu. */
   const FOG_REVEAL = 3.2;
   function drawFog() {
+    // Magla je čvor ekrana igre; pomoćne mape (podešavanje, puna mapa arene)
+    // je ne smeju dirati — inače bi je gasile dok su otvorene.
+    if (opts.noFog) return;
     const fog = document.getElementById('fog');
     if (!fog) return;
     if (fullMap || !lastMe) { fog.style.background = 'transparent'; return; }
@@ -174,6 +177,8 @@ function makeMap(elId, opts) {
     map, setMe, recenter, drawZone, drawFire, drawWasps, drawItems, drawPlayers, drawTraps, setStart, drawFog,
     setVision(v) { if (v === visionM) return; visionM = v; autoZoom(); drawFog(); },
     setFull(v) { if (v === fullMap) return; fullMap = v; drawFog(); },
+    /** Pun pregled arene ne sme da juri igrača — inače se vraća na zum oko tebe. */
+    setFollow(v) { follow = !!v; },
     get isFull() { return fullMap; },
     get following() { return follow; },
     fitArena(cfg) {

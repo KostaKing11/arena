@@ -37,77 +37,66 @@ Ekran je 1080×2340 fizički, **384×686 CSS px** — sve mora da stane u to.
 
 ---
 
-## 1. Kvarovi sa utvrđenim uzrokom
+## 1. Urađeno u ovoj rundi
 
-### 1.1 Borba: primicanje i odmicanje su obrnuti  ⚠️ najgore
-`docs/js/ui/screens.js`, oko linije 817:
+Sve provereno na telefonu (SM-A576B, Samsung Internet, preko `adb reverse`), osim gde piše drugačije.
 
-```js
-const near = 6, far = 34;
-$('#figMe').style.left  = (near + (far - near) * t) + '%';   // t = distance/5
-$('#figFoe').style.right = (near + (far - near) * t) + '%';
-```
+### 1.1 Borba: primicanje i odmicanje su bili obrnuti  ✔
+`screens.js` — sada `34 − 28·t`: razdaljina **0** stavlja oba lika na 34% od svoje ivice (u
+sredini, jedan drugom u lice), razdaljina **5** na 6% (svako na svom kraju). Provereno kroz
+DOM za svih šest razdaljina.
 
-Na razdaljini **0** oba lika idu na **6%** od svoje ivice — dakle na suprotne krajeve ekrana.
-Na razdaljini **5** idu na 34%, tj. jedan do drugog u sredini. Tačno obrnuto od stvarnosti.
-Treba: `34 − 28·t` (blizu centra kad je razdaljina mala, ka ivicama kad raste).
+Uz to je borba objašnjena, jer se iz naziva poteza nije videlo šta rade:
+- svako dugme ima ishod ispod naslova — *Napad −30 HP*, *Blok −60% štete*, *Priđi 5 → 4*
+- nemoguć potez je ugašen sa razlogom (*Van dometa*, *Već ste u klinču*, *Dalje ne može*)
+- nove ikonice `stepIn`/`stepOut` — strelice ka sredini i od sredine
+- traka dometa piše *Sad si na 3 · Luk 3–5 · Napad*, sa „?" koje otvara pravila borbe
 
-Proveri i da traka razdaljine ispod (`.dtrack .pip`) prati isto, i da je pojas dometa oružja
-(`.rngband`) na istoj skali.
+### 1.2 Lobi se prepisivao na svaku promenu u bazi  ✔
+Podeljeno na `buildLobby()` (skelet, mapa, klizači — jednom) i `updateLobby()` (brojke, spisak
+igrača, dugme *Pokreni*). Klizači imaju zastavicu `dragging` pa se ne diraju dok je prst na
+njima. **Mapa arene sada radi** — u lobiju se vide ulice i krug arene.
 
-### 1.2 Lobi se ponovo iscrtava na svaku promenu u bazi → klizači i mapa ne rade
-`docs/js/app.js:32` — `Store.on('room', () => route())`, a `route()` na liniji 299 zove
-`UI.renderLobby()`, koja prepiše ceo `#lobbyBody`. Pošto igrači upisuju poziciju svakih par
-sekundi, lobi se prepisuje stalno. Posledice:
+### 1.3 „Mapa" i „Centriraj" razdvojeni  ✔
+Gornje dugme centrira pogled na tebe. Donje otvara **punu mapu arene**: granica, zona,
+kornukopija, vidljivi igrači i predmeti, legenda. Osvežava se dok je otvorena.
 
-- **klizači** (prečnik, trajanje, gustina, priprema) pucaju usred prevlačenja — to je onih „90%
-  vremena zabagovani"
-- **mapa arene ne radi uopšte**: `makeMap('setupMap')` (`screens.js:197`) zakači Leaflet za čvor
-  koji sledeće iscrtavanje obriše, pa mapa ostaje da visi nad odvojenim elementom
+### 1.4 Kompas  ✔
+Pojas od dva puna kruga se crta jednom, a na svaki događaj kompasa se pomera preko
+`translateX` — klizi umesto da skače. **Slova strana sveta se sada vide**: uzrok je bio to što
+je oznaka nosila klasu `card`, pa je iz `components.css` dobijala tamnu ploču sa 16 px razmaka
+i ispadala ispod ivice trake visine 38 px. Klasa uklonjena, traka podignuta na 46 px.
 
-Rešenje: razdvoji „iscrtaj jednom" od „osveži podatke". Spisak igrača i dugme *Pokreni* smeju da
-se osvežavaju stalno; mapa i klizači se prave **jednom** i posle se samo ažuriraju vrednosti.
-
-### 1.3 „Mapa" i „Centriraj" rade istu stvar
-`app.js:124` i `app.js:126` — oba zovu `UI.gmap.recenter()` kad si živ. Odluči šta je šta:
-predlog je da gornje dugme centrira, a donje otvara **punu mapu arene** (pregled cele arene,
-zona, tvoja pozicija) — to sada nigde ne postoji.
-
-### 1.4 Kompas je isečkan
-`renderCompass` se poziva iz otkucaja motora (1×/s) i svaki put prepisuje `innerHTML`. Zato
-skače umesto da klizi. Treba: iscrtaj crtice **jednom**, a na svaki događaj kompasa (desetine
-puta u sekundi) pomeraj traku sa `transform: translateX(...)`. Uz to proveri zašto se slova
-strana sveta (S, SI, I…) ne vide — verovatno ih zaklanja/odseca visina trake.
+### 1.5 Ostalo iz spiska  ✔
+- kartica igrača: zelene oznake dozvola uklonjene; tvoja kartica je prva, sa zlatnom ivicom
+- **mentor je na tvojoj kartici**; kad neko prihvati link, ispod tebe stoji uža kartica sa
+  njegovim imenom (mentor nema lika)
+- **promena lika radi u lobiju** — tap na svoj avatar, upisuje se odmah u bazu
+- „centar arene" → **arena**
+- **kretanje tapom u testu**: tap po mapi (i po punoj mapi arene) te vodi tamo peške, 1,4 m/s;
+  u PREP fazi postoji i *Test: odšetaj do startne tačke* — bez toga se u testu do startne
+  tačke uopšte nije stizalo, pa partija nije ni kretala
+- animacije: prekidači (tema, jezik, raspored) imaju **klizeću pločicu**; prelazi između ekrana
+- **nova QR ikonica**, prepravljene ikone za život, glad i sva oružja
+- **slika lica**: isečak sada prati oval sa ekrana (lice popunjava kadar), 320×320 umesto 240,
+  i okreće se po širini jer je prednja kamera daje u ogledalu
 
 ---
 
-## 2. Traženo, a nije urađeno
+## 2. Ostaje za sledeću rundu
 
-**Lobi i kartica igrača**
-- ukloni zelenu oznaku „ima sve dozvole" sa kartice igrača — više nije potrebna otkako se
-  dozvole traže unapred
-- **mentor ide na tvoju karticu**: dugme na svojoj kartici šalje link; kad ga neko prihvati,
-  ispod tebe se prikaže manja kartica sa imenom mentora (mentor nema lika)
+- **eventovi i skupljanje zone da se bolje vide** — zona se crta, ali najava faze i zid vatre
+  su i dalje slabo primetni
 - **sponzorski link šalje mentor**, ne igrač
-- **promena lika mora da radi i u lobiju**
-- „centar arene" preimenovati u **arena**, uz dugme da postaviš svoju lokaciju
-
-**Izgled i osećaj**
-- **animacije**: prekidači (jezik, tema) da klize, ne da se teleportuju; prelazi između ekrana
-- **QR ikonica je loša** — nacrtaj bolju
-- ikone za život, glad, žeđ i oružja da budu bolje
-- eventovi i skupljanje zone da se bolje vide
-
-**Test režim**
-- **kretanje tapom po mapi** u testu — sada sa botovima stojiš u mestu i ništa se ne dešava
-
-**Ranije prijavljeno, i dalje otvoreno**
-- slika lica je **ogledalo** (`transform: scaleX(-1)` na video) i **premala**
 - duhu inventar pokazuje samo broj iskri
 - naziv „Tvorac igara" promeniti
 - potvrditi da pun ekran stvarno radi u instaliranoj aplikaciji (WebAPK pamti `display` od
   trenutka instalacije — treba obrisati ikonu i instalirati ponovo)
 - `npm run test:fb` i `npm run test:live` su pisani za stari protokol i ne rade
+- **ekran borbe nije viđen u živoj partiji** — u dva pokušaja sa botovima do borbe nije došlo
+  (zona me ubila pre toga). Ispravka je proverena kroz DOM, ali vredi je videti na terenu.
+- botovi retko napadaju: čekaju da im priđeš, a sami idu ka centru zone; razmisliti o tome da
+  u testu budu agresivniji
 
 ---
 

@@ -77,11 +77,18 @@
 .rec-hint { font-size: var(--fs-xs); color: var(--text-3); }
 .rec-hint.warn { color: var(--gold); }
 
-.seg { display: flex; gap: 2px; padding: 3px; background: var(--ink-0); border: 1px solid var(--line-2); border-radius: var(--r-md); }
+/* Prekidač sa klizećom pločicom: izbor otklizi na novo mesto umesto da se
+   pozadina teleportuje sa jednog dugmeta na drugo. */
+.seg { position: relative; display: flex; gap: 2px; padding: 3px; background: var(--ink-0); border: 1px solid var(--line-2); border-radius: var(--r-md); }
 :root[data-theme="day"] .seg { background: var(--ink-3); }
-.seg button { flex: 1; min-height: 40px; border-radius: var(--r-sm); color: var(--text-2); font-weight: 600; font-size: var(--fs-sm); }
-.seg button.on { background: var(--ink-4); color: var(--text); }
-:root[data-theme="day"] .seg button.on { background: #fff; }
+.seg .thumb {
+  position: absolute; left: 0; top: 3px; bottom: 3px; width: 0;
+  border-radius: var(--r-sm); background: var(--ink-4); z-index: 0;
+  transition: transform .22s var(--ease), width .22s var(--ease);
+}
+:root[data-theme="day"] .seg .thumb { background: #fff; }
+.seg button { position: relative; z-index: 1; flex: 1; min-height: 40px; border-radius: var(--r-sm); color: var(--text-2); font-weight: 600; font-size: var(--fs-sm); background: none; transition: color .18s var(--ease); }
+.seg button.on { color: var(--text); }
 
 .switch { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); min-height: 52px; }
 .switch .track { width: 50px; height: 30px; border-radius: var(--r-pill); background: var(--ink-4); position: relative; transition: background .18s; flex: none; }

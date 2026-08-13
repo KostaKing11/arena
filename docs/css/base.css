@@ -44,8 +44,17 @@ p { margin: 0 0 var(--s3); }
 
 /* — kostur — */
 #app { position: fixed; inset: 0; overflow: hidden; }
+/* Ekrani se ne smenjuju odsečno — novi ekran ulazi kratkim uzdizanjem, pa se
+   vidi da si prešao negde, a ne da ti je slika zamenjena. */
 .screen { position: absolute; inset: 0; display: none; flex-direction: column; }
-.screen.on { display: flex; }
+.screen.on { display: flex; animation: screenIn .2s var(--ease-out) both; }
+@keyframes screenIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* Mapa u igri ima svoje kretanje i Leaflet joj meri veličinu — nju ne diramo. */
+#s-game.on, #s-fight.on { animation: fadeIn .18s var(--ease-out) both; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .screen.on, #s-game.on, #s-fight.on { animation: none; }
+}
 .scroll {
   flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;

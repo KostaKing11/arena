@@ -33,15 +33,27 @@
 .compass {
   position: absolute; left: var(--s3); right: var(--s3); z-index: 500;
   top: calc(var(--safe-t) + 52px);
-  height: 38px; overflow: hidden; border-radius: var(--r-sm);
+  height: 46px; overflow: hidden; border-radius: var(--r-sm);
 }
-.compass .strip { position: absolute; inset: 0; }
+/* Pojas se pomera kao celina; `will-change` ga drži na svom sloju da
+   pomeranje ne pokreće ponovni raspored ostatka HUD-a. */
+.compass .strip { position: absolute; top: 0; bottom: 0; left: 0; will-change: transform; }
+.compass .ticks { position: absolute; top: 0; bottom: 0; left: 0; }
+.compass .marks { position: absolute; inset: 0; }
 .compass .tk { position: absolute; top: 6px; width: 1px; background: var(--text-3); }
 .compass .tk.minor { height: 5px; opacity: .6; }
 .compass .tk.mid { height: 8px; }
-.compass .tk.major { height: 11px; background: var(--text-2); width: 2px; }
-.compass .cd { position: absolute; top: 18px; transform: translateX(-50%); font-size: 12px; font-weight: 800; color: var(--text); letter-spacing: .04em; }
-.compass .mk { position: absolute; top: 4px; transform: translateX(-50%); }
+.compass .tk.major { height: 12px; background: var(--text-2); width: 2px; }
+/* Bez dodatnih klasa — oznaka strane sveta je čist tekst. Ranije je nosila
+   klasu `card`, pa je od `components.css` dobijala tamnu ploču sa 16 px
+   razmaka i ispadala ispod donje ivice trake. */
+.compass .cd {
+  position: absolute; top: 22px; transform: translateX(-50%);
+  font-size: 12px; line-height: 1; font-weight: 800;
+  color: var(--text); letter-spacing: .04em; white-space: nowrap;
+}
+.compass .mk { position: absolute; top: 3px; transform: translateX(-50%); }
+.compass .dead-lbl { position: absolute; inset: 0; display: grid; place-items: center; }
 .compass .center {
   position: absolute; left: 50%; top: 0; bottom: 0; width: 2px;
   background: var(--ember); transform: translateX(-1px);
@@ -201,17 +213,31 @@
 
 .combat-log { min-height: 34px; padding: var(--s2) var(--s4); text-align: center; font-size: var(--fs-sm); color: var(--text-2); }
 .moves { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); padding: 0 var(--s3); }
+/* Dugme nosi naslov i ishod: "Priđi / 3 → 2". Ikonica levo, tekst desno,
+   da se u 10 s runde pročita jednim pogledom. */
 .move {
-  min-height: 60px; border-radius: var(--r-md); border: 1px solid var(--line);
-  background: var(--ink-2); display: flex; align-items: center; justify-content: center; gap: var(--s2);
-  font-weight: 700; font-size: var(--fs-md);
+  min-height: 62px; border-radius: var(--r-md); border: 1px solid var(--line);
+  background: var(--ink-2); display: grid; grid-template-columns: auto 1fr;
+  align-items: center; gap: 0 var(--s2); padding: var(--s2) var(--s3);
+  font-weight: 700; font-size: var(--fs-md); text-align: left;
+  transition: transform .12s var(--ease), background .16s var(--ease), border-color .16s var(--ease);
 }
-.move .ic { color: var(--text-3); }
+.move .ic { color: var(--text-3); grid-row: 1 / 3; }
+.move .sub { grid-column: 2; font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); }
 .move.attack { border-color: color-mix(in srgb, var(--danger) 60%, transparent); } .move.attack .ic { color: var(--danger); }
 .move.block { border-color: color-mix(in srgb, var(--thirst) 60%, transparent); } .move.block .ic { color: var(--thirst); }
+.move.step .ic { color: var(--gold); }
 .move.on { background: var(--ember); border-color: transparent; color: var(--on-accent); }
-.move.on .ic { color: var(--on-accent); }
-.move:disabled { opacity: .3; }
+.move.on .ic, .move.on .sub { color: var(--on-accent); }
+.move:active:not(:disabled) { transform: scale(.97); }
+.move:disabled { opacity: .32; }
+/* Znak pitanja uz traku dometa — objašnjenje borbe je jedan tap daleko. */
+.range-hint { display: flex; align-items: center; justify-content: center; gap: var(--s2); }
+.helpdot {
+  flex: none; width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--line-2); background: var(--ink-2);
+  color: var(--text-3); font-size: 12px; font-weight: 800; line-height: 1;
+}
 .fight-extra { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); padding: var(--s2) var(--s3) calc(var(--s3) + var(--safe-b)); }
 
 /* ── bekstvo ── */

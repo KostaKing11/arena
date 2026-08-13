@@ -38,6 +38,34 @@ function toast(msg, kind, iconName) {
   while (host.children.length > 3) host.firstChild.remove();
 }
 
+/* ───────────────────────── klizeći prekidač (.seg) ─────────────────────────
+   Pločica ispod dugmadi klizi na izabrano polje. Ranije se samo prebacivala
+   klasa `on`, a ekran podešavanja se uz to iscrtavao iznova — pa je izbor
+   izgledao kao da se teleportuje. */
+function segInit(seg) {
+  if (!seg) return;
+  if (!$('.thumb', seg)) seg.insertAdjacentHTML('afterbegin', '<i class="thumb"></i>');
+  segMove(seg);
+  requestAnimationFrame(() => segMove(seg));      // posle prvog rasporeda
+}
+function segMove(seg) {
+  if (!seg) return;
+  const btns = $$('button', seg);
+  const th = $('.thumb', seg);
+  if (!th || !btns.length) return;
+  const b = btns.find((x) => x.classList.contains('on')) || btns[0];
+  if (!b.offsetWidth) return;
+  th.style.width = b.offsetWidth + 'px';
+  th.style.transform = `translateX(${b.offsetLeft}px)`;
+}
+/** Izaberi vrednost sa animacijom; `after` se zove kad pločica stigne. */
+function segPick(seg, v, after) {
+  if (!seg) return;
+  $$('button', seg).forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+  segMove(seg);
+  if (after) setTimeout(after, 230);
+}
+
 /* ───────────────────────── fioke i modali ───────────────────────── */
 /** Fioka odozdo. Zatvara se tapom pored, prevlačenjem nadole i dugmetom nazad. */
 function sheet(title, bodyHtml, opts) {
