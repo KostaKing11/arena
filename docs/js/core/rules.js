@@ -408,6 +408,57 @@
     return pts.map((p, i) => ({ id: 'a' + i, type: 'arrows', rarity: 'uncommon', lat: p.lat, lng: p.lng, pool: 'scatter' }));
   }
 
+  /* ═══════════════════ 16. ISKRE ═══════════════════
+     Vidljive samo duhovima. Raspoređene po celoj areni, determinstički —
+     nema potrebe da iko iko drugom javlja gde su.                            */
+  const SPARKS_PER_PLAYER = 6;
+  function generateSparks(seed, cfg, playerCount) {
+    const rng = U.rngFor(seed, 'sparks');
+    const n = Math.max(20, Math.round(playerCount * SPARKS_PER_PLAYER));
+    const outerR = Math.max(30, cfg.diameterM / 2 - 10);
+    return U.scatter(rng, cfg.center, outerR, 15, n, 18, [])
+      .map((p, i) => ({ id: 's' + i, lat: p.lat, lng: p.lng }));
+  }
+  const SPARK_REACH_M = 10;
+
+  /* ═══════════════════ 15. HALUCINACIJE ═══════════════════
+     Traker ose ostavljaju 5 minuta lažnih predmeta koji nestanu kad priđeš.
+     Računaju se lokalno, iz (igrač, minut) — ne diraju bazu.                 */
+  const HALLUCINATION_MS = 300000;
+  const HALLUCINATION_POP_M = 12;
+  function hallucinations(pid, center, bucket, count) {
+    const rng = U.rngFor(pid, 'halluc', bucket);
+    const n = count || 4;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const p = U.pointInCircle(rng, center, 70, 20);
+      const rarity = U.weighted(rng, { uncommon: 40, rare: 35, epic: 20, legendary: 5 });
+      const pool = ITEM_IDS.filter((id) => ITEMS[id].rarity === rarity);
+      out.push({ id: `h${bucket}_${i}`, type: U.pick(rng, pool), rarity, lat: p.lat, lng: p.lng, fake: true });
+    }
+    return out;
+  }
+
+  /* ═══════════════════ 17. MENTOR ═══════════════════ */
+  const PACKAGE_COSTS = [1, 3, 6, 10];          // cena raste po paketu (§17)
+  const PACKAGE_COOLDOWN_MS = 300000;           // max 1 paket na 5 min po igraču
+  const PACKAGE_DROP_M = 15;                    // paket pada 15 m od igrača
+  const CHEER_FAVOR = 0.5, CHEER_COOLDOWN_MS = 600000;
+  const PACKAGE_TIERS = {
+    water:    { minCost: 1, items: ['waterBottle', 'springWater'] },
+    food:     { minCost: 1, items: ['bread', 'driedMeat'] },
+    medkit:   { minCost: 3, items: ['medkit', 'bandage'] },
+    backpack: { minCost: 3, items: ['smallBag', 'backpack'] },
+    weapon:   { minCost: 6, items: ['wSpear', 'wAxe', 'wBow', 'wKnife', 'wBlowgun', 'wTrident'] },
+  };
+  const packageCost = (sent) => PACKAGE_COSTS[Math.min(sent || 0, PACKAGE_COSTS.length - 1)];
+  const canAffordTier = (tier, sent, favor) => {
+    const t = PACKAGE_TIERS[tier];
+    if (!t) return false;
+    const c = packageCost(sent);
+    return c >= t.minCost && favor >= c;
+  };
+
   /* ═══════════════════ 4. STARTNE TAČKE ═══════════════════ */
   function startPoints(seed, cfg, playerIds) {
     const rng = U.rngFor(seed, 'start');
@@ -694,6 +745,10 @@
     SURVIVAL, survivalTick,
     buildSchedule, zoneAt, firewallAt,
     RARITY_W, CORN_RADIUS_M, EDGE_MARGIN_M, generateItems, generateArrowCaches, startPoints,
+    SPARKS_PER_PLAYER, generateSparks, SPARK_REACH_M,
+    HALLUCINATION_MS, HALLUCINATION_POP_M, hallucinations,
+    PACKAGE_COSTS, PACKAGE_COOLDOWN_MS, PACKAGE_DROP_M, PACKAGE_TIERS,
+    CHEER_FAVOR, CHEER_COOLDOWN_MS, packageCost, canAffordTier,
     distanceBand, PHOTO_MAX_M, PHOTO_MAX_ARCHER_M, PHOTO_CONE_DEG, PHOTO_COOLDOWN_MS,
     RANGED_MAX_M, RANGED_AIM_MS, RANGED_COOLDOWN_MS, RANGED_DODGE_M, RANGED_SELF_MOVE_M,
     RANGED_MIN_ACC_M, RANGED_STALE_M,

@@ -46,10 +46,13 @@ const Store = (() => {
       if (EMU) { db.useEmulator(host, 9000); auth.useEmulator(`http://${host}:9099`, { disableWarnings: true }); }
       await auth.signInAnonymously();
       Clock.attach(db);
+      // `.info/connected` prvo javi false dok se veza tek uspostavlja — to nije
+      // prekid. "Izgubljena veza" se prijavljuje tek ako smo ranije bili online.
+      let everOnline = false;
       db.ref('.info/connected').on('value', (s) => {
         const up = s.val() === true;
-        emit(up ? 'online' : 'offline');
-        if (up && myId && roomRef) presence();
+        if (up) { everOnline = true; emit('online'); if (myId && roomRef) presence(); }
+        else if (everOnline) emit('offline');
       });
       ready = true;
       emit('ready');
@@ -127,6 +130,22 @@ const Store = (() => {
     return attach();
   }
 
+  /** Gledanje sobe bez igranja — mentor i gledalac nemaju svoj players/{pid}. */
+  async function watchRoom(c) {
+    c = String(c || '').toUpperCase().trim();
+    const s = await db.ref(`rooms/${c}`).get();
+    if (!s.exists()) { emit('error', { msg: T('roomNotFound') }); return false; }
+    code = c; myId = null;
+    roomRef = db.ref(`rooms/${code}`);
+    roomRef.on('value', (snap) => {
+      room = snap.val() || null;
+      if (!room) { emit('roomGone'); return; }
+      emit('room', room);
+    });
+    emit('watching', { code });
+    return true;
+  }
+
   function attach() {
     sess.save(code, myId);
     roomRef = db.ref(`rooms/${code}`);
@@ -140,7 +159,20 @@ const Store = (() => {
     return true;
   }
 
-  function leave() {
+  /** Izlazak iz sobe: obriši i sebe iz baze ako igra još nije počela. */
+  async function leave(removeSelf) {
+    try {
+      if (removeSelf && roomRef && myId && state() === 'LOBBY') {
+        await ref(`players/${myId}`).remove();
+        // ako je domaćin izašao, prvi sledeći koji je ušao preuzima sobu (§21)
+        if (meta().hostId === myId) {
+          const rest = Object.entries(players()).filter(([id, p]) => id !== myId && !p.isBot)
+            .sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0));
+          if (rest.length) await ref('meta/hostId').set(rest[0][0]);
+          else await roomRef.remove();
+        }
+      }
+    } catch (e) { console.warn('leave', e); }
     if (roomRef) roomRef.off();
     sess.clear();
     room = null; code = null; myId = null; roomRef = null;
@@ -272,7 +304,7 @@ const Store = (() => {
 
   const API = {
     connect, on, sess,
-    createRoom, joinRoom, rejoin, attach, leave,
+    createRoom, joinRoom, rejoin, attach, leave, watchRoom,
     get ready() { return ready; }, get code() { return code; }, get myId() { return myId; },
     get room() { return room; }, get db() { return db; },
     meta, config, schedule, players, me, isHost, state, items, traps, fights, feed,

@@ -51,6 +51,7 @@ function sheet(title, bodyHtml, opts) {
   document.body.appendChild(wrap);
   function close() { wrap.remove(); opts.onClose && opts.onClose(); }
   wrap.close = close;
+  if (window.Nav) Nav.rearm();          // da hardversko "nazad" zatvori fioku
   return wrap;
 }
 function modal(bodyHtml, opts) {
@@ -59,9 +60,11 @@ function modal(bodyHtml, opts) {
   wrap.innerHTML = `<div class="modal-body"></div>`;
   $('.modal-body', wrap).innerHTML = bodyHtml || '';
   if (opts.dismissible !== false) wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+  else wrap.dataset.noback = '1';        // na ovo se mora odgovoriti, nazad ga ne zatvara
   document.body.appendChild(wrap);
   function close() { wrap.remove(); opts.onClose && opts.onClose(); }
   wrap.close = close;
+  if (window.Nav) Nav.rearm();
   return wrap;
 }
 function confirmBox(text, okLabel, danger) {
@@ -84,6 +87,7 @@ const Screens = {
     if (this.cur === name) return;
     this.cur = name;
     $$('.screen').forEach((s) => s.classList.toggle('on', s.id === 's-' + name));
+    if (window.Nav) Nav.arm();
     window.dispatchEvent(new CustomEvent('arena:screen', { detail: name }));
   },
 };

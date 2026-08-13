@@ -7,6 +7,7 @@ const App = (() => {
   // `/arena/test` i `?test=1` pale iste botove — ista aplikacija, samo flag (§1)
   const TEST = params.get('test') === '1' || /\/test\/?$/.test(location.pathname);
   let booted = false, camScreen = null;
+  let MODE = 'player';                       // 'player' | 'mentor' | 'spectator'
 
   /* ───────────────── pokretanje ───────────────── */
   async function boot() {
@@ -14,7 +15,9 @@ const App = (() => {
     applyLang();
     UI.initHome(TEST);
     wireStatic();
+    wireBack();
     registerSW();
+    Nav.init();
     Screens.go('home');
     UI.maybeInstallModal();
 
@@ -25,7 +28,7 @@ const App = (() => {
     Store.on('error', (e) => toast(e.msg, 'danger', 'alert'));
     Store.on('offline', () => toast(T('connectionLost'), 'danger', 'wifiOff'));
     Store.on('room', () => { if (booted) route(); });
-    Store.on('roomGone', () => { Store.leave(); location.href = location.pathname; });
+    Store.on('roomGone', () => { Store.leave(); goHome(); });
 
     const ok = await Store.connect();
     if (!ok) return;
@@ -37,12 +40,62 @@ const App = (() => {
     const room = params.get('room');
     if (room) $('#codeInput').value = room.toUpperCase();
 
-    // povratak u sobu posle zatvaranja app-a
+    // Mentorski link je ličan: ?room=KOD&mentor=PID (§17)
+    const mentorPid = params.get('mentor');
+    if (room && mentorPid) {
+      const okw = await Store.watchRoom(room);
+      if (okw) {
+        MODE = await Mentor.claim(mentorPid);
+        toast(MODE === 'mentor' ? T('mentorWelcome') : T('mentorTaken'), MODE === 'mentor' ? 'good' : 'gold', 'users');
+        booted = true; Engine.start(); route();
+        return;
+      }
+    }
+
+    // Povratak u sobu se NE dešava sam — pitamo (§ traženo posle testiranja)
     if (Store.sess.code && Store.sess.pid) {
-      const okr = await Store.rejoin(Store.sess.code, Store.sess.pid);
-      if (okr) { booted = true; Engine.start(); route(); return; }
+      const want = await askRejoin(Store.sess.code);
+      if (want) {
+        const okr = await Store.rejoin(Store.sess.code, Store.sess.pid);
+        if (okr) { booted = true; Engine.start(); route(); return; }
+        toast(T('roomNotFound'), 'danger');
+      }
+      Store.sess.clear();          // "Ne" briše sesiju, pa se više ne pita
     }
     booted = true;
+    Screens.go('home');
+  }
+
+  /** Pitanje na ulasku: da li se vraćaš u sobu u kojoj si već bio? */
+  function askRejoin(code) {
+    return new Promise((res) => {
+      const m = modal(`
+        <div class="center stack-lg">
+          <div class="goldc">${icon('refresh', { size: 48 })}</div>
+          <h2>${esc(T('rejoinTitle'))}</h2>
+          <p class="dim">${esc(T('rejoinBody'))} <b class="goldc">${esc(code)}</b></p>
+          <button class="btn primary lg full" id="rjYes">${esc(T('rejoinYes'))}</button>
+          <button class="btn ghost full" id="rjNo">${esc(T('rejoinNo'))}</button>
+        </div>`, { dismissible: false });
+      $('#rjYes', m).onclick = () => { m.close(); res(true); };
+      $('#rjNo', m).onclick = () => { m.close(); res(false); };
+    });
+  }
+
+  /** Nazad na početak, ali bez gubljenja `test`/`emu` — inače te izlazak iz
+      sobe u test režimu izbaci iz test režima. */
+  function goHome() {
+    const keep = new URLSearchParams();
+    for (const k of ['test', 'emu']) if (params.get(k)) keep.set(k, params.get(k));
+    const q = keep.toString();
+    location.href = location.pathname + (q ? '?' + q : '');
+  }
+
+  /** Izlazak iz sobe iz bilo kog ekrana pre početka igre. */
+  async function leaveRoom() {
+    if (!(await confirmBox(T('leaveConfirm'), T('leaveRoom'), true))) return;
+    await Store.leave(true);
+    goHome();
   }
 
   function wireStatic() {
@@ -99,12 +152,48 @@ const App = (() => {
     if (ok) { Engine.start(); UI.prepStep = 0; route(); }
   }
 
+  /* ───────────────── dugme "nazad" ───────────────── */
+  function wireBack() {
+    $('#btnPrepBack').innerHTML = icon('chevronLeft', { size: 22 });
+    $('#btnGhostBack').innerHTML = icon('chevronLeft', { size: 22 });
+    $('#btnPrepBack').onclick = () => Nav.back();
+    $('#btnGhostBack').onclick = () => Nav.back();
+
+    // Iz pripreme se ide korak unazad; sa prvog koraka — napolje iz sobe.
+    Nav.on('prep', () => {
+      if (UI.prepStep > 0) { UI.prepStep = UI.prepStep - 1; UI.renderPrep(); }
+      else leaveRoom();
+    });
+    Nav.on('lobby', () => leaveRoom());
+    Nav.on('ghost', () => Screens.go('game'));
+    Nav.on('mentor', () => { /* mentor nema gde nazad */ });
+    Nav.on('end', () => { });
+    // Iz žive partije se ne izlazi slučajnim pritiskom
+    const block = () => toast(T('cantGoBackInGame'), 'gold', 'menu');
+    ['game', 'fight', 'chase', 'deploy'].forEach((s) => Nav.on(s, () => {
+      if (s === 'fight' && UI.spectateFid) { UI.spectateFid = null; Screens.go(Store.me() ? 'ghost' : 'mentor'); return; }
+      block();
+    }));
+  }
+
   /* ───────────────── rutiranje ───────────────── */
   function route() {
+    if (MODE === 'mentor' || MODE === 'spectator') {
+      if (UI.spectateFid && Store.fights()[UI.spectateFid]) { Screens.go('fight'); return; }
+      Screens.go('mentor');
+      return;
+    }
     if (!Store.room) { Screens.go('home'); return; }
     const me = Store.me();
     if (!me) { Screens.go('home'); return; }
     const s = Store.state();
+
+    // duh gleda tuđu borbu
+    if (UI.spectateFid) {
+      const sf = Store.fights()[UI.spectateFid];
+      if (sf && sf.state === 'live') { Screens.go('fight'); return; }
+      UI.spectateFid = null;
+    }
 
     if (s === 'LOBBY') {
       const done = me.perms && me.perms.location && me.perms.camera && me.hasFace;
@@ -372,9 +461,13 @@ const App = (() => {
       const s = Screens.cur;
       if (s === 'deploy') UI.renderDeploy(d);
       else if (s === 'game') UI.renderGame(d);
-      else if (s === 'fight') { const f = Combat.myFight(); if (f) UI.renderFight(d, f); }
+      else if (s === 'fight') {
+        if (UI.spectateFid) { const sf = Store.fights()[UI.spectateFid]; if (sf) UI.renderFight(d, { fid: UI.spectateFid, ...sf }, true); }
+        else { const f = Combat.myFight(); if (f) UI.renderFight(d, f); }
+      }
       else if (s === 'chase') UI.renderChase(d);
       else if (s === 'ghost') UI.renderGhost(d);
+      else if (s === 'mentor') UI.renderMentor(d);
       else if (s === 'lobby') { /* lobi se osvežava na promenu sobe */ }
       // §16 — obavezno wake lock dok igra traje
       if (d.state === 'LIVE' || d.state === 'FINAL_TWO' || d.state === 'PREP') Wake.on();
@@ -390,7 +483,7 @@ const App = (() => {
   });
 
   /* — ponude saveza i dolazeći hitac — */
-  let offerShown = null, shotShown = null;
+  let offerShown = null, shotShown = null, pkgShown = null;
   function handleOffers(d) {
     const me = d.me;
     if (!me) return;
@@ -410,6 +503,14 @@ const App = (() => {
     }
     if (!me.allyOffer) offerShown = null;
 
+    // paket od mentora — samo tebi piše ko ga je poslao (§17, §20)
+    if (me.incomingPackage && pkgShown !== me.incomingPackage.atMs) {
+      pkgShown = me.incomingPackage.atMs;
+      toast(`${T('yourPackage')}: ${itemName(me.incomingPackage.type)} — ${T('packageLanded')}`, 'gold', 'gift');
+      Haptics.fire('pickup'); Sfx.pickup();
+      Store.setMe('incomingPackage', null);
+    }
+
     if (me.incomingShot && shotShown !== me.incomingShot.atMs) {
       shotShown = me.incomingShot.atMs;
       const dir = compassName(me.incomingShot.bearing);
@@ -422,7 +523,10 @@ const App = (() => {
     return C[Math.round((b || 0) / 45) % 8];
   }
 
-  return { boot, route, requestPerm, startGame, playAgain, tryPickup, openEncounter, buyEvent, get TEST() { return TEST; } };
+  return {
+    boot, route, requestPerm, startGame, playAgain, tryPickup, openEncounter, buyEvent, leaveRoom, goHome,
+    get TEST() { return TEST; }, get MODE() { return MODE; },
+  };
 })();
 
 window.addEventListener('DOMContentLoaded', () => App.boot());

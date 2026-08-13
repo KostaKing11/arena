@@ -16,7 +16,34 @@ const Items = (() => {
       if (dm > vis) continue;
       out.push({ id, ...it, distM: dm, inReach: dm <= R.PICKUP_RADIUS_M });
     }
+    // Halucinacije od tracker osa: lažni predmeti koji nestanu kad priđeš (§15)
+    const hallucUntil = (me.effects && me.effects.hallucinateUntil) || 0;
+    if (d.now < hallucUntil) {
+      const bucket = Math.floor(d.now / 60000);
+      for (const f of R.hallucinations(Store.myId, pos, bucket)) {
+        const dm = U.dist(pos, f);
+        if (dm > vis || dm <= R.HALLUCINATION_POP_M) continue;   // isparava kad priđeš
+        out.push({ ...f, distM: dm, inReach: false });
+      }
+    }
     return out.sort((a, b) => a.distM - b.distM);
+  }
+
+  /* ───────────────── iskre: vidljive samo duhovima (§16) ───────────────── */
+  function sparks(d) {
+    const me = d.me, pos = Geo.pos;
+    if (!me || me.alive !== false || !pos || !d.cfg || !d.cfg.center) return [];
+    const seed = (Store.room && Store.room.seed) || 's';
+    const taken = (Store.sparks().collected) || {};
+    const all = R.generateSparks(seed, d.cfg, Object.keys(Store.players()).length);
+    return all.filter((s) => !taken[s.id]).map((s) => ({
+      ...s, distM: U.dist(pos, s), inReach: U.dist(pos, s) <= R.SPARK_REACH_M,
+    })).sort((a, b) => a.distM - b.distM);
+  }
+  async function collectSpark(sid) {
+    await Store.addSpark(sid);
+    Haptics.fire('pickup'); Sfx.pickup();
+    toast(T('sparkTaken'), 'gold', 'spark');
   }
 
   const nearest = (d) => visible(d).find((i) => i.inReach) || null;
@@ -339,5 +366,5 @@ const Items = (() => {
     return out;
   }
 
-  return { visible, nearest, pickupAllowed, runPickup, take, use, drop, inv, checkTraps, visibleTraps, swapDialog };
+  return { visible, nearest, pickupAllowed, runPickup, take, use, drop, inv, checkTraps, visibleTraps, swapDialog, sparks, collectSpark };
 })();

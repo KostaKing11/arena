@@ -5,7 +5,7 @@ const UI = (() => {
   'use strict';
   let myAvatar = JSON.parse(localStorage.getItem('arena.avatar') || 'null') || randomAvatar();
   let gmap = null, smap = null, smapCenter = null;
-  let lastFightRound = -1, lastHp = null;
+  let lastFightRound = -1, lastHp = null, spectateFid = null;
 
   const saveAvatar = () => localStorage.setItem('arena.avatar', JSON.stringify(myAvatar));
 
@@ -160,13 +160,16 @@ const UI = (() => {
 
     $('#lobbyBody').innerHTML = `
       <div class="row between"><div class="chip">${icon('users', { size: 16 })}${n} / ${R.MAX_PLAYERS}</div>
-        <button class="btn sm ghost" id="btnLeaveLobby">${esc(T('leaveRoom'))}</button></div>
+        <div class="row-tight">
+          <button class="btn sm ghost" id="btnMentorLink">${icon('users', { size: 16 })}<span>${esc(T('mentorTitle'))}</span></button>
+          <button class="btn sm ghost" id="btnLeaveLobby">${esc(T('leaveRoom'))}</button>
+        </div></div>
       <div class="list">${playersHtml}</div>
       ${hostHtml}`;
 
-    $('#btnLeaveLobby').onclick = async () => {
-      if (await confirmBox(T('leaveRoom'), T('yes'), true)) { Store.leave(); location.reload(); }
-    };
+    $('#btnLeaveLobby').onclick = () => App.leaveRoom();
+    const ml = $('#btnMentorLink');
+    if (ml) ml.onclick = () => UI.mentorLinkSheet(Store.myId);
     if (host) wireHostConfig();
 
     function slider(key, label, min, max, step, val, unit, recVal) {
@@ -412,7 +415,12 @@ const UI = (() => {
     if (d.zone) gmap.drawZone(d.zone, d.cfg);
     gmap.drawFire(d.firewall);
     gmap.drawWasps(d.wasps);
-    gmap.drawItems(Items.visible(d), (it) => App.tryPickup(it));
+    // duhovi umesto plena vide iskre (§16)
+    const ghost = me.alive === false;
+    const drawn = ghost
+      ? Items.sparks(d).slice(0, 40).map((s) => ({ ...s, type: 'spark', rarity: 'legendary' }))
+      : Items.visible(d);
+    gmap.drawItems(drawn, (it) => (ghost ? (it.inReach && Items.collectSpark(it.id)) : App.tryPickup(it)));
     gmap.drawTraps(Items.visibleTraps(d));
     gmap.drawPlayers(visiblePlayers(d));
 
@@ -442,10 +450,13 @@ const UI = (() => {
     // glavna akcija
     const act = $('#actionBtn');
     const near = Items.nearest(d);
-    if (me.alive === false) {
+    if (ghost) {
+      const sp = drawn.find((s) => s.inReach);
       act.hidden = false; act.disabled = false; act.className = 'action-btn gold';
-      act.innerHTML = `${icon('ghost', { size: 24 })}<span>${esc(T('ghostTitle'))}</span>`;
-      act.onclick = () => Screens.go('ghost');
+      act.innerHTML = sp
+        ? `${icon('spark', { size: 24 })}<span>${esc(T('collectSpark'))}</span>`
+        : `${icon('ghost', { size: 24 })}<span>${esc(T('ghostTitle'))}</span>`;
+      act.onclick = () => (sp ? Items.collectSpark(sp.id) : Screens.go('ghost'));
     } else if (near && Items.pickupAllowed(d)) {
       act.hidden = false; act.disabled = false; act.className = 'action-btn';
       act.innerHTML = `${icon(ITEM_ICON[near.type] || 'box', { size: 24 })}<span>${esc(itemName(near.type))}</span>`;
@@ -609,6 +620,7 @@ const UI = (() => {
       <button class="btn full" id="mTheme">${icon(Theme.get() === 'day' ? 'moon' : 'sun', { size: 22 })}<span>${esc(Theme.get() === 'day' ? T('nightMode') : T('dayMode'))}</span></button>
       <button class="btn full" id="mLang">SR / EN</button>
       <button class="btn full" id="mRecenter">${icon('crosshair', { size: 22 })}<span>${esc(T('map'))}</span></button>
+      <button class="btn full" id="mMentor">${icon('users', { size: 22 })}<span>${esc(T('mentorLink'))}</span></button>
       <label class="switch card"><span>${esc(T('cannon'))} + ${esc(T('menu'))}</span>
         <input type="checkbox" id="mHap" ${Haptics.enabled ? 'checked' : ''}><span class="track"><span class="knob"></span></span></label>
       ${host ? `<button class="btn ${paused ? 'good' : 'ghost'} full" id="mPause">${icon(paused ? 'play' : 'pause', { size: 22 })}<span>${esc(paused ? T('resumeGame') : T('pauseGame'))}</span></button>` : ''}
@@ -617,6 +629,7 @@ const UI = (() => {
     $('#mTheme').onclick = () => { Theme.toggle(); location.reload(); };
     $('#mLang').onclick = () => { toggleLang(); location.reload(); };
     $('#mRecenter').onclick = () => { gmap && gmap.recenter(); };
+    $('#mMentor').onclick = () => UI.mentorLinkSheet(Store.myId);
     $('#mHap').onchange = (e) => Haptics.setEnabled(e.target.checked);
     const p = $('#mPause');
     if (p) p.onclick = () => Store.hostUpdate('meta', { pausedAtMs: paused ? null : Clock.now() });
@@ -624,17 +637,23 @@ const UI = (() => {
   }
 
   /* ═══════════════ borba ═══════════════ */
-  function renderFight(d, f) {
-    const me = d.me, P = Store.players();
-    const side = Combat.sideOf(f);
-    const foeId = Combat.foeIdOf(f);
+  /** `spectate` = gledam tuđu borbu (duh ili mentor): isti ekran, bez komandi. */
+  function renderFight(d, f, spectate) {
+    const P = Store.players();
+    const side = spectate ? 'A' : Combat.sideOf(f);
+    const meId = spectate ? f.a : Store.myId;
+    const foeId = spectate ? f.b : Combat.foeIdOf(f);
+    const me = spectate ? (P[f.a] || {}) : d.me;
     const foe = P[foeId] || {};
-    const myHp = Combat.myHp(f), fHp = Combat.foeHp(f);
+    const myHp = side === 'A' ? f.hpA : f.hpB;
+    const fHp = side === 'A' ? f.hpB : f.hpA;
     const w = R.WEAPONS[me.weapon] || R.WEAPONS.fists;
-    const picked = !!(f.moves || {})[Store.myId];
+    const picked = spectate ? false : !!(f.moves || {})[Store.myId];
     const left = Math.max(0, (f.deadlineMs - d.now) / 1000);
 
-    $('#fightTag').innerHTML = `${icon('swords', { size: 16 })}<span>${esc(T('fight'))}</span>`;
+    $('#fightTag').innerHTML = spectate
+      ? `${icon('eye', { size: 16 })}<span>${esc(T('spectating'))}</span>`
+      : `${icon('swords', { size: 16 })}<span>${esc(T('fight'))}</span>`;
     const rr = $('#roundRing');
     rr.className = 'round-ring' + (left < 4 ? ' urgent' : '');
     rr.innerHTML = ring(left / (R.ROUND_MS / 1000), 62) + `<div class="n">${f.round}</div>`;
@@ -642,7 +661,7 @@ const UI = (() => {
     $('#fighters').innerHTML = `
       <div class="fighter me" id="fMe">
         <div class="avatar" style="width:74px;height:74px">${avatarSvg(me.avatar, 74)}</div>
-        <div class="who">${esc(T('you'))}</div>
+        <div class="who">${esc(spectate ? (me.name || '?') : T('you'))}</div>
         <div class="cls">${esc(clsName(me.classId))}</div>
         <div class="hpnum">${Math.round(myHp)}</div>
         <div class="dmg-pop" id="popMe"></div>
@@ -671,6 +690,18 @@ const UI = (() => {
     $('#rangeHint').innerHTML = `${esc(weaponName(me.weapon))} · ${w.min}–${w.max} · ` +
       (inRange ? esc(T('moveAttack')) : esc(T('outOfRange')));
 
+    // gledalac vidi sve isto, samo bez dugmadi
+    if (spectate) {
+      $('#moves').innerHTML = '';
+      $('#fightExtra').innerHTML = `<button class="btn ghost" id="specBack" style="grid-column:1/-1">
+        ${icon('chevronLeft', { size: 20 })}<span>${esc(T('back'))}</span></button>`;
+      const sb = $('#specBack');
+      if (sb) sb.onclick = () => { spectateFid = null; Screens.go(Store.me() ? 'ghost' : 'mentor'); };
+      $('#combatLog').textContent = describeLog(f, me, foe);
+      bumpRound(f, meId, foeId);
+      return;
+    }
+
     // potezi
     const mk = (m, label, ic, cls) => `<button class="move ${cls || ''}" data-m="${m}" ${picked ? 'disabled' : ''}>
       ${icon(ic, { size: 28 })}<span>${esc(label)}</span></button>`;
@@ -694,21 +725,24 @@ const UI = (() => {
 
     $('#combatLog').textContent = picked ? T('waitingOpponent') : describeLog(f, me, foe);
 
-    // trzaj i brojka štete na novu rundu
-    if (f.round !== lastFightRound) {
-      if (lastFightRound >= 0 && f.lastLog) {
-        for (const l of f.lastLog) {
-          if (!l.dmg) continue;
-          const mine = l.to === Store.myId;
-          const pop = $(mine ? '#popMe' : '#popFoe');
-          if (pop) { pop.textContent = '−' + l.dmg; pop.classList.remove('go'); void pop.offsetWidth; pop.classList.add('go'); }
-          const card = $(mine ? '#fMe' : '#fFoe');
-          if (card) { card.classList.remove('hit'); void card.offsetWidth; card.classList.add('hit'); }
-        }
-        Haptics.fire('round'); Sfx.hit();
+    bumpRound(f, Store.myId, foeId);
+  }
+
+  /* Trzaj i brojka štete kad stigne nova runda. */
+  function bumpRound(f, meId, foeId) {
+    if (f.round === lastFightRound) return;
+    if (lastFightRound >= 0 && f.lastLog) {
+      for (const l of f.lastLog) {
+        if (!l.dmg) continue;
+        const mine = l.to === meId;
+        const pop = $(mine ? '#popMe' : '#popFoe');
+        if (pop) { pop.textContent = '−' + l.dmg; pop.classList.remove('go'); void pop.offsetWidth; pop.classList.add('go'); }
+        const card = $(mine ? '#fMe' : '#fFoe');
+        if (card) { card.classList.remove('hit'); void card.offsetWidth; card.classList.add('hit'); }
       }
-      lastFightRound = f.round;
+      Haptics.fire('round'); Sfx.hit();
     }
+    lastFightRound = f.round;
   }
   function describeLog(f, me, foe) {
     if (!f.lastLog || !f.lastLog.length) return '';
@@ -799,18 +833,111 @@ const UI = (() => {
       </div>
       <div class="card stack">
         <div class="card-title">${esc(T('allPlayers'))}</div>
-        ${aliveList.map(([pid, p]) => `<div class="list-item">
-          <div class="avatar" style="width:40px;height:40px">${avatarSvg(p.avatar, 40)}</div>
+        ${aliveList.map(([pid, p]) => {
+          const inFight = p.fightId && (Store.fights()[p.fightId] || {}).state === 'live';
+          const followed = (d.me && d.me.following) === pid;
+          return `<div class="list-item">
+          <div class="avatar ${followed ? 'ring' : ''}" style="width:40px;height:40px">${avatarSvg(p.avatar, 40)}</div>
           <div class="grow"><div class="name">${esc(p.name)}</div>
-            <div class="tiny dim">${esc(clsName(p.classId))} · ${esc(weaponName(p.weapon))}</div></div>
-          <div class="tiny"><span class="dangerc">${Math.round(p.hp)}</span> ·
-            ${Math.round(p.hunger || 0)} · ${Math.round(p.thirst || 0)}</div>
-        </div>`).join('')}
+            <div class="tiny dim">${esc(clsName(p.classId))} · ${esc(weaponName(p.weapon))}
+              · ${icon('heart', { size: 11 })} ${Math.round(p.hp)}
+              · ${Math.round(p.hunger || 0)} / ${Math.round(p.thirst || 0)}</div></div>
+          ${inFight ? `<button class="btn sm danger-ghost" data-watch="${p.fightId}">${icon('eye', { size: 16 })}</button>` : ''}
+          <button class="btn sm ${followed ? 'gold' : 'ghost'}" data-follow="${pid}">
+            ${icon(followed ? 'check' : 'target', { size: 16 })}</button>
+        </div>`; }).join('')}
       </div>
       <button class="btn ghost full" id="ghostMap">${icon('map', { size: 22 })}<span>${esc(T('map'))}</span></button>`;
 
     $$('#ghostBody .gm-event').forEach((b) => b.onclick = () => App.buyEvent(b.dataset.ev));
+    $$('#ghostBody [data-follow]').forEach((b) => b.onclick = () => {
+      const pid = b.dataset.follow;
+      const cur = (Store.me() || {}).following;
+      Store.updateMe({ following: cur === pid ? null : pid });
+      toast(cur === pid ? T('unfollowBtn') : T('following'), '', 'target');
+    });
+    $$('#ghostBody [data-watch]').forEach((b) => b.onclick = () => {
+      spectateFid = b.dataset.watch;
+      lastFightRound = -1;
+      Screens.go('fight');
+    });
     $('#ghostMap').onclick = () => Screens.go('game');
+  }
+
+  /* ═══════════════ mentor i gledalac (§17) ═══════════════ */
+  function renderMentor(d) {
+    const p = Mentor.target();
+    const isMentor = Mentor.mode === 'mentor';
+    $('#mentorTitle').textContent = isMentor ? T('mentorTitle') : T('spectator');
+    $('#favorChip').innerHTML = `${icon('spark', { size: 16 })}<span>${Mentor.favor().toFixed(1)}</span>`;
+
+    if (!p) { $('#mentorBody').innerHTML = `<div class="card center"><p>${esc(T('loading'))}</p></div>`; return; }
+    const inFight = p.fightId && (Store.fights()[p.fightId] || {}).state === 'live';
+    const cost = R.packageCost(Mentor.sent());
+    const cd = Math.max(0, ((Mentor.rec().lastPackageMs || 0) + R.PACKAGE_COOLDOWN_MS - d.now) / 1000);
+
+    $('#mentorBody').innerHTML = `
+      <div class="card">
+        <div class="row">
+          <div class="avatar ring" style="width:64px;height:64px">${avatarSvg(p.avatar, 64)}</div>
+          <div class="grow"><div class="tiny upper dim">${esc(T('yourTribute'))}</div>
+            <div class="big" style="font-weight:800">${esc(p.name)}</div>
+            <div class="tiny dim">${p.classId ? esc(clsName(p.classId)) : '—'} · ${esc(weaponName(p.weapon || 'fists'))}</div></div>
+        </div>
+        <div class="vitals" style="margin-top:var(--s3)">
+          ${vitalBox('hp', 'heart', p.hp || 0, p.maxHp || 100, (p.hp || 0) < 25)}
+          ${vitalBox('hunger', 'meat', p.hunger || 0, 100, (p.hunger || 0) < 25)}
+          ${vitalBox('thirst', 'droplet', p.thirst || 0, 100, (p.thirst || 0) < 25)}
+        </div>
+        ${p.alive === false ? `<p class="dangerc center" style="margin-top:var(--s3)">${esc(T('youDied'))}</p>` : ''}
+        ${inFight ? `<button class="btn danger full" id="mWatch" style="margin-top:var(--s3)">
+          ${icon('eye', { size: 20 })}<span>${esc(T('watchFight'))}</span></button>` : ''}
+      </div>
+
+      ${isMentor ? `
+      <div class="card stack">
+        <div class="card-title">${esc(T('earnFavor'))}</div>
+        <p class="tiny dim" style="margin:0">${esc(T('noFavorYet'))}</p>
+        <div class="row wrap">
+          ${Mentor.CHALLENGES.map((c) => `<button class="btn sm ghost" data-ch="${c}">
+            ${esc(T({ reaction: 'chReaction', simon: 'chSimon', targets: 'chTarget', quiz: 'chQuiz', rhythm: 'chRhythm' }[c]))}</button>`).join('')}
+        </div>
+      </div>
+
+      <div class="card stack">
+        <div class="card-title">${esc(T('packages'))}</div>
+        <div class="row between"><span class="dim">${esc(T('packageNext'))}</span>
+          <span class="chip gold">${icon('spark', { size: 14 })}${cost}</span></div>
+        ${cd > 0 ? `<p class="tiny goldc">${esc(T('packageCooldown'))} ${U.mmss(cd)}</p>` : ''}
+        ${Object.keys(R.PACKAGE_TIERS).map((tier) => {
+          const okBuy = R.canAffordTier(tier, Mentor.sent(), Mentor.favor()) && cd <= 0 && p.alive !== false;
+          const t = R.PACKAGE_TIERS[tier];
+          return `<button class="gm-event" data-pkg="${tier}" ${okBuy ? '' : 'disabled'}>
+            ${icon({ water: 'droplet', food: 'meat', medkit: 'bandage', backpack: 'backpack', weapon: 'swords' }[tier], { size: 24 })}
+            <div class="grow" style="text-align:left"><div style="font-weight:700">${esc(T({ water: 'pkgWater', food: 'pkgFood', medkit: 'pkgMedkit', backpack: 'pkgBackpack', weapon: 'pkgWeapon' }[tier]))}</div>
+              <div class="tiny dim">${esc(T('packageCost'))} ${Math.max(cost, t.minCost)}</div></div>
+            <span class="cost">${icon('spark', { size: 14 })}${t.minCost}+</span></button>`;
+        }).join('')}
+      </div>` : `
+      <div class="card stack center">
+        <p class="dim">${esc(T('spectator'))}</p>
+        <button class="btn gold lg full" id="mCheer">${icon('users', { size: 22 })}<span>${esc(T('cheer'))}</span></button>
+        <p class="tiny mute">${esc(T('cheerCooldown'))}</p>
+      </div>`}
+
+      <div class="card stack">
+        <div class="card-title">${esc(T('feed'))}</div>
+        ${Object.entries(Store.feed()).map(([id, f]) => ({ id, ...f }))
+          .filter((f) => f.scope === 'all').sort((a, b) => b.atMs - a.atMs).slice(0, 12)
+          .map((f) => `<div class="feed-item ${f.type === 'death' ? 'death' : 'event'}">${esc(feedText(f))}</div>`).join('') || '<p class="dim">—</p>'}
+      </div>`;
+
+    const w = $('#mWatch');
+    if (w) w.onclick = () => { spectateFid = p.fightId; lastFightRound = -1; Screens.go('fight'); };
+    $$('#mentorBody [data-ch]').forEach((b) => b.onclick = () => Mentor.earn(b.dataset.ch));
+    $$('#mentorBody [data-pkg]').forEach((b) => b.onclick = () => Mentor.sendPackage(b.dataset.pkg));
+    const c = $('#mCheer');
+    if (c) c.onclick = () => Mentor.cheer();
   }
 
   /* ═══════════════ kraj (§19) ═══════════════ */
@@ -865,7 +992,7 @@ const UI = (() => {
       <button class="btn ghost full" id="btnHome">${esc(T('backToStart'))}</button>`;
 
     const a = $('#btnAgain'); if (a) a.onclick = () => App.playAgain();
-    $('#btnHome').onclick = () => { Store.leave(); location.href = location.pathname; };
+    $('#btnHome').onclick = async () => { await Store.leave(); App.goHome(); };
   }
 
   return {
@@ -873,6 +1000,20 @@ const UI = (() => {
     renderLobby, showQr, shareLink, renderPrep, nextStep, get prepStep() { return prepStep; },
     set prepStep(v) { prepStep = v; }, renderDeploy, ensureMap, renderGame, inventorySheet,
     feedSheet, menuSheet, renderFight, renderChase, showSky, renderGhost, renderEnd, feedText,
+    renderMentor,
     get gmap() { return gmap; },
+    get spectateFid() { return spectateFid; },
+    set spectateFid(v) { spectateFid = v; lastFightRound = -1; },
+    mentorLinkSheet(pid) {
+      const url = Mentor.mentorLinkFor(Store.code, pid);
+      const s = sheet(T('mentorLink'), `
+        <p class="dim">${esc(T('mentorOf'))}: <b>${esc((Store.players()[pid] || {}).name || '')}</b></p>
+        <div class="card" style="word-break:break-all;font-size:var(--fs-sm)">${esc(url)}</div>
+        <button class="btn primary lg full" id="mlCopy" style="margin-top:var(--s3)">${esc(T('copyMentorLink'))}</button>`);
+      $('#mlCopy', s).onclick = async () => {
+        try { await navigator.clipboard.writeText(url); toast(T('copied'), 'good', 'check'); } catch { }
+        if (navigator.share) { try { await navigator.share({ title: 'ARENA', url }); } catch { } }
+      };
+    },
   };
 })();

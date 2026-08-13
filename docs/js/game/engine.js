@@ -123,7 +123,15 @@ const Engine = (() => {
     if (d.inFire && !d.paused) { patch.hp = 0; patch._cause = 'fire'; }
 
     if (patch.hp <= 0) return die(patch._cause || causeOf(d));
-    await Store.updateMe({ hunger: patch.hunger, thirst: patch.thirst, hp: patch.hp, lastTickMs: patch.lastTickMs });
+    const w = { hunger: patch.hunger, thirst: patch.thirst, hp: patch.hp, lastTickMs: patch.lastTickMs };
+    // Traker ose ostavljaju halucinacije još 5 minuta pošto izađeš (§15)
+    if (d.inWasps) {
+      const until = now + R.HALLUCINATION_MS;
+      if (((me.effects && me.effects.hallucinateUntil) || 0) < until - 30000) {
+        w['effects/hallucinateUntil'] = until;
+      }
+    }
+    await Store.updateMe(w);
     warnLow(me, patch);
   }
 
@@ -227,6 +235,7 @@ const Engine = (() => {
     if (meta.state === 'LIVE' || meta.state === 'FINAL_TWO') {
       await maintainItems(d);
       await maintainSky(d);
+      await maintainDrops(d);
     }
   }
 
@@ -300,6 +309,35 @@ const Engine = (() => {
       }
     }
     if (Object.keys(upd).length) await Store.hostUpdate('items', upd);
+  }
+
+  /* — gozba i sanduk sa zalihama stvarno spuštaju predmete (§15, §16) — */
+  const droppedFor = new Set();
+  async function maintainDrops(d) {
+    const sch = Store.schedule(), cfg = Store.config();
+    const live = (Store.room && Store.room.liveEvents) || {};
+    const all = [...((sch && sch.events) || []), ...Object.values(live)];
+    for (const ev of all) {
+      if (ev.type !== 'feast' && ev.type !== 'supplyBox') continue;
+      if (d.now < ev.atMs || droppedFor.has(ev.id)) continue;
+      droppedFor.add(ev.id);
+      const rng = U.rngFor(ev.id, 'drop');
+      const n = ev.type === 'feast' ? (R.EVENTS.feast.items || 6) : 3;
+      // gozba je na kornukopiji, sanduk na neutralnom mestu
+      const center = ev.type === 'feast' ? cfg.center : U.pointInCircle(rng, cfg.center, cfg.diameterM * 0.3, 40);
+      const pts = U.scatter(rng, center, ev.type === 'feast' ? 25 : 8, 0, n, 4, []);
+      const upd = {};
+      pts.forEach((p, i) => {
+        const rarity = U.weighted(rng, ev.type === 'feast' ? { rare: 30, epic: 50, legendary: 20 } : { uncommon: 40, rare: 45, epic: 15 });
+        const pool = R.ITEM_IDS.filter((id) => R.ITEMS[id].rarity === rarity);
+        upd[`${ev.id}_${i}`] = {
+          type: U.pick(rng, pool), rarity, lat: p.lat, lng: p.lng,
+          spawnedAtMs: d.now, dropped: true,
+        };
+      });
+      await Store.hostUpdate('items', upd);
+      await Store.pushFeed({ type: 'event', eventType: ev.type, scope: 'all' });
+    }
   }
 
   /* — nebo na svakih 15 min (§16) — */

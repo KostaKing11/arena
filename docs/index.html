@@ -90,6 +90,7 @@
   <!-- ═══ priprema (5 koraka) ═══ -->
   <section class="screen" id="s-prep">
     <div class="topbar">
+      <button class="iconbtn sm" id="btnPrepBack" data-i-aria="back"></button>
       <div class="grow"><h2 data-i="prepTitle"></h2></div>
       <div class="chip" id="prepStepChip"></div>
     </div>
@@ -163,7 +164,9 @@
 
   <!-- ═══ duh / tvorac igara ═══ -->
   <section class="screen" id="s-ghost">
-    <div class="topbar"><div class="grow"><h2 data-i="ghostTitle"></h2></div>
+    <div class="topbar">
+      <button class="iconbtn sm" id="btnGhostBack" data-i-aria="back"></button>
+      <div class="grow"><h2 data-i="ghostTitle"></h2></div>
       <div class="spark-pool" id="sparkPool"></div></div>
     <div class="scroll"><div class="hold stack-lg" id="ghostBody"></div></div>
   </section>
@@ -198,12 +201,14 @@
 <script src="js/net/clock.js"></script>
 <script src="js/net/store.js"></script>
 <script src="js/ui/kit.js"></script>
+<script src="js/ui/nav.js"></script>
 <script src="js/ui/sensors.js"></script>
 <script src="js/ui/map.js"></script>
 <script src="js/game/engine.js"></script>
 <script src="js/game/items.js"></script>
 <script src="js/game/combat.js"></script>
 <script src="js/game/encounter.js"></script>
+<script src="js/game/mentor.js"></script>
 <script src="js/game/bots.js"></script>
 <script src="js/ui/screens.js"></script>
 <script src="js/app.js"></script>

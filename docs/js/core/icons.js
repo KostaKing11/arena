@@ -120,6 +120,7 @@ const ITEM_ICON = {
   ragePotion: 'flask', camoCloak: 'eyeOff', quiver: 'arrows', arrows: 'arrows',
   wClub: 'club', wSling: 'sling', wNet: 'net', wSpear: 'spear', wAxe: 'axe',
   wBlowgun: 'blowgun', wBow: 'bow', wKnife: 'knife', wTrident: 'trident',
+  spark: 'spark',
 };
 const WEAPON_ICON = {
   fists: 'hand', club: 'club', sling: 'sling', net: 'net', spear: 'spear',

@@ -140,6 +140,35 @@ const I18N = {
     roomFull: 'Soba je puna', hostOnly: 'Samo domaćin', notReady: 'Nisi spreman',
     firebaseMissing: 'Firebase nije podešen',
     leaveWarning: 'Igra je u toku. Ako izađeš, umireš.',
+
+    /* — povratak i sesija — */
+    backAgainToExit: 'Pritisni nazad još jednom da izađeš',
+    rejoinTitle: 'Vrati se u arenu?',
+    rejoinBody: 'Već si u sobi',
+    rejoinYes: 'Uđi ponovo', rejoinNo: 'Ne, izađi iz sobe',
+    leaveConfirm: 'Izaći iz sobe?',
+    cantGoBackInGame: 'Iz partije se izlazi kroz meni',
+
+    /* — iskre i tvorci igara — */
+    collectSpark: 'Pokupi iskru', sparkTaken: 'Iskra pokupljena',
+    followBtn: 'Prati', unfollowBtn: 'Ne prati više', following: 'Pratiš',
+    watchFight: 'Gledaj borbu', spectating: 'Gledaš borbu',
+    hallucination: 'Ovo nije bilo stvarno',
+
+    /* — mentor (§17) — */
+    mentorWelcome: 'Ti si mentor', mentorTaken: 'Ovaj igrač već ima mentora',
+    mentorLink: 'Link za mentora', copyMentorLink: 'Kopiraj mentorski link',
+    yourTribute: 'Tvoj tribut', noFavorYet: 'Zaradi naklonost izazovima',
+    startChallenge: 'Kreni', challengeDone: 'Zaradio si', challengeFail: 'Ništa ovaj put',
+    packages: 'Paketi', packageNext: 'Sledeći paket košta',
+    pkgWater: 'Voda', pkgFood: 'Hrana', pkgMedkit: 'Medkit',
+    pkgBackpack: 'Ranac', pkgWeapon: 'Oružje',
+    notEnoughFavor: 'Nemaš dovoljno naklonosti',
+    packageLanded: 'Paket je pao 15 m od tebe',
+    cheerCooldown: 'Možeš da navijaš na 10 minuta',
+    tapWhenGreen: 'Tapni čim pozeleni', tooEarly: 'Prerano!',
+    repeatSequence: 'Ponovi niz', hitTargets: 'Pogodi mete', tapRhythm: 'Tapkaj u ritmu',
+    quizTitle: 'Kviz o Igrama gladi',
   },
 
   en: {
@@ -266,6 +295,32 @@ const I18N = {
     roomFull: 'The room is full', hostOnly: 'Host only', notReady: 'You are not ready',
     firebaseMissing: 'Firebase is not configured',
     leaveWarning: 'A game is running. If you leave, you die.',
+
+    backAgainToExit: 'Press back again to exit',
+    rejoinTitle: 'Return to the arena?',
+    rejoinBody: 'You are already in room',
+    rejoinYes: 'Rejoin', rejoinNo: 'No, leave the room',
+    leaveConfirm: 'Leave the room?',
+    cantGoBackInGame: 'Leave a running game from the menu',
+
+    collectSpark: 'Collect spark', sparkTaken: 'Spark collected',
+    followBtn: 'Follow', unfollowBtn: 'Stop following', following: 'Following',
+    watchFight: 'Watch the fight', spectating: 'Watching a fight',
+    hallucination: 'That was never there',
+
+    mentorWelcome: 'You are the mentor', mentorTaken: 'This player already has a mentor',
+    mentorLink: 'Mentor link', copyMentorLink: 'Copy mentor link',
+    yourTribute: 'Your tribute', noFavorYet: 'Earn favour through challenges',
+    startChallenge: 'Start', challengeDone: 'You earned', challengeFail: 'Nothing this time',
+    packages: 'Packages', packageNext: 'Next package costs',
+    pkgWater: 'Water', pkgFood: 'Food', pkgMedkit: 'Med kit',
+    pkgBackpack: 'Backpack', pkgWeapon: 'Weapon',
+    notEnoughFavor: 'Not enough favour',
+    packageLanded: 'A package landed 15 m from you',
+    cheerCooldown: 'You can cheer once every 10 minutes',
+    tapWhenGreen: 'Tap the moment it turns green', tooEarly: 'Too early!',
+    repeatSequence: 'Repeat the sequence', hitTargets: 'Hit the targets', tapRhythm: 'Tap in rhythm',
+    quizTitle: 'Hunger Games quiz',
   },
 };
 

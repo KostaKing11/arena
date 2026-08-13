@@ -217,5 +217,37 @@ console.log('\n10. Konzumiranje (§12)');
   ok('Trkac ima +1 slot', R.slotsOf({ classId: 'runner', capacity: 4 }) === 5);
 }
 
+console.log('\n11. Iskre, halucinacije, mentor (§15, §16, §17)');
+{
+  const s1 = R.generateSparks('sp', cfg, 10), s2 = R.generateSparks('sp', cfg, 10);
+  ok('iskre su determinsticke', JSON.stringify(s1) === JSON.stringify(s2));
+  ok('iskre po 6 na igraca', s1.length === 60, String(s1.length));
+  ok('iskre su unutar arene', s1.every((s) => U.dist(s, cfg.center) <= cfg.diameterM / 2));
+  ok('iskra se kupi na 10 m', R.SPARK_REACH_M === 10);
+
+  const h1 = R.hallucinations('p1', cfg.center, 7), h2 = R.hallucinations('p1', cfg.center, 7);
+  ok('halucinacije su stabilne u istom minutu', JSON.stringify(h1) === JSON.stringify(h2));
+  ok('drugi igrac vidi druge halucinacije',
+    JSON.stringify(R.hallucinations('p2', cfg.center, 7)) !== JSON.stringify(h1));
+  ok('halucinacije su oznacene kao lazne', h1.every((x) => x.fake === true && !!R.ITEMS[x.type]));
+  ok('halucinacije traju 5 min', R.HALLUCINATION_MS === 300000);
+
+  ok('cena paketa raste 1/3/6/10',
+    [0, 1, 2, 3].map(R.packageCost).join(',') === '1,3,6,10');
+  ok('peti paket ostaje na 10', R.packageCost(9) === 10);
+  ok('voda i hrana od 1, medkit i ranac od 3, oruzje od 6',
+    R.PACKAGE_TIERS.water.minCost === 1 && R.PACKAGE_TIERS.food.minCost === 1 &&
+    R.PACKAGE_TIERS.medkit.minCost === 3 && R.PACKAGE_TIERS.backpack.minCost === 3 &&
+    R.PACKAGE_TIERS.weapon.minCost === 6);
+  ok('prvi paket ne moze biti oruzje', !R.canAffordTier('weapon', 0, 99));
+  ok('cetvrti paket moze biti oruzje', R.canAffordTier('weapon', 3, 10));
+  ok('bez naklonosti nema paketa', !R.canAffordTier('water', 0, 0));
+  ok('paket pada 15 m od igraca', R.PACKAGE_DROP_M === 15);
+  ok('max 1 paket na 5 min', R.PACKAGE_COOLDOWN_MS === 300000);
+  ok('navijanje 0.5 na 10 min', R.CHEER_FAVOR === 0.5 && R.CHEER_COOLDOWN_MS === 600000);
+  ok('svi paketi vode ka stvarnim predmetima',
+    Object.values(R.PACKAGE_TIERS).every((t) => t.items.every((i) => !!R.ITEMS[i])));
+}
+
 console.log(fail ? `\n${fail} provera palo\n` : `\nSve provere prosle\n`);
 process.exit(fail ? 1 : 0);
