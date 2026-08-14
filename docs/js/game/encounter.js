@@ -227,14 +227,33 @@ const Encounter = (() => {
     const sx = (video.videoWidth - sw) / 2, sy = (video.videoHeight - sh) / 2;
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
     const shot = canvas.toDataURL('image/jpeg', 0.5);
+    const thumb = shrink(canvas, THUMB_MAX_PX, 0.4);
 
-    if (!detectorReady()) return { ok: true, photo: shot, usedDetector: false };
+    if (!detectorReady()) return { ok: true, photo: shot, thumb, usedDetector: false };
     const boxes = detectPersons(canvas);
     if (boxes && boxes.length === 0) {
       lastShotMs = now;                     // 15 s da se kamera ne koristi kao radar
-      return { ok: false, reason: 'noperson', photo: shot };
+      return { ok: false, reason: 'noperson', photo: shot, thumb };
     }
-    return { ok: true, photo: shot, usedDetector: true, boxes };
+    return { ok: true, photo: shot, thumb, usedDetector: true, boxes };
+  }
+
+  /* Mala kopija snimka za bazu.
+     Pun kadar je 50–150 KB po udarcu, a u Realtime Database ga povlači SVAKI
+     telefon u sobi na svaku promenu čvora — za jednu partiju to su desetine
+     megabajta kroz mobilni internet. Duhu je za "video sam kad ga je sredio"
+     dovoljna slika od 480 px. Pun kadar ostaje lokalno kod napadača. */
+  const THUMB_MAX_PX = 480;
+  function shrink(srcCanvas, maxSide, q) {
+    try {
+      const w = srcCanvas.width, h = srcCanvas.height;
+      const k = Math.min(1, maxSide / Math.max(w, h));
+      if (k >= 1) return srcCanvas.toDataURL('image/jpeg', q);
+      const c = document.createElement('canvas');
+      c.width = Math.round(w * k); c.height = Math.round(h * k);
+      c.getContext('2d').drawImage(srcCanvas, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', q);
+    } catch { return null; }
   }
 
   return {

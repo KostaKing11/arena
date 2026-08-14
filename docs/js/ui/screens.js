@@ -1483,7 +1483,7 @@ const UI = (() => {
       if (sp.maxM != null && target) {
         const conf = await confirmTarget(target);
         if (!conf.ok) { toast(confirmText(conf), 'danger', 'alert'); return; }
-        photo = conf.photo;
+        photo = conf.thumb || conf.photo;
         if (sp.aimMs) {
           const held = await holdAim(target.pid, { aimMs: sp.aimMs, warns: sp.warns });
           if (!held || held.reason === 'cancelled') return;
@@ -1562,7 +1562,7 @@ const UI = (() => {
           // Blic-folija na meti obara snimak sa daljine; Stativ je probija
           targetFlashUntilMs: target.p && target.p.flashUntilMs,
         });
-        const out = await Attack.land(d, target.pid, held.distM, res, { photo: conf.photo });
+        const out = await Attack.land(d, target.pid, held.distM, res, { photo: conf.thumb || conf.photo });
         if (target.ally) {
           await Store.updateMe({ allianceId: null });
           await Store.pushFeed({ type: 'betrayal', subjectId: Store.myId, targetId: target.pid, scope: 'all' });
@@ -1686,19 +1686,149 @@ const UI = (() => {
               · ${icon('heart', { size: 11 })} ${Math.round(p.hp)}
               · ${Math.round(p.hunger || 0)} / ${Math.round(p.thirst || 0)}</div></div>
           <button class="btn sm ${followed ? 'gold' : 'ghost'}" data-follow="${pid}">
-            ${icon(followed ? 'check' : 'target', { size: 16 })}</button>
+            ${icon('eye', { size: 16 })}<span>${esc(T('watchBtn'))}</span></button>
         </div>`; }).join('')}
       </div>
       <button class="btn ghost full" id="ghostMap">${icon('map', { size: 22 })}<span>${esc(T('map'))}</span></button>`;
 
     $$('#ghostBody .gm-event').forEach((b) => b.onclick = () => App.buyEvent(b.dataset.ev));
-    $$('#ghostBody [data-follow]').forEach((b) => b.onclick = () => {
-      const pid = b.dataset.follow;
-      const cur = (Store.me() || {}).following;
-      Store.updateMe({ following: cur === pid ? null : pid });
-      toast(cur === pid ? T('unfollowBtn') : T('following'), '', 'target');
-    });
+    $$('#ghostBody [data-follow]').forEach((b) => b.onclick = () => openWatch(b.dataset.follow));
     $('#ghostMap').onclick = () => Screens.go('game');
+  }
+
+  /* ═══════════════ GLEDANJE JEDNOG IGRAČA (duh) ═══════════════
+     „Prati" je bio čekboks: upiše se `following` i ne desi se ništa. Ovo je
+     pravo gledanje — mapa koja ide za njim, njegovo stanje, spisak njegovih
+     udaraca, i kadar koji je snimio kad nekog pogodi. */
+  let wmap = null, watchFollow = true, watchSeenHit = null, watchShotTimer = 0;
+
+  function openWatch(pid) {
+    Store.updateMe({ following: pid });
+    watchSeenHit = null;                   // ne prikazuj stare kadrove pri ulasku
+    Screens.go('watch');
+    renderWatch(Engine.d);
+  }
+  function closeWatch() {
+    clearTimeout(watchShotTimer);
+    $('#watchShot').hidden = true;
+    Screens.go('ghost');
+    renderGhost(Engine.d);
+  }
+
+  function renderWatch(d) {
+    const pid = (d.me || {}).following;
+    const p = pid && Store.players()[pid];
+    if (!p) { closeWatch(); return; }
+
+    $('#watchTitle').textContent = p.name || '';
+    $('#btnWatchBack').innerHTML = icon('chevronLeft', { size: 22 });
+    $('#btnWatchBack').onclick = () => closeWatch();
+
+    /* — mapa ide za njim, ne za mnom — */
+    if (!wmap) {
+      wmap = makeMap('watchMap', { zoom: 17, noFog: true });
+      wmap.setFull(true);
+      wmap.setFollow(false);               // ne juri MOJU poziciju
+      watchFollow = true;
+      wmap.map.on('dragstart', () => { watchFollow = false; });
+      setTimeout(() => wmap && wmap.refresh(), 60);
+    }
+    if (p.pos) {
+      wmap.drawPlayers([{ id: pid, lat: p.pos.lat, lng: p.pos.lng, kind: 'foe' }]);
+      if (watchFollow) wmap.map.setView([p.pos.lat, p.pos.lng], wmap.map.getZoom(), { animate: true, duration: 0.4 });
+    }
+    if (d.zone) wmap.drawZone(d.zone, d.cfg);
+    wmap.drawFire(d.firewall);
+    wmap.drawWasps(d.wasps);
+
+    /* — neko ga nišani: napetost pred udarac — */
+    const aim = p.incomingAim;
+    const aimOn = !!(aim && d.now - (aim.atMs || 0) < 12000);
+    const ac = $('#watchAim');
+    ac.hidden = !aimOn;
+    if (aimOn) ac.innerHTML = `${icon('target', { size: 14 })}<span>${esc(T('watchAimed'))}</span>`;
+    ac.className = 'chip danger';
+
+    /* — njegova kartica — */
+    const maxHp = p.maxHp || 100;
+    const eff = R.activeEffects(p, d.now);
+    const carrying = (p.inv || []).filter(Boolean).reduce((n, s) => n + (s.qty || 1), 0);
+
+    $('#watchBody').innerHTML = `
+      <div class="card stack">
+        <div class="row">
+          <div class="avatar ring" style="width:56px;height:56px">${avatarSvg(p.avatar, 56)}</div>
+          <div class="grow">
+            <div class="big" style="font-weight:800">${esc(p.name)}</div>
+            <div class="tiny dim">${p.classId ? esc(clsName(p.classId)) : '—'} · ${esc(weaponName(p.weapon || 'fists'))}</div>
+          </div>
+          <div class="chip">${icon('backpack', { size: 14 })}${carrying}</div>
+        </div>
+        <div class="vitals">
+          ${vitalBox('hp', 'heart', p.hp || 0, maxHp, (p.hp || 0) < 25)}
+          ${vitalBox('hunger', 'meat', p.hunger || 0, 100 + (p.maxHungerBonus || 0), (p.hunger || 0) < R.SURVIVAL.lowThreshold)}
+          ${vitalBox('thirst', 'droplet', p.thirst || 0, 100 + (p.maxThirstBonus || 0), (p.thirst || 0) < R.SURVIVAL.lowThreshold)}
+        </div>
+        ${eff.length ? `<div class="fx-bar" style="position:static">${eff.map((e) => {
+          const left = e.charges != null ? `×${e.charges}` : U.mmss(Math.max(0, e.leftMs / 1000));
+          return `<span class="fx ${e.tone}">${icon(e.icon, { size: 13 })}<b>${esc(left)}</b></span>`;
+        }).join('')}</div>` : ''}
+        ${p.alive === false ? `<p class="dangerc center" style="margin:0">${esc(T('watchDead'))}</p>` : ''}
+      </div>
+
+      <div class="card stack">
+        <div class="card-title">${esc(T('watchHits'))}</div>
+        ${hitRows(pid)}
+      </div>
+
+      <button class="btn ghost full" id="watchStop">${icon('x', { size: 20 })}<span>${esc(T('watchStop'))}</span></button>`;
+
+    $('#watchStop').onclick = () => { Store.updateMe({ following: null }); closeWatch(); };
+
+    maybeShowShot(pid, d);
+  }
+
+  /** Njegovi udarci — i oni koje je zadao i oni koje je primio. */
+  function hitRows(pid) {
+    const P = Store.players();
+    const nm = (id) => (P[id] ? P[id].name : T('unknown'));
+    const list = Object.values(Store.hits() || {})
+      .filter((h) => h.attackerId === pid || h.victimId === pid)
+      .sort((a, b) => b.atMs - a.atMs)
+      .slice(0, 15);
+    if (!list.length) return `<p class="dim tiny" style="margin:0">${esc(T('watchNoHits'))}</p>`;
+    return list.map((h) => {
+      const mine = h.attackerId === pid;
+      const what = h.missed ? T('missed') : `−${h.damage}`;
+      return `<div class="hit-row ${mine ? 'out' : 'in'}">
+        <span class="w">${icon(WEAPON_ICON[h.weapon] || 'hand', { size: 15 })}</span>
+        <span class="grow tiny">${esc(mine ? nm(h.attackerId) : nm(h.attackerId))} → ${esc(nm(h.victimId))}
+          · ${h.distanceM} m</span>
+        <b class="${h.missed ? 'dim' : mine ? 'goodc' : 'dangerc'}">${esc(what)}</b>
+      </div>`;
+    }).join('');
+  }
+
+  /** Kadar koji je praćeni igrač snimio kad je nekog pogodio — 2 s preko ekrana. */
+  function maybeShowShot(pid, d) {
+    const hits = Object.entries(Store.hits() || {})
+      .filter(([, h]) => h.attackerId === pid && h.photoRef && !h.missed)
+      .sort((a, b) => b[1].atMs - a[1].atMs);
+    if (!hits.length) return;
+    const [hid, h] = hits[0];
+    if (watchSeenHit === null) { watchSeenHit = hid; return; }   // prvi prolaz samo pamti
+    if (watchSeenHit === hid) return;
+    if (d.now - h.atMs > 15000) return;                          // ne prikazuj zastarelo
+    watchSeenHit = hid;
+
+    const box = $('#watchShot');
+    box.innerHTML = `<img src="${esc(h.photoRef)}" alt="">
+      <div class="dmg">−${h.damage}</div>
+      <div class="who">${esc((Store.players()[h.victimId] || {}).name || '')} · ${h.distanceM} m</div>`;
+    box.hidden = false;
+    Haptics.fire('hit'); Sfx.zap();
+    clearTimeout(watchShotTimer);
+    watchShotTimer = setTimeout(() => { box.hidden = true; }, 2000);
   }
 
   /* ═══════════════ mentor i gledalac (§17) ═══════════════ */
@@ -1833,6 +1963,7 @@ const UI = (() => {
     renderLobby, resetLobby, showQr, shareLink, arenaMapSheet, renderPrep, nextStep, get prepStep() { return prepStep; },
     set prepStep(v) { prepStep = v; }, renderDeploy, ensureMap, renderGame, inventorySheet,
     feedSheet, playersSheet, openAim, closeAim, testSheet, showSky, renderGhost, renderEnd, feedText,
+    renderWatch, openWatch, closeWatch,
     renderMentor, renderSettings, devMode,
     get gmap() { return gmap; },
     mentorLinkSheet(pid) {

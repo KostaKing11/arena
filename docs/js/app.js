@@ -268,6 +268,7 @@ const App = (() => {
     });
     Nav.on('lobby', () => leaveRoom());
     Nav.on('ghost', () => Screens.go('game'));
+    Nav.on('watch', () => UI.closeWatch());
     Nav.on('mentor', () => { /* mentor nema gde nazad */ });
     Nav.on('end', () => { });
     // Iz žive partije se ne izlazi slučajnim pritiskom
@@ -312,7 +313,8 @@ const App = (() => {
     if (s === 'END') { Screens.go('end'); UI.renderEnd(); return; }
 
     // nisanjenje je ekran koji se otvara namerno i sam se zatvara
-    if (Screens.cur === 'aim' || Screens.cur === 'ghost' || Screens.cur === 'sky' || Screens.cur === 'mentor') return;
+    if (Screens.cur === 'aim' || Screens.cur === 'ghost' || Screens.cur === 'watch'
+        || Screens.cur === 'sky' || Screens.cur === 'mentor') return;
     Screens.go('game');
   }
 
@@ -484,6 +486,7 @@ const App = (() => {
       if (s === 'deploy') UI.renderDeploy(d);
       else if (s === 'game') UI.renderGame(d);
       else if (s === 'ghost') UI.renderGhost(d);
+      else if (s === 'watch') UI.renderWatch(d);
       else if (s === 'mentor') UI.renderMentor(d);
       else if (s === 'lobby') { /* lobi se osvežava na promenu sobe */ }
       // §16 — obavezno wake lock dok igra traje
