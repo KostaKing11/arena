@@ -257,7 +257,7 @@ const Mentor = (() => {
     toast(T('cheered'), 'good', 'users');
   }
 
-  const mentorLinkFor = (code, pid) => `${location.origin}/arena/?room=${code}&mentor=${pid}`;
+  const mentorLinkFor = (code, pid) => `${appBase()}?room=${code}&mentor=${pid}`;
 
   return {
     claim, earn, sendPackage, cheer, mentorLinkFor, CHALLENGES,

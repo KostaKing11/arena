@@ -67,7 +67,15 @@
   border: 1.5px dashed color-mix(in srgb, var(--gold) 65%, transparent);
 }
 
-.setup-map { height: 260px; border-radius: var(--r-lg); overflow: hidden; border: 2px solid var(--line); background: var(--map-bg); }
+.setup-map { height: 260px; border-radius: var(--r-lg); overflow: hidden; border: 2px solid var(--line); background: var(--map-bg); position: relative; }
+/* Mapa u lobiju se pomera sa dva prsta — jedan prst lista lobi. Savet se
+   pojavi samo kad neko stvarno vuče jednim prstom. */
+.setup-map.needs-two::after {
+  content: attr(data-hint); position: absolute; inset: 0; z-index: 500;
+  display: grid; place-items: center; pointer-events: none;
+  background: rgba(6, 5, 10, .55); color: #fff; font-weight: 700;
+  font-size: var(--fs-sm); animation: fadeIn .12s ease;
+}
 /* Puna mapa arene — otvara se iz donjeg dugmeta "Mapa". */
 .arena-map { height: 58vh; min-height: 300px; border-radius: var(--r-lg); overflow: hidden; border: 2px solid var(--line); background: var(--map-bg); }
 .legend { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }

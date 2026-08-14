@@ -1,5 +1,5 @@
 /* UI kit: DOM sitnice, obaveštenja, fioke, tema. */
-const APP_VERSION = '0.9.3';
+const APP_VERSION = '0.9.4';
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const el = (tag, cls, html) => {
@@ -149,6 +149,13 @@ const Screens = {
     window.dispatchEvent(new CustomEvent('arena:screen', { detail: name }));
   },
 };
+
+/* Osnovna adresa aplikacije, izvedena iz trenutne stranice.
+   Ranije je svuda stajalo zakucano "/arena/", pa su svi deljeni linkovi na
+   lokalnom serveru vodili u 404, a iz /arena/test bi ispao /arena/test?room=. */
+function appBase() {
+  return location.origin + location.pathname.replace(/[^/]*$/, '');
+}
 
 /* ───────────────────────── razno ───────────────────────── */
 function fmtDist(m) {

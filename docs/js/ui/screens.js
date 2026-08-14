@@ -18,6 +18,9 @@ const UI = (() => {
 
   function maybeInstallModal() {
     if (isStandalone() || localStorage.getItem('arena.installChoice')) return;
+    /* Mentor dolazi na svoj lični link, gleda jednu partiju sa kauča i više se
+       nikad ne vraća — nema šta da instalira, a prozor je bez izlaza. */
+    if (new URLSearchParams(location.search).get('mentor')) return;
     const m = modal(`
       <div class="center stack-lg">
         <div style="color:var(--gold)">${icon('download', { size: 52 })}</div>
@@ -319,7 +322,8 @@ const UI = (() => {
   function wireHostConfig() {
     const cfg = Store.config();
     // Mapa se pravi jednom, u čvoru koji od sada niko ne prepisuje.
-    smap = makeMap('setupMap', { zoom: 15, noFog: true });
+    smap = makeMap('setupMap', { zoom: 15, noFog: true, inline: true });
+    $('#setupMap').dataset.hint = T('mapTwoFingers');
     smap.map.on('click', (e) => {
       smapCenter = { lat: e.latlng.lat, lng: e.latlng.lng };
       Store.hostUpdate('config', { center: smapCenter });
@@ -356,7 +360,7 @@ const UI = (() => {
   }
 
   function showQr() {
-    const url = `${location.origin}/arena/?room=${Store.code}`;
+    const url = `${appBase()}?room=${Store.code}`;
     let svg = '';
     try {
       const q = qrcode(0, 'M'); q.addData(url); q.make();
@@ -367,7 +371,7 @@ const UI = (() => {
       <p class="dim">${esc(T('scanQr'))}</p></div>`);
   }
   async function shareLink() {
-    const url = `${location.origin}/arena/?room=${Store.code}`;
+    const url = `${appBase()}?room=${Store.code}`;
     const text = `ARENA — ${T('roomCode')}: ${Store.code}\n${url}`;
     if (navigator.share) { try { await navigator.share({ title: 'ARENA', text, url }); return; } catch {} }
     try { await navigator.clipboard.writeText(text); toast(T('copied'), 'good', 'check'); } catch { toast(url); }
@@ -1721,14 +1725,20 @@ const UI = (() => {
      pravo gledanje — mapa koja ide za njim, njegovo stanje, spisak njegovih
      udaraca, i kadar koji je snimio kad nekog pogodi. */
   let wmap = null, watchFollow = true, watchSeenHit = null, watchShotTimer = 0;
+  /* Koga gledam držim i ovde, ne samo u bazi: `updateMe` je asinhron, a
+     `Engine.d` je snimak od pre upisa — pa je ekran gledanja na prvom crtanju
+     video staro `following: null` i istog trena se zatvarao. */
+  let watchPid = null;
 
   function openWatch(pid) {
+    watchPid = pid;
     Store.updateMe({ following: pid });
     watchSeenHit = null;                   // ne prikazuj stare kadrove pri ulasku
     Screens.go('watch');
     renderWatch(Engine.d);
   }
   function closeWatch() {
+    watchPid = null;
     clearTimeout(watchShotTimer);
     $('#watchShot').hidden = true;
     Screens.go('ghost');
@@ -1736,7 +1746,7 @@ const UI = (() => {
   }
 
   function renderWatch(d) {
-    const pid = (d.me || {}).following;
+    const pid = watchPid || (d.me || {}).following;
     const p = pid && Store.players()[pid];
     if (!p) { closeWatch(); return; }
 
@@ -1822,7 +1832,7 @@ const UI = (() => {
       const what = h.missed ? T('missed') : `−${h.damage}`;
       return `<div class="hit-row ${mine ? 'out' : 'in'}">
         <span class="w">${icon(WEAPON_ICON[h.weapon] || 'hand', { size: 15 })}</span>
-        <span class="grow tiny">${esc(mine ? nm(h.attackerId) : nm(h.attackerId))} → ${esc(nm(h.victimId))}
+        <span class="grow tiny">${esc(nm(h.attackerId))} → ${esc(nm(h.victimId))}
           · ${h.distanceM} m</span>
         <b class="${h.missed ? 'dim' : mine ? 'goodc' : 'dangerc'}">${esc(what)}</b>
       </div>`;

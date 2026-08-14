@@ -42,6 +42,27 @@ function makeMap(elId, opts) {
   map.on('move zoom', drawFog);
   setTimeout(() => map.invalidateSize(), 150);
 
+  /* Mapa usred stranice koja se skroluje (podešavanje arene u lobiju) gutala je
+     povlačenje prstom: umesto da se lista lobi, mapa se pomerala. Zato jedan
+     prst skroluje stranicu, a mapa se pomera sa dva — kao svuda drugde na vebu.
+     Tap i dalje bira centar, pa se glavni posao ne menja. */
+  if (opts.inline) {
+    const el = map.getContainer();
+    map.dragging.disable();
+    let hintT = 0;
+    el.addEventListener('touchstart', (e) => {
+      if (e.touches.length > 1) map.dragging.enable(); else map.dragging.disable();
+    }, { passive: true });
+    // savet se pojavi tek kad se vidi da neko VUČE jednim prstom, ne na tap
+    el.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 1) return;
+      el.classList.add('needs-two');
+      clearTimeout(hintT);
+      hintT = setTimeout(() => el.classList.remove('needs-two'), 1200);
+    }, { passive: true });
+    el.addEventListener('touchend', () => map.dragging.disable(), { passive: true });
+  }
+
   /* Magla rata je atmosfera, a NE pravilo — šta se stvarno vidi određuju podaci
      (Items.visible). Zato je otvor mnogo širi od dometa vida: ranije je pri
      vidu od 15 m rupa bila ~46 px na ekranu od 740, pa je mapa izgledala
