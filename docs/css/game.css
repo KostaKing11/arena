@@ -281,7 +281,7 @@
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   transition: transform .1s var(--ease), opacity .2s;
 }
-.aim-side[hidden] { display: none; }
+.aim-side.off { visibility: hidden; pointer-events: none; }
 .aim-side:active:not(:disabled) { transform: scale(.96); }
 .aim-side:disabled { opacity: .4; }
 .aim-side.ally { border-color: color-mix(in srgb, var(--good) 70%, transparent); color: var(--good-hi); }

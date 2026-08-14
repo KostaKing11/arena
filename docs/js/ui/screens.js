@@ -1241,7 +1241,7 @@ const UI = (() => {
 
     const ab = $('#aimAlly');
     const canAlly = !!target && !target.ally;
-    ab.hidden = !canAlly;
+    ab.classList.toggle('off', !canAlly);
     if (canAlly) {
       const near = target.distM <= R.ALLY_OFFER_M;
       ab.disabled = !near;
@@ -1254,7 +1254,7 @@ const UI = (() => {
     const sb = $('#aimSpecial');
     const sp = R.SPECIALS[me.classId];
     const showSp = !!sp && !me.specialUsedThisGame;
-    sb.hidden = !showSp;
+    sb.classList.toggle('off', !showSp);
     if (showSp) {
       const why = Attack.specialBlocked(d, target && target.pid, target && target.distM);
       sb.disabled = !!why;
