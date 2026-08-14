@@ -207,11 +207,14 @@ const Bots = (() => {
     }
   }
 
-  /** Dovedi bota tik uz mene — da se napad moze isprobati bez trcanja. */
+  /** Dovedi bota tik uz mene — da se napad moze isprobati bez trcanja.
+      Stavlja ga u pravcu u kom telefon trenutno gleda, da odmah upadne u
+      konus kamere; inace ga trazis okrecuci se u krug. */
   async function bring(pid, meters) {
     const pos = Geo.pos;
     if (!pos) return false;
-    const p = U.destPoint(pos, Math.random() * 360, meters == null ? 2 : meters);
+    const brg = Compass.heading != null ? Compass.heading : Math.random() * 360;
+    const p = U.destPoint(pos, brg, meters == null ? 2 : meters);
     await Store.ref(`players/${pid}`).update({
       pos: { lat: p.lat, lng: p.lng, accM: 5, atMs: Clock.now() },
     });
