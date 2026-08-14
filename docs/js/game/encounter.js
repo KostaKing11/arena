@@ -95,10 +95,16 @@ const Encounter = (() => {
     const now = Clock.now();
     // dokle vidiš zavisi od TVOG oružja — sa pesnicama nemaš šta da tražiš na 30 m
     const maxM = R.visibleRangeM(R.weaponOf(me));
+    /* Dim: u zoni od 20 m kamera ne detektuje NIKOGA — ni onog ko ju je
+       bacio. Zato se ovde izbacuju i meta u dimu i sve mete ako si ti u
+       dimu: nije pasivni buff nego zona u kojoj borbe nema. */
+    const smoke = R.smokeZones(Store.players(), now);
+    if (R.inSmoke(smoke, pos)) return { list: [], inSmoke: true };
     const out = [];
     for (const [pid, p] of Object.entries(Store.players())) {
       if (pid === Store.myId || p.alive === false || !p.pos) continue;
       if (p.hiddenUntilMs > now) continue;                 // kamuflažni ogrtač
+      if (R.inSmoke(smoke, p.pos)) continue;               // meta je u dimu
       if (p.classId === 'shadow' && p.allianceId !== me.allianceId) continue;   // Senka je nevidljiva (§5)
       const m = U.dist(pos, p.pos);
       if (m > maxM) continue;
@@ -111,7 +117,7 @@ const Encounter = (() => {
       });
     }
     out.sort((a, b) => a.angleDiff - b.angleDiff);
-    return { list: out, noHeading: heading == null };
+    return { list: out, noHeading: heading == null, inSmoke: false };
   }
 
   /* — savezi — */

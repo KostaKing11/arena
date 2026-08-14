@@ -123,14 +123,19 @@ function icon(name, opts) {
 
 /* Koja ikonica ide uz koji predmet / oružje. */
 const ITEM_ICON = {
-  berries: 'flask', mushrooms: 'flask', bread: 'meat', driedMeat: 'meat', feastMeal: 'meat',
-  supplyBelt: 'backpack', dirtyWater: 'droplet', waterBottle: 'droplet', juice: 'droplet',
+  berries: 'flask', mushrooms: 'flask', ration: 'meat', feastMeal: 'meat',
+  supplyBelt: 'backpack', dirtyWater: 'droplet', waterBottle: 'droplet',
   springWater: 'droplet', thermos: 'flask', herbs: 'flask', bandage: 'bandage',
-  antidote: 'flask', medkit: 'bandage', salve: 'bandage',
-  smallBag: 'backpack', backpack: 'backpack', bigBackpack: 'backpack',
+  antidote: 'flask', salve: 'bandage',
+  backpack: 'backpack',
   trapBasic: 'trap', trapAlarm: 'trap', trapTracker: 'trap', trapNet: 'net',
-  torch: 'torch', bigTorch: 'torch', binoculars: 'binoculars', smokeBomb: 'cloud',
-  ragePotion: 'flask', camoCloak: 'eyeOff', quiver: 'arrows', arrows: 'arrows',
+  // kamera i borba
+  flashFoil: 'sun', tripod: 'crosshair', smokeBomb: 'cloud',
+  adrenaline: 'flame', shield: 'shield',
+  // izviđanje i alat
+  torch: 'torch', compassItem: 'compass', flare: 'spark', binoculars: 'binoculars',
+  zoneMap: 'map', decoyBait: 'eyeOff',
+  camoCloak: 'eyeOff', quiver: 'arrows', arrows: 'arrows',
   wClub: 'club', wSling: 'sling', wNet: 'net', wSpear: 'spear', wAxe: 'axe',
   wBlowgun: 'blowgun', wBow: 'bow', wKnife: 'knife', wTrident: 'trident',
   spark: 'spark',

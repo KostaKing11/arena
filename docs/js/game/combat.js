@@ -13,20 +13,23 @@ const Attack = (() => {
   'use strict';
 
   /* — kontekst za anti-varanje (§10) — */
-  function ctxFor(d) {
+  function ctxFor(d, target) {
     return {
       nowMs: d.now,
       startedAtMs: Store.meta().startedAtMs,
       myAccM: Geo.accuracy,
       outsideZone: !!d.outsideZone,
       lastMoveMs: (d.me || {}).lastMoveMs,
+      // u dimu se niko ne detektuje u kadru — ni napadač ni meta
+      inSmoke: !!d.inSmoke,
+      targetInSmoke: !!(target && target.pos && R.inSmoke(d.smoke, target.pos)),
     };
   }
 
   /** Zašto napad nije moguć, ili null ako jeste. */
   function blockedReason(d, target) {
     if (!d.me) return 'dead';
-    return R.attackBlocked(d.me, target, ctxFor(d));
+    return R.attackBlocked(d.me, target, ctxFor(d, target));
   }
 
   /* — koliko još traje cooldown oružja, u sekundama — */
@@ -57,17 +60,32 @@ const Attack = (() => {
     upd.lastAttackAtMs = now;
     if (w.ammo === 'arrow') upd.arrows = Math.max(0, (me.arrows || 0) - 1);
 
+    // Stativ se troši na svaki ispaljen kadar, i kad pogodi i kad promaši
+    if (res.usedTripod) upd.tripodCharges = Math.max(0, (me.tripodCharges || 0) - 1);
+
     let hp = target.hp || 0;
+    let shielded = false;
     if (!res.miss) {
-      hp = Math.max(0, hp - res.dmg);
-      tUpd.hp = hp;
-      upd.damageDone = (me.damageDone || 0) + res.dmg;
-      upd.attacksLanded = (me.attacksLanded || 0) + 1;
-      if (res.entangle && !(R.CLASSES[target.classId] || {}).immuneToEntangle) {
-        tUpd.entangledUntilMs = now + R.ENTANGLE_MS;
+      /* Štit upija JEDAN napad u celosti, pa puca. Namerno pre svega
+         ostalog: ni otrov ni mreža ne prolaze kroz štit. */
+      if (target.hasShield) {
+        shielded = true;
+        tUpd.hasShield = null;
+        upd.attacksLanded = (me.attacksLanded || 0) + 1;
+      } else {
+        hp = Math.max(0, hp - res.dmg);
+        tUpd.hp = hp;
+        upd.damageDone = (me.damageDone || 0) + res.dmg;
+        upd.attacksLanded = (me.attacksLanded || 0) + 1;
+        if (res.entangle && !(R.CLASSES[target.classId] || {}).immuneToEntangle) {
+          tUpd.entangledUntilMs = now + R.ENTANGLE_MS;
+        }
+        // otrov se ne slaže, novi pogodak samo produžava trajanje;
+        // protivotrov daje 60 s imuniteta i za vreme njega otrov ne prima
+        if (res.poison && (target.poisonImmuneUntilMs || 0) <= now) {
+          tUpd.poisonUntilMs = now + R.POISON_MS;
+        }
       }
-      // otrov se ne slaže, novi pogodak samo produžava trajanje
-      if (res.poison) tUpd.poisonUntilMs = now + R.POISON_MS;
     } else {
       upd.attacksMissed = (me.attacksMissed || 0) + 1;
     }
@@ -78,22 +96,23 @@ const Attack = (() => {
     // svaki udarac je dokaz — feed duhovima i recap na kraju (§10, §11)
     await Store.pushHit({
       attackerId: Store.myId, victimId: targetId, weapon: w.id,
-      distanceM: Math.round(distM), damage: res.miss ? 0 : res.dmg,
-      missed: !!res.miss, special: opts.special || null, photoRef: opts.photo || null,
+      distanceM: Math.round(distM), damage: res.miss || shielded ? 0 : res.dmg,
+      missed: !!res.miss, shielded, special: opts.special || null, photoRef: opts.photo || null,
     });
 
     if (!res.miss) {
       // žrtva vidi ko ju je pogodio, čime i sa koje strane (§4)
       await Store.ref(`players/${targetId}/incomingHit`).set({
-        from: Store.myId, weapon: w.id, dmg: res.dmg, atMs: now,
-        distM: Math.round(distM),
+        from: Store.myId, weapon: w.id, dmg: shielded ? 0 : res.dmg, atMs: now,
+        distM: Math.round(distM), shielded,
         bearing: target.pos && me.pos ? U.bearing(target.pos, me.pos) : null,
         special: opts.special || null,
       });
     }
 
-    if (hp <= 0 && !res.miss) await kill(targetId, target);
-    return { hp, killed: hp <= 0 && !res.miss };
+    const killed = hp <= 0 && !res.miss && !shielded;
+    if (killed) await kill(targetId, target);
+    return { hp, killed, shielded };
   }
 
   /** Smrt: top svima, sve pada na mesto smrti, ubici +1 (§5). */

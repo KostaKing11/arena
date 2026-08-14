@@ -56,6 +56,19 @@ const App = (() => {
       }
     }
 
+    /* Povratak mentora bez linka: mentor nema svoj `players` čvor, pa bi mu
+       zatvaranje taba oduzelo mesto zauvek. Sesija se pamti lokalno. */
+    const ms = Mentor.session();
+    if (!room && ms && ms.room && ms.pid) {
+      const okw = await Store.watchRoom(ms.room);
+      if (okw) {
+        MODE = await Mentor.claim(ms.pid);
+        booted = true; Engine.start(); route();
+        return;
+      }
+      Mentor.clearSession();          // soba više ne postoji
+    }
+
     // Povratak u sobu se NE dešava sam — pitamo (§ traženo posle testiranja)
     if (Store.sess.code && Store.sess.pid) {
       const want = await askRejoin(Store.sess.code);
@@ -483,7 +496,8 @@ const App = (() => {
   });
 
   /* — ponude saveza i dolazeći hitac — */
-  let offerShown = null, shotShown = null, pkgShown = null, hitShown = null;
+  let offerShown = null, shotShown = null, pkgShown = null, hitShown = null, decoyShown = null;
+  let mentorShown;                           // undefined = jos nije bilo prvog prolaza
   function handleOffers(d) {
     const me = d.me;
     if (!me) return;
@@ -525,12 +539,36 @@ const App = (() => {
       hitShown = me.incomingHit.atMs;
       const h = me.incomingHit;
       const from = (Store.players()[h.from] || {}).name || T('unknown');
-      toast(`${T('hitBy')} ${weaponName(h.weapon)} ${T('fromDist')} ${h.distM} m — ${from}`, 'danger', 'swords');
-      Haptics.fire('hurt'); Sfx.hurt();
-      const flash = $('#zoneFlash');
-      if (flash) { flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go'); }
+      if (h.shielded) {
+        toast(T('shieldBroke'), 'gold', 'shield');
+        Haptics.fire('alert');
+      } else {
+        toast(`${T('hitBy')} ${weaponName(h.weapon)} ${T('fromDist')} ${h.distM} m — ${from}`, 'danger', 'swords');
+        Haptics.fire('hurt'); Sfx.hurt();
+        const flash = $('#zoneFlash');
+        if (flash) { flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go'); }
+      }
       Store.setMe('incomingHit', null);
     }
+
+    // neko je nagazio na tvoj mamac — jedina povratna informacija tog predmeta
+    if (me.decoyHit && decoyShown !== me.decoyHit.atMs) {
+      decoyShown = me.decoyHit.atMs;
+      toast(T('decoyHitMsg'), 'gold', 'eyeOff');
+      Haptics.fire('alert');
+      Store.setMe('decoyHit', null);
+    }
+
+    /* Neko je prihvatio tvoj poziv i postao ti mentor.
+       Prvi prolaz samo upamti zatečeno stanje — inače bi ti na svakom ulasku
+       u sobu iskakalo obaveštenje za mentora koga već odavno imaš. */
+    const men = me.mentorName || null;
+    if (mentorShown === undefined) mentorShown = men;
+    else if (men && men !== mentorShown) {
+      toast(`${T('mentorClaimed')}: ${men}`, 'good', 'users');
+      Haptics.fire('pickup');
+      mentorShown = men;
+    } else if (!men) mentorShown = null;
   }
   function compassName(b) {
     const C = LANG === 'en' ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] : ['sever', 'severoistok', 'istok', 'jugoistok', 'jug', 'jugozapad', 'zapad', 'severozapad'];

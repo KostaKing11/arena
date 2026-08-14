@@ -72,6 +72,30 @@
   background: linear-gradient(0deg, var(--ink-1) 45%, color-mix(in srgb, var(--ink-1) 70%, transparent) 78%, transparent);
 }
 
+/* Traka efekata sa trajanjem (§4).
+   Stoji iznad vitalnih i skroluje vodoravno kad ih ima previše — nikad ne
+   lomi red i nikad ne gura mapu, jer sedi u istoj koloni kao vitalni. */
+.fx-bar {
+  display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.fx-bar::-webkit-scrollbar { display: none; }
+.fx-bar[hidden] { display: none; }
+.fx {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 7px; border-radius: 999px;
+  font-size: var(--fs-xs); font-variant-numeric: tabular-nums; line-height: 1;
+  background: color-mix(in srgb, var(--ink-2) 88%, transparent);
+  border: 1px solid var(--line-2); color: var(--text-2);
+}
+.fx b { font-weight: 700; }
+.fx.gold   { color: var(--gold);   border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+.fx.good   { color: var(--good);   border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.fx.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+             animation: fxPulse 1.6s ease-in-out infinite; }
+@keyframes fxPulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .fx.danger { animation: none; } }
+
 /* vitalni u jednom redu */
 .vitals { display: flex; gap: var(--s2); }
 .vitalbox {

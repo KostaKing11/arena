@@ -9,11 +9,14 @@ const Items = (() => {
     const started = d.state === 'LIVE' || d.state === 'FINAL_TWO';
     if (!started) return [];
     const vis = (d.vision && d.vision.itemsM) || 15;
+    // vid za piće ne pada od žeđi — inače bi žeđ bila spirala iz koje se ne izlazi
+    const visDrink = (d.vision && d.vision.drinksM) || vis;
     const out = [];
     for (const [id, it] of Object.entries(Store.items())) {
       if (it.takenBy) continue;
       const dm = U.dist(pos, it);
-      if (dm > vis) continue;
+      const def = R.ITEMS[it.type];
+      if (dm > (def && def.type === 'drink' ? visDrink : vis)) continue;
       out.push({ id, ...it, distM: dm, inReach: dm <= R.PICKUP_RADIUS_M });
     }
     // Halucinacije od tracker osa: lažni predmeti koji nestanu kad priđeš (§15)
@@ -54,15 +57,21 @@ const Items = (() => {
     if (d.paused) return false;
     const me = d.me;
     if (!me || me.alive === false) return false;
+    // Mreža-zamka: 30 s ne možeš ni da napadaš ni da uzimaš (§9)
+    if ((me.cameraBlockedUntilMs || 0) > d.now) return false;
     return d.elapsedMs > R.NO_PICKUP_AFTER_START_MS;
   }
 
-  /* ───────────────── kupljenje po retkosti ───────────────── */
-  /** Vraća Promise<boolean> — da li je izazov položen. UI se crta ovde. */
+  /* ───────────────── uzimanje po TIPU predmeta ─────────────────
+     Ranije je retkost određivala način uzimanja, pa se voda uzimala isto kao
+     ranac. Sada cenu plaćaš u izloženosti, srazmerno težini predmeta:
+       tap     — hrana, piće, strele, sitni alat
+       hold3   — oružje, zamke, ranac, trajni bonusi
+       chest8  — legendarno i epska oružja: 8 s + JAVNA OBJAVA svima      */
+  /** Vraća Promise<boolean> — da li je uzimanje uspelo. UI se crta ovde. */
   function runPickup(item) {
-    const meta = R.RARITY[item.rarity];
-    if (meta.pick === 'tap') return Promise.resolve(true);
-    if (meta.pick === 'challenge') return challengePick(item);
+    const meta = R.pickupOf(item.type, Store.me(), Clock.now());
+    if (!meta.pickMs) return Promise.resolve(true);
     return holdPick(item, meta);
   }
 
@@ -107,66 +116,8 @@ const Items = (() => {
       window.addEventListener('pointercancel', up);
       $('#hrCancel', m).onclick = () => finish(false);
       m.addEventListener('remove', () => window.removeEventListener('pointerup', up));
-      // legendarno: svima ide objava da neko otvara sanduk (§12)
+      // sanduk: svima ide objava da ga neko otvara (§1)
       if (meta.announce) Store.pushFeed({ type: 'legendary', scope: 'all' });
-    });
-  }
-
-  /** Epsko: 5 tapova u ritmu ILI 3 protresanja telefona. */
-  function challengePick(item) {
-    return new Promise((res) => {
-      const m = modal(`
-        <div class="center stack-lg">
-          <div class="chip rar-epic" style="color:var(--rc);border-color:var(--rc)"><span class="rar-dot"></span>${esc(rarityName('epic'))}</div>
-          <h2>${esc(itemName(item.type))}</h2>
-          <div class="seg" id="chMode">
-            <button class="on" data-m="tap">${esc(T('pickupChallenge'))}</button>
-            <button data-m="shake">${esc(T('pickupShake'))}</button>
-          </div>
-          <div id="chStage" style="min-height:180px;display:grid;place-items:center"></div>
-          <button class="btn ghost full" id="chCancel">${esc(T('cancel'))}</button>
-        </div>`, { dismissible: false });
-
-      let done = false;
-      const finish = (ok) => { if (done) return; done = true; Shake.stop(); m.close(); res(ok); };
-      $('#chCancel', m).onclick = () => finish(false);
-
-      const stage = $('#chStage', m);
-      function tapMode() {
-        Shake.stop();
-        stage.innerHTML = `<div class="stack center" style="gap:var(--s4)">
-          <div class="display" id="chBeat" style="font-size:var(--fs-3xl)">0/5</div>
-          <button class="btn primary lg" id="chTap" style="width:170px;height:170px;border-radius:50%">${icon('hand', { size: 44 })}</button>
-        </div>`;
-        let hits = 0, last = 0, ivl = 600, t = setInterval(() => { Sfx.tick(); }, ivl);
-        const beat = setInterval(() => {}, ivl);
-        const t0 = performance.now();
-        $('#chTap', stage).onclick = () => {
-          const now = performance.now();
-          const phase = ((now - t0) % ivl) / ivl;
-          const good = phase < 0.28 || phase > 0.72;      // dovoljno blizu otkucaju
-          if (good) { hits++; Haptics.fire('tap'); } else { hits = Math.max(0, hits - 1); }
-          $('#chBeat', stage).textContent = `${hits}/5`;
-          if (hits >= 5) { clearInterval(t); clearInterval(beat); Haptics.fire('pickup'); finish(true); }
-        };
-        m.addEventListener('remove', () => { clearInterval(t); clearInterval(beat); });
-      }
-      async function shakeMode() {
-        stage.innerHTML = `<div class="stack center"><div class="display" id="chShake" style="font-size:var(--fs-3xl)">0/3</div>
-          <p class="dim">${esc(T('pickupShake'))}</p></div>`;
-        const ok = await Shake.start((n) => {
-          $('#chShake', stage).textContent = `${Math.min(3, n)}/3`;
-          Haptics.fire('tap');
-          if (n >= 3) { Haptics.fire('pickup'); finish(true); }
-        });
-        if (!ok) { toast(T('denied'), 'danger'); tapMode(); $$('#chMode button', m).forEach((b) => b.classList.toggle('on', b.dataset.m === 'tap')); }
-      }
-      $$('#chMode button', m).forEach((b) => b.onclick = () => {
-        $$('#chMode button', m).forEach((x) => x.classList.remove('on'));
-        b.classList.add('on');
-        b.dataset.m === 'tap' ? tapMode() : shakeMode();
-      });
-      tapMode();
     });
   }
 
@@ -177,6 +128,18 @@ const Items = (() => {
     const me = Store.me();
     const slots = R.slotsOf(me);
     const list = inv(me);
+
+    /* Mamac: izgleda kao legendarni sanduk, a nema ničega u njemu. Vlasnik
+       dobija obaveštenje da mu je neko upravo stao na tačku koju je izabrao. */
+    if (item.decoyFake) {
+      await Store.ref(`items/${item.id}`).remove();
+      if (item.ownerId && item.ownerId !== Store.myId) {
+        await Store.ref(`players/${item.ownerId}/decoyHit`).set({ atMs: Clock.now(), lat: item.lat, lng: item.lng });
+      }
+      Haptics.fire('hurt');
+      toast(T('decoyFooled'), 'danger', 'eyeOff');
+      return false;
+    }
 
     // oružje ide u svoj slot van inventara (§6)
     const def = R.ITEMS[item.type];
@@ -277,6 +240,7 @@ const Items = (() => {
     if (!def) return;
 
     if (def.trap) return setTrap(index, s);
+    if (def.decoy) return setDecoy(index, s);
 
     /* Borba v4 §9: nema više stanja borbe, pa je lečenje i jelo uvek dostupno —
        ali traje 3 s stajanja u mestu i prekida se ako se pomeriš preko 5 m.
@@ -289,26 +253,43 @@ const Items = (() => {
       if (!okHold) return;
     }
 
-    const patch = R.consume(me, s.itemType, Math.random);
+    const now = Clock.now();
+    const patch = R.consume(me, s.itemType, Math.random, now);
     const next = list.slice();
     if ((s.qty || 1) > 1) next[index] = { ...s, qty: s.qty - 1 };
     else next.splice(index, 1);
     patch.inv = next.map((x, i) => ({ slot: i, itemType: x.itemType, qty: x.qty || 1 }));
 
-    if (def.light) {
-      patch.effects = { ...(me.effects || {}) };
-      patch.effects[def.lightBonusM ? 'bigTorchUntil' : 'torchUntil'] = Clock.now() + def.light;
+    // Dim pamti GDE je bačen — iz toga svi telefoni računaju aktivne zone
+    if (def.smokeMs) {
+      const pos = Geo.pos;
+      if (!pos) { toast(T('noGps'), 'danger'); return; }
+      patch.smokeAt = { lat: pos.lat, lng: pos.lng };
     }
-    if (def.hideTrackersMs) { patch.effects = { ...(me.effects || {}), hideTrackersUntil: Clock.now() + def.hideTrackersMs }; }
-    if (def.hideAllMs) { patch.hiddenUntilMs = Clock.now() + def.hideAllMs; }
-    if (def.rageFirstRound) { patch.effects = { ...(me.effects || {}), rage: true }; }
+    // Signalna raketa: otkriva te 30 s, ali mentor odmah dobija jedan paket
+    if (def.freePackage) await Store.pushFeed({ type: 'flare', subjectId: Store.myId, scope: 'all' });
     if (s.itemType === 'dirtyWater') patch.dirtyWaterDrunk = (me.dirtyWaterDrunk || 0) + 1;
 
     const msg = patch._msg; delete patch._msg;
     await Store.updateMe(patch);
-    if (msg === 'poisoned') { toast(T('diedFrom') + ': ' + itemName(s.itemType), 'danger', 'alert'); Haptics.fire('hurt'); }
+    if (msg === 'poisoned') { toast(T('gotPoisoned'), 'danger', 'alert'); Haptics.fire('hurt'); }
     else { toast(itemName(s.itemType), 'good', ITEM_ICON[s.itemType]); Sfx.pickup(); }
     if (patch.hp <= 0) Engine.die('poison');
+  }
+
+  /* Mamac: lažni sanduk koji svima izgleda legendarno. Jedini predmet koji
+     pravi razlog da neko negde ode — a to je ono što IRL igra treba da radi. */
+  async function setDecoy(index, s) {
+    const me = Store.me(), pos = Geo.pos;
+    if (!pos) { toast(T('noGps'), 'danger'); return; }
+    const list = inv(me), next = list.slice();
+    if ((s.qty || 1) > 1) next[index] = { ...s, qty: s.qty - 1 }; else next.splice(index, 1);
+    await Store.ref(`items/${U.uid('k')}`).set({
+      type: 'feastMeal', rarity: 'legendary', lat: pos.lat, lng: pos.lng,
+      spawnedAtMs: Clock.now(), dropped: true, decoyFake: true, ownerId: Store.myId,
+    });
+    await Store.updateMe({ inv: next.map((x, i) => ({ slot: i, itemType: x.itemType, qty: x.qty || 1 })) });
+    toast(T('decoySet'), 'gold', 'eyeOff');
   }
 
   async function drop(index) {
@@ -335,31 +316,53 @@ const Items = (() => {
     toast(T('trapSet'), 'gold', 'trap');
   }
 
+  /* Koliko dugo stojim u kojoj zamci — lokalno, ne ide u bazu.
+     Zamka okida tek posle 5 s neprekidnog zadržavanja u krugu od 15 m:
+     stari radijus od 10 m je bio unutar same greške GPS-a, pa su zamke
+     okidale na ljude koji nisu ni prišli. */
+  const dwell = new Map();
+
   /** Provera da li sam upao u tuđu zamku — svaki igrač je proverava sam. */
   async function checkTraps(d) {
     const pos = Geo.pos, me = d.me;
-    if (!pos || !me || me.alive === false) return;
+    if (!pos || !me || me.alive === false) { dwell.clear(); return; }
+    const now = d.now;
+    const live = new Set();
+
     for (const [tid, t] of Object.entries(Store.traps())) {
       if (t.triggeredBy || t.ownerId === Store.myId) continue;
-      if (U.dist(pos, t) > 10) continue;
+      if (U.dist(pos, t) > R.TRAP_RADIUS_M) continue;
+      live.add(tid);
+      if (!dwell.has(tid)) { dwell.set(tid, now); continue; }        // tek sam ušao
+      if (now - dwell.get(tid) < R.TRAP_DWELL_MS) continue;          // još se nisam zadržao
+      dwell.delete(tid);
+
       await Store.ref(`traps/${tid}/triggeredBy`).set(Store.myId);
       const mul = t.power || 1;
       if (t.type === 'basic') {
-        const hp = Math.max(0, me.hp - Math.round(18 * mul));
+        const hp = Math.max(0, me.hp - Math.round(Math.abs(R.ITEMS.trapBasic.hp) * mul));
         await Store.updateMe({ hp });
         Haptics.fire('hurt'); Sfx.hurt();
-        toast(T('trapHit'), 'danger', 'trap');
-        if (hp <= 0) Engine.die('trap', t.ownerId);
+        if (hp <= 0) { Engine.die('trap', t.ownerId); return; }
       } else if (t.type === 'alarm') {
-        await Store.updateMe({ revealedUntilMs: Clock.now() + 8000 });
+        await Store.updateMe({ revealedUntilMs: now + R.ITEMS.trapAlarm.revealMs });
         await Store.pushFeed({ type: 'alarm', subjectId: Store.myId, scope: 'all' });
       } else if (t.type === 'tracker') {
-        await Store.updateMe({ trackedBy: t.ownerId, trackedUntilMs: Clock.now() + 300000 });
+        await Store.updateMe({ trackedBy: t.ownerId, trackedUntilMs: now + R.ITEMS.trapTracker.trackMs });
       } else if (t.type === 'net') {
-        await Store.updateMe({ cannotFleeUntilMs: Clock.now() + 600000 });
+        /* Popravljeno: stara mreža je pisala `cannotFleeUntilMs`, a to je čitao
+           samo Combat.flee kog više nema. Pošto se sada napada kamerom,
+           „uhvaćen u mrežu" prirodno znači da ti kamera ne radi — pa ne možeš
+           ni da napadaš ni da uzimaš predmete. To je priprema za ubistvo,
+           što je i bila prvobitna namera predmeta. */
+        await Store.updateMe({ cameraBlockedUntilMs: now + R.ITEMS.trapNet.blocksCameraMs });
+        if (t.ownerId) await Store.ref(`players/${t.ownerId}/nettedTarget`).set({ id: Store.myId, untilMs: now + R.ITEMS.trapNet.blocksCameraMs });
       }
+      Haptics.fire('hurt');
       toast(T('trapHit'), 'danger', 'trap');
     }
+    // izašao si iz kruga pre nego što je isteklo → brojanje kreće iz početka
+    for (const tid of [...dwell.keys()]) if (!live.has(tid)) dwell.delete(tid);
   }
 
   /** Zamke koje vidim: svoje uvek, tuđe samo Zamkar na 10 m. */
@@ -376,5 +379,5 @@ const Items = (() => {
     return out;
   }
 
-  return { visible, nearest, pickupAllowed, runPickup, take, use, drop, inv, checkTraps, visibleTraps, swapDialog, sparks, collectSpark };
+  return { visible, nearest, pickupAllowed, runPickup, take, use, drop, inv, checkTraps, visibleTraps, swapDialog, sparks, collectSpark, setDecoy };
 })();

@@ -174,6 +174,7 @@ const UI = (() => {
         <button class="btn sm ghost" id="btnLeaveLobby">${esc(T('leaveRoom'))}</button>
       </div>
       <div class="list" id="lobbyList"></div>
+      <div class="card stack" id="mentorCard"></div>
       ${hostHtml}`;
 
     $('#btnLeaveLobby').onclick = () => App.leaveRoom();
@@ -207,9 +208,9 @@ const UI = (() => {
       list.innerHTML = order.map((id) => playerCard(id, P[id])).join('');
       const av = $('#lobbyMyAvatar');
       if (av) av.onclick = () => avatarBuilder({ onSave: () => Store.updateMe({ avatar: myAvatar }) });
-      const mb = $('#lobbyMentor');
-      if (mb) mb.onclick = () => UI.mentorLinkSheet(Store.myId);
     }
+
+    updateMentorCard();
 
     if (!host) return;
     const ready = ids.every((id) => P[id].isBot || P[id].ready);
@@ -251,18 +252,68 @@ const UI = (() => {
   function playerCard(id, p) {
     const mine = id === Store.myId;
     const isHost = Store.meta().hostId === id;
-    const men = (Store.mentors() || {})[id] || {};
     const avatar = p.isBot ? icon('settings', { size: 24 }) : avatarSvg(p.avatar, 44);
     return `<div class="player-row${mine ? ' mine' : ''}">
         <div class="avatar${mine ? ' tapable' : ''}" ${mine ? 'id="lobbyMyAvatar"' : ''}
           style="width:44px;height:44px">${avatar}</div>
         <div class="grow"><div class="name">${esc(p.name)}${mine ? ' · ' + esc(T('you')) : ''}</div>
           ${isHost ? `<div class="tiny goldc">${esc(T('youAreHost'))}</div>` : ''}</div>
-        ${mine ? `<button class="btn sm ghost" id="lobbyMentor">${icon('users', { size: 16 })}<span>${esc(T('mentorTitle'))}</span></button>` : ''}
-      </div>`
-      // mentor nema lika — manja kartica odmah ispod tvoje (§17)
-      + (mine && men.mentorId ? `<div class="mentor-row">${icon('users', { size: 16 })}
-          <span class="grow"><b>${esc(men.name || T('mentorTitle'))}</b> · ${esc(T('yourMentor'))}</span></div>` : '');
+      </div>`;
+  }
+
+  /* ═══════════════ poziv mentora — iz LOBIJA ═══════════════
+     Ranije se do mentorskog linka dolazilo samo kroz podešavanja nasred žive
+     partije: pet koraka, od kojih se tri dešavaju dok trčiš napolju. Niko to
+     nikad nije uradio, pa mentore niko nije ni video. Lobi je jedini trenutak
+     kad svi stoje na istom mestu, sa vremenom u rukama. */
+  function updateMentorCard() {
+    const card = $('#mentorCard');
+    if (!card) return;
+    const me = Store.me() || {};
+    const men = (Store.mentors() || {})[Store.myId] || {};
+    const name = me.mentorName || men.name;
+    const has = !!men.mentorId;
+
+    card.innerHTML = `<div class="card-title">${esc(T('yourMentorTitle'))}</div>`
+      + (has
+        ? `<div class="row">
+             <span class="goldc">${icon('users', { size: 22 })}</span>
+             <div class="grow"><div class="big" style="font-weight:800">${esc(name || T('mentorTitle'))}</div>
+               <div class="tiny dim">${esc(T('yourMentor'))}</div></div>
+             <button class="btn sm ghost" id="mentorChange">${esc(T('changeMentor'))}</button>
+           </div>`
+        : `<p class="tiny dim" style="margin:0">${esc(T('mentorQrBody'))}</p>
+           <button class="btn primary full" id="mentorInvite">
+             ${icon('qr', { size: 20 })}<span>${esc(T('inviteMentor'))}</span></button>`);
+
+    const inv = $('#mentorInvite', card);
+    if (inv) inv.onclick = () => mentorInviteSheet();
+    const ch = $('#mentorChange', card);
+    if (ch) ch.onclick = async () => {
+      if (!(await confirmBox(T('changeMentorAsk'), T('changeMentor'), true))) return;
+      await Store.mentorRef(Store.myId).remove();
+      await Store.updateMe({ mentorName: null });
+      mentorInviteSheet();
+    };
+  }
+
+  /** QR + link, isti oblik kao `showQr()` za sobu. */
+  function mentorInviteSheet() {
+    const url = Mentor.mentorLinkFor(Store.code, Store.myId);
+    let svg = '';
+    try {
+      const q = qrcode(0, 'M'); q.addData(url); q.make();
+      svg = q.createSvgTag({ cellSize: 6, margin: 2 });
+    } catch { svg = ''; }
+    const s = sheet(T('inviteMentor'), `
+      <div class="qr-wrap">${svg}
+        <p class="dim">${esc(T('mentorQrBody'))}</p></div>
+      <div class="card" style="word-break:break-all;font-size:var(--fs-sm)">${esc(url)}</div>
+      <button class="btn primary lg full" id="mlCopy" style="margin-top:var(--s3)">${esc(T('copyMentorLink'))}</button>`);
+    $('#mlCopy', s).onclick = async () => {
+      try { await navigator.clipboard.writeText(url); toast(T('copied'), 'good', 'check'); } catch {}
+      if (navigator.share) { try { await navigator.share({ title: 'ARENA', url }); } catch {} }
+    };
   }
 
   function wireHostConfig() {
@@ -581,9 +632,11 @@ const UI = (() => {
     gmap.setVision((d.vision && d.vision.itemsM) || 15);
     gmap.setFull(me.alive === false || d.state === 'FINAL_TWO');
     if (pos) gmap.setMe(pos, Compass.heading);
-    if (d.zone) gmap.drawZone(d.zone, d.cfg);
+    // Karta zone: najavni prsten se pali 5 min ranije nego inače
+    if (d.zone) gmap.drawZone({ ...d.zone, peek: (me.zonePeekUntilMs || 0) > d.now }, d.cfg);
     gmap.drawFire(d.firewall);
     gmap.drawWasps(d.wasps);
+    gmap.drawSmoke(d.smoke);
     // duhovi umesto plena vide iskre (§16)
     const ghost = me.alive === false;
     const drawn = ghost
@@ -606,12 +659,15 @@ const UI = (() => {
 
     $('#dangerVig').classList.toggle('on', !!d.outsideZone || !!d.inFire || !!d.inWasps);
 
-    // vitalni
+    // vitalni — prag upozorenja prati prag kazne (§3), ne proizvoljnih 25
     const maxHp = me.maxHp || 100;
+    const lowAt = R.SURVIVAL.lowThreshold;
     $('#vitals').innerHTML =
       vitalBox('hp', 'heart', me.hp || 0, maxHp, (me.hp || 0) < 25) +
-      vitalBox('hunger', 'meat', me.hunger || 0, 100 + (me.maxHungerBonus || 0), (me.hunger || 0) < 25) +
-      vitalBox('thirst', 'droplet', me.thirst || 0, 100 + (me.maxThirstBonus || 0), (me.thirst || 0) < 25);
+      vitalBox('hunger', 'meat', me.hunger || 0, 100 + (me.maxHungerBonus || 0), (me.hunger || 0) < lowAt) +
+      vitalBox('thirst', 'droplet', me.thirst || 0, 100 + (me.maxThirstBonus || 0), (me.thirst || 0) < lowAt);
+
+    renderEffects(d);
 
     // kompas traka sa oznakama
     renderCompass(d);
@@ -657,12 +713,55 @@ const UI = (() => {
     // koristimo ga da se i na njoj vidi kretanje, a ne zamrznuta slika.
     if (amap) {
       if (pos) amap.setMe(pos, Compass.heading);
-      if (d.zone) amap.drawZone(d.zone, d.cfg);
+      if (d.zone) amap.drawZone({ ...d.zone, peek: (me.zonePeekUntilMs || 0) > d.now }, d.cfg);
       amap.drawPlayers(visiblePlayers(d, true));
       amap.drawItems(Items.visible(d), null);
       amap.drawFire(d.firewall);
       amap.drawWasps(d.wasps);
+      amap.drawSmoke(d.smoke);
     }
+  }
+
+  /* ═══════════════ traka efekata sa trajanjem ═══════════════
+     Sedam predmeta traje X minuta, a do sada nigde nije pisalo koliko je
+     ostalo. Šta god da se doda u budućnosti, dovoljno je da uđe u
+     R.TIMED_EFFECTS — ovde se ne dira ništa.
+
+     Uz efekte stoje i dve kazne od preživljavanja (slep/slab), jer se i one
+     ponašaju kao stanje koje igrač mora da vidi da bi znao zašto promašuje. */
+  function renderEffects(d) {
+    const bar = $('#fxBar');
+    if (!bar) return;
+    const chips = (d.effects || []).map((e) => {
+      const left = e.charges != null ? `×${e.charges}` : U.mmss(Math.max(0, e.leftMs / 1000));
+      return `<span class="fx ${e.tone}" title="${esc(T('fx_' + e.id))}">
+        ${icon(e.icon, { size: 13 })}<b>${esc(left)}</b></span>`;
+    });
+    const pen = d.penalty || {};
+    if (pen.parched) chips.unshift(`<span class="fx danger" title="${esc(T('fxParched'))}">${icon('eyeOff', { size: 13 })}<b>${esc(T('fxParchedShort'))}</b></span>`);
+    if (pen.starving) chips.unshift(`<span class="fx danger" title="${esc(T('fxStarving'))}">${icon('meat', { size: 13 })}<b>−25%</b></span>`);
+
+    /* Mentor nije efekat sa trajanjem nego stalno stanje — stoji prvi u traci,
+       bez odbrojavača, samo da igrač zna da neko gleda i da mu može poslati
+       paket. Bez ovoga igrač nema pojma da mentora uopšte ima. */
+    const men = (d.me || {}).mentorName;
+    if (men) {
+      chips.unshift(`<span class="fx gold" id="fxMentor" title="${esc(T('yourMentor'))}">
+        ${icon('users', { size: 13 })}<b>${esc(men)}</b></span>`);
+    }
+
+    bar.innerHTML = chips.join('');
+    bar.hidden = !chips.length;
+    const fm = $('#fxMentor', bar);
+    if (fm) fm.onclick = () => {
+      const m = modal(`<div class="center stack">
+        <div class="goldc">${icon('users', { size: 44 })}</div>
+        <h2>${esc(T('yourMentorTitle'))}</h2>
+        <p class="big" style="font-weight:800">${esc(men)}</p>
+        <p class="dim tiny">${esc(T('mentorWatching'))}</p>
+        <button class="btn primary full" id="fmOk">${esc(T('ok'))}</button></div>`);
+      $('#fmOk', m).onclick = () => m.close();
+    };
   }
 
   /* Ko se uopšte vidi na mapi (§5).
@@ -691,6 +790,19 @@ const UI = (() => {
       const strongVisible = fullMap && (R.CLASSES[p.classId] || {}).alwaysVisible;
       const revealed = p.revealedUntilMs > now || (p.trackedBy === Store.myId && p.trackedUntilMs > now);
       if (strongVisible || revealed || (d.state === 'FINAL_TWO')) { out.push({ id: pid, lat: p.pos.lat, lng: p.pos.lng, kind: 'foe' }); continue; }
+      /* Baklja i ranac su jedina dva predmeta koja te ODAJU. Svetlo znači da
+         ti vidiš, ali i da tebe vide — jedini tradeoff koji je istinit i
+         uživo, i jedini razlog da baklju iko ikad ugasi. */
+      const selfM = R.selfRevealM(p, now);
+      if (selfM && dist <= selfM) { out.push({ id: pid, lat: p.pos.lat, lng: p.pos.lng, kind: 'foe' }); continue; }
+      /* Durbin: 15 s vidiš igrače u konusu ±25° u pravcu u kom držiš telefon.
+         Stari durbin je dizao samo vid za PREDMETE (15 → 20 m) i bio najslabiji
+         „retko" u igri; ovaj traži da staneš i da pogodiš pravac. */
+      const scope = R.ITEMS.binoculars;
+      if ((me.scopeUntilMs || 0) > now && dist <= scope.scopeM && pos && Compass.heading != null
+          && Math.abs(U.angleDiff(Compass.heading, U.bearing(pos, p.pos))) <= scope.scopeConeDeg) {
+        out.push({ id: pid, lat: p.pos.lat, lng: p.pos.lng, kind: 'foe' }); continue;
+      }
       if (cls.playerVisionM && dist <= cls.playerVisionM) out.push({ id: pid, lat: p.pos.lat, lng: p.pos.lng, kind: 'foe' });
     }
     return out;
@@ -780,6 +892,25 @@ const UI = (() => {
     strip.style.transform = `translateX(${compassW / 2 - (h + 180) * compassPpd}px)`;
   }
 
+  /* Smer ka najbližem živom protivniku, zamrznut na 30 s.
+     Da se računa svaki otkucaj, strelica bi treperila i pretvorila se u
+     radar; ovako je snimak star do pola minuta — dovoljno da te uputi, ne i
+     da ti neko pobegne ispred nosa. */
+  let nearestSnap = { atMs: 0, brg: null };
+  function nearestBearing(d, pos) {
+    const item = R.ITEMS.compassItem;
+    if (d.now - nearestSnap.atMs < item.nearestRefreshMs) return nearestSnap.brg;
+    let best = Infinity, brg = null;
+    for (const [pid, p] of Object.entries(Store.players())) {
+      if (pid === Store.myId || p.alive === false || !p.pos) continue;
+      if (p.allianceId && p.allianceId === d.me.allianceId) continue;
+      const m = U.dist(pos, p.pos);
+      if (m < best) { best = m; brg = U.bearing(pos, p.pos); }
+    }
+    nearestSnap = { atMs: d.now, brg };
+    return brg;
+  }
+
   function renderCompass(d) {
     const c = $('#compass');
     const h = Compass.heading;
@@ -804,6 +935,12 @@ const UI = (() => {
     };
     if (pos && d.zone && d.outsideZone) mark(U.bearing(pos, d.zone.center), 'var(--danger)', 'target');
     if (pos && d.me && d.state === 'PREP' && d.me.startPos) mark(U.bearing(pos, d.me.startPos), 'var(--gold)', 'pin');
+    /* Kompas tributa: strelica ka najbližem igraču, BEZ razdaljine, i osvežava
+       se tek na 30 s. Namerno je grub — daje ti pravac, ne rešenje. */
+    if (pos && d.me && (d.me.nearestArrowUntilMs || 0) > d.now) {
+      const brg = nearestBearing(d, pos);
+      if (brg != null) mark(brg, 'var(--gold)', 'navigation');
+    }
     if (pos && d.me) {
       for (const [pid, p] of Object.entries(Store.players())) {
         if (pid === Store.myId || !p.pos || p.alive === false) continue;
@@ -1238,6 +1375,7 @@ const UI = (() => {
       dead: T('targetDead'), grace: T('blockGrace'), zone: T('blockZone'),
       gps: T('blockGps'), gpsTarget: T('blockGpsTarget'), stale: T('blockStale'),
       cooldown: T('blockCooldown'), entangled: T('blockEntangled'),
+      netted: T('blockNetted'), smoke: T('blockSmoke'), smokeTarget: T('blockSmokeTarget'),
       ammo: T('noArrows'), nocone: T('photoNoneInCone'),
     })[why] || T('aimBlocked');
   }
@@ -1355,13 +1493,19 @@ const UI = (() => {
         if (held.miss) { showMiss(held.reason); return; }
 
         const me = Store.me();
-        const res = R.attackDamage(me, held.distM, { betrayal: target.ally });
+        const res = R.attackDamage(me, held.distM, {
+          betrayal: target.ally,
+          nowMs: Clock.now(),
+          // Blic-folija na meti obara snimak sa daljine; Stativ je probija
+          targetFlashUntilMs: target.p && target.p.flashUntilMs,
+        });
         const out = await Attack.land(d, target.pid, held.distM, res, { photo: conf.photo });
         if (target.ally) {
           await Store.updateMe({ allianceId: null });
           await Store.pushFeed({ type: 'betrayal', subjectId: Store.myId, targetId: target.pid, scope: 'all' });
         }
-        if (res.miss) showMiss('close');
+        if (res.miss) showMiss(res.reason || 'close');
+        else if (out && out.shielded) { flash(T('shieldBroke'), 'var(--gold)'); Haptics.fire('alert'); toast(T('shieldBroke'), 'gold', 'shield'); }
         else showHit(res.dmg, out && out.killed);
       } finally { aimBusy = false; drawAim(); }
     };
@@ -1377,8 +1521,9 @@ const UI = (() => {
   function showMiss(reason) {
     flash(T('missed'), 'var(--text-2)');
     Haptics.fire('alert');
-    const why = reason === 'dodged' ? T('missDodged') : reason === 'moved' ? T('missMoved') : T('missClose');
-    toast(why, 'gold', 'alert');
+    const why = reason === 'dodged' ? T('missDodged') : reason === 'moved' ? T('missMoved')
+      : reason === 'flash' ? T('missFlash') : T('missClose');
+    toast(why, 'gold', reason === 'flash' ? 'sun' : 'alert');
   }
   /* Broj štete preko ekrana, 1,5 s (§3).
 

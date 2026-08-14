@@ -20,15 +20,29 @@ const Mentor = (() => {
   const favor = () => rec().favor || 0;
   const sent = () => rec().packagesSent || 0;
 
+  /* Mentorska sesija se pamti lokalno: mentor nema `players/{pid}` čvor, pa bi
+     mu zatvaranje taba značilo da je izgubio mesto zauvek. */
+  const SESS = 'arena.mentor';
+  const saveSession = (room, pid) => {
+    try { localStorage.setItem(SESS, JSON.stringify({ room, pid })); } catch {}
+  };
+  const session = () => {
+    try { return JSON.parse(localStorage.getItem(SESS) || 'null'); } catch { return null; }
+  };
+  const clearSession = () => { try { localStorage.removeItem(SESS); } catch {} };
+
   /** Pokušaj da preuzmeš mesto mentora; ako je zauzeto, postaješ gledalac. */
   async function claim(pid) {
     targetPid = pid;
     const t = await Store.mentorRef(pid).child('mentorId').transaction((cur) => (cur == null ? myId : undefined));
     // Ime ide uz mesto mentora — bez njega igraču u lobiju piše samo "mentor".
     if (t.committed) {
-      const nm = (localStorage.getItem('arena.name') || '').trim().slice(0, 16);
-      await Store.mentorRef(pid).child('name').set(nm || T('mentorTitle'));
+      const nm = (localStorage.getItem('arena.name') || '').trim().slice(0, 16) || T('mentorTitle');
+      await Store.mentorRef(pid).child('name').set(nm);
+      // i na igračev čvor, da igrač u igri vidi da mentora uopšte ima
+      await Store.ref(`players/${pid}/mentorName`).set(nm);
     }
+    saveSession(Store.code, pid);
     if (t.committed) { mode = 'mentor'; return 'mentor'; }
     const cur = t.snapshot.val();
     mode = cur === myId ? 'mentor' : 'spectator';
@@ -201,14 +215,22 @@ const Mentor = (() => {
     const p = target();
     if (!p || !p.pos) return;
     const cost = R.packageCost(sent());
-    if (!R.canAffordTier(tier, sent(), favor())) { toast(T('notEnoughFavor'), 'danger'); return; }
-    const last = rec().lastPackageMs || 0;
-    if (Clock.now() - last < R.PACKAGE_COOLDOWN_MS) {
-      toast(`${T('packageCooldown')} ${U.mmss((last + R.PACKAGE_COOLDOWN_MS - Clock.now()) / 1000)}`, 'gold');
-      return;
+    /* Signalna raketa: igrač se otkrio svima na 30 s i time kupio jedan paket
+       koji ne košta naklonost i ne čeka hlađenje. To je ceo trejd tog predmeta
+       — čist rizik za nagradu, i jedina veza predmeta sa mentorskim sistemom. */
+    const freebie = !!p.freePackage;
+    if (!freebie) {
+      if (!R.canAffordTier(tier, sent(), favor())) { toast(T('notEnoughFavor'), 'danger'); return; }
+      const last = rec().lastPackageMs || 0;
+      if (Clock.now() - last < R.PACKAGE_COOLDOWN_MS) {
+        toast(`${T('packageCooldown')} ${U.mmss((last + R.PACKAGE_COOLDOWN_MS - Clock.now()) / 1000)}`, 'gold');
+        return;
+      }
+      const t = await Store.mentorRef(targetPid).child('favor').transaction((c) => ((c || 0) >= cost ? c - cost : undefined));
+      if (!t.committed) { toast(T('notEnoughFavor'), 'danger'); return; }
+    } else {
+      await Store.ref(`players/${targetPid}/freePackage`).remove();
     }
-    const t = await Store.mentorRef(targetPid).child('favor').transaction((c) => ((c || 0) >= cost ? c - cost : undefined));
-    if (!t.committed) { toast(T('notEnoughFavor'), 'danger'); return; }
 
     const pool = R.PACKAGE_TIERS[tier].items;
     const type = pool[Math.floor(Math.random() * pool.length)];
@@ -239,6 +261,7 @@ const Mentor = (() => {
 
   return {
     claim, earn, sendPackage, cheer, mentorLinkFor, CHALLENGES,
+    session, clearSession,
     get mode() { return mode; }, get targetPid() { return targetPid; },
     get myId() { return myId; }, target, favor, sent, rec,
   };

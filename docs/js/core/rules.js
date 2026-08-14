@@ -80,71 +80,107 @@
     medic:    { id: 'potion',     heal: 70, maxM: 15, canTargetAlly: true },
   };
 
-  /* ═══════════════════ 12. PREDMETI ═══════════════════ */
+  /* ═══════════════════ 12. PREDMETI (v5) ═══════════════════
+     Retkost više NE određuje kako se predmet uzima — samo boju i bazen u kom
+     se izvlači. Ranije se voda uzimala isto kao ranac zato što su oboje bili
+     „retko"; jedini pravi resurs u igri koja se igra napolju je koliko dugo
+     stojiš u mestu na otvorenom, pa ga treba trošiti po TEŽINI predmeta. */
   const RARITY = {
-    common:    { i: 0, stack: 3, pickMs: 0,     pick: 'tap' },
-    uncommon:  { i: 1, stack: 2, pickMs: 3000,  pick: 'hold' },
-    rare:      { i: 2, stack: 1, pickMs: 6000,  pick: 'hold', cancelOnMove: true },
-    epic:      { i: 3, stack: 1, pickMs: 0,     pick: 'challenge' },
-    legendary: { i: 4, stack: 1, pickMs: 10000, pick: 'hold', cancelOnMove: true, announce: true },
+    common:    { i: 0 },
+    uncommon:  { i: 1 },
+    rare:      { i: 2 },
+    epic:      { i: 3 },
+    legendary: { i: 4 },
   };
 
-  // pool: 'scatter' | 'corn' | 'both'  (§13 — šta gde može da se pojavi)
+  /* Tri klase uzimanja. `chest8` je jedini koji javlja svima gde si. */
+  const PICKUP = {
+    tap:    { id: 'tap',    pickMs: 0,    cancelOnMove: false },
+    hold3:  { id: 'hold3',  pickMs: 3000, cancelOnMove: true, moveM: 6 },
+    chest8: { id: 'chest8', pickMs: 8000, cancelOnMove: true, moveM: 6, announce: true },
+  };
+  /** Kako se ovaj predmet uzima, uz Adrenalin koji prepolovljava držanje. */
+  function pickupOf(itemType, p, nowMs) {
+    const it = ITEMS[itemType];
+    const base = PICKUP[(it && it.pickup) || 'tap'] || PICKUP.tap;
+    if (base.pickMs && p && (p.adrenalineUntilMs || 0) > (nowMs || 0)) {
+      return { ...base, pickMs: Math.round(base.pickMs * 0.5) };
+    }
+    return base;
+  }
+
+  // pool: 'scatter' | 'corn' | 'both' | 'none'  (§13 — šta gde može da se pojavi)
+  // 'none' = postoji kao predmet ali ga generator NIKAD ne izvuče (mamac).
   const ITEMS = {
-    // — hrana —
-    // Osnovne namirnice stoje i u kornukopiji: tabela retkosti joj daje 20%
-    // običnih predmeta, pa mora da ima šta da se izvuče.
-    berries:    { type: 'food',  rarity: 'common',    pool: 'both',    hunger: 20, poisonChance: 0.05, poisonHp: 10 },
-    mushrooms:  { type: 'food',  rarity: 'uncommon',  pool: 'scatter', hunger: 30, poisonChance: 0.15, poisonHp: 20 },
-    bread:      { type: 'food',  rarity: 'uncommon',  pool: 'both',    hunger: 35 },
-    driedMeat:  { type: 'food',  rarity: 'rare',      pool: 'both',    hunger: 55 },
-    feastMeal:  { type: 'food',  rarity: 'legendary', pool: 'corn',    hunger: 100 },
-    supplyBelt: { type: 'pack',  rarity: 'epic',      pool: 'corn',    maxHunger: 30 },
-    // — piće —
-    dirtyWater: { type: 'drink', rarity: 'common',    pool: 'both',    thirst: 25, hp: -8 },
-    waterBottle:{ type: 'drink', rarity: 'uncommon',  pool: 'both',    thirst: 40 },
-    juice:      { type: 'drink', rarity: 'uncommon',  pool: 'both',    thirst: 30, hunger: 15 },
-    springWater:{ type: 'drink', rarity: 'rare',      pool: 'both',    thirst: 70 },
-    thermos:    { type: 'pack',  rarity: 'epic',      pool: 'corn',    maxThirst: 30 },
-    // — lečenje —
-    herbs:      { type: 'heal',  rarity: 'common',    pool: 'both',    heal: 15, medicDouble: true },
-    bandage:    { type: 'heal',  rarity: 'uncommon',  pool: 'both',    heal: 25 },
-    antidote:   { type: 'heal',  rarity: 'rare',      pool: 'both',    curesPoison: true },
-    medkit:     { type: 'heal',  rarity: 'epic',      pool: 'corn',    heal: 60 },
-    // Jedini legendarni predmet koji se nađe i u divljini — tabela rasutog
-    // plena ima 1% legendarnih, a veliki ranac je po specifikaciji samo u
-    // kornukopiji, pa taj procenat pripada masti.
-    salve:      { type: 'heal',  rarity: 'legendary', pool: 'both',    healFull: true },
-    // — rančevi —
-    smallBag:   { type: 'pack',  rarity: 'rare',      pool: 'both',    slots: 5 },
-    backpack:   { type: 'pack',  rarity: 'epic',      pool: 'corn',    slots: 7 },
-    bigBackpack:{ type: 'pack',  rarity: 'legendary', pool: 'corn',    slots: 9 },
-    // — zamke —
-    trapBasic:  { type: 'trap',  rarity: 'uncommon',  pool: 'scatter', trap: 'basic',   hp: -18 },
-    trapAlarm:  { type: 'trap',  rarity: 'rare',      pool: 'both',    trap: 'alarm',   revealMs: 8000 },
-    trapTracker:{ type: 'trap',  rarity: 'epic',      pool: 'both',    trap: 'tracker', trackMs: 300000 },
-    trapNet:    { type: 'trap',  rarity: 'epic',      pool: 'both',    trap: 'net',     blocksFlee: true },
-    // — alat —
-    torch:      { type: 'tool',  rarity: 'common',    pool: 'both',    light: 480000 },
-    bigTorch:   { type: 'tool',  rarity: 'rare',      pool: 'both',    light: 900000, lightBonusM: 6 },
-    binoculars: { type: 'tool',  rarity: 'rare',      pool: 'both',    visionM: 20 },
-    smokeBomb:  { type: 'tool',  rarity: 'rare',      pool: 'both',    hideTrackersMs: 180000 },
-    ragePotion: { type: 'tool',  rarity: 'epic',      pool: 'both',    rageFirstRound: true },
-    camoCloak:  { type: 'tool',  rarity: 'epic',      pool: 'corn',    hideAllMs: 300000 },
-    quiver:     { type: 'tool',  rarity: 'rare',      pool: 'both',    quiver: true },
-    arrows:     { type: 'ammo',  rarity: 'uncommon',  pool: 'scatter', arrows: 3 },
-    // — oružja kao predmeti —
-    wClub:    { type: 'weapon', rarity: 'common',    pool: 'scatter', weapon: 'club' },
-    wSling:   { type: 'weapon', rarity: 'common',    pool: 'scatter', weapon: 'sling' },
-    wNet:     { type: 'weapon', rarity: 'uncommon',  pool: 'both',    weapon: 'net' },
-    wSpear:   { type: 'weapon', rarity: 'rare',      pool: 'corn',    weapon: 'spear' },
-    wAxe:     { type: 'weapon', rarity: 'rare',      pool: 'corn',    weapon: 'axe' },
-    wBlowgun: { type: 'weapon', rarity: 'rare',      pool: 'corn',    weapon: 'blowgun' },
-    wBow:     { type: 'weapon', rarity: 'epic',      pool: 'corn',    weapon: 'bow' },
-    wKnife:   { type: 'weapon', rarity: 'epic',      pool: 'corn',    weapon: 'knife' },
-    wTrident: { type: 'weapon', rarity: 'legendary', pool: 'corn',    weapon: 'trident' },
+    /* ── hrana (5) ─────────────────────────────────────────────────────────
+       Hleb i sušeno meso su spojeni u Obrok: bili su isti predmet sa dva
+       broja. Bobicama je skinuta 5% šansa za trovanje — nevidljiva kazna
+       koja ne pravi odluku. Pečurke sada UVEK truju, ali najbolje hrane od
+       svega rasutog: to jeste odluka. */
+    berries:    { type: 'food',  rarity: 'common',    pool: 'scatter', pickup: 'tap',    hunger: 20 },
+    mushrooms:  { type: 'food',  rarity: 'uncommon',  pool: 'scatter', pickup: 'tap',    hunger: 40, poisonsAlways: true },
+    ration:     { type: 'food',  rarity: 'uncommon',  pool: 'both',    pickup: 'tap',    hunger: 45 },
+    feastMeal:  { type: 'food',  rarity: 'legendary', pool: 'corn',    pickup: 'chest8', hunger: 100, thirst: 50, bigItem: true },
+    supplyBelt: { type: 'pack',  rarity: 'epic',      pool: 'corn',    pickup: 'hold3',  maxHunger: 30 },
+    /* ── piće (4) ── Sok izbačen: bio je mešavina hleba i vode. */
+    dirtyWater: { type: 'drink', rarity: 'common',    pool: 'both',    pickup: 'tap',    thirst: 25, hp: -8 },
+    waterBottle:{ type: 'drink', rarity: 'uncommon',  pool: 'both',    pickup: 'tap',    thirst: 45 },
+    springWater:{ type: 'drink', rarity: 'rare',      pool: 'both',    pickup: 'tap',    thirst: 70 },
+    thermos:    { type: 'pack',  rarity: 'epic',      pool: 'corn',    pickup: 'hold3',  maxThirst: 30 },
+    /* ── lečenje (4) ── Medkit izbačen (stepenik između zavoja i masti),
+       zavoj podignut 25 → 35 da pokrije rupu. */
+    herbs:      { type: 'heal',  rarity: 'common',    pool: 'both',    pickup: 'tap',    heal: 15, medicDouble: true },
+    bandage:    { type: 'heal',  rarity: 'uncommon',  pool: 'both',    pickup: 'tap',    heal: 35 },
+    antidote:   { type: 'heal',  rarity: 'rare',      pool: 'both',    pickup: 'tap',    curesPoison: true, poisonImmuneMs: 60000 },
+    salve:      { type: 'heal',  rarity: 'legendary', pool: 'both',    pickup: 'tap',    healFull: true, curesPoison: true },
+    /* ── ranac (1) ── Tri ranca („važi najveći") su bili jedan predmet
+       napisan tri puta. Ostaje jedan, ali sa cenom: krupan je i vidi te se. */
+    backpack:   { type: 'pack',  rarity: 'epic',      pool: 'corn',    pickup: 'hold3',  slots: 7, bulkyVisibleM: 50, bigItem: true },
+    /* ── zamke (4) ── */
+    trapBasic:  { type: 'trap',  rarity: 'uncommon',  pool: 'scatter', pickup: 'hold3',  trap: 'basic',   hp: -20 },
+    trapAlarm:  { type: 'trap',  rarity: 'rare',      pool: 'both',    pickup: 'hold3',  trap: 'alarm',   revealMs: 8000 },
+    trapTracker:{ type: 'trap',  rarity: 'epic',      pool: 'both',    pickup: 'hold3',  trap: 'tracker', trackMs: 300000 },
+    // Mreža je popravljena: pošto se napada kamerom, „uhvaćen" = kamera ne radi.
+    trapNet:    { type: 'trap',  rarity: 'epic',      pool: 'both',    pickup: 'hold3',  trap: 'net',     blocksCameraMs: 30000 },
+    /* ── kamera i borba (5) — NOVA KATEGORIJA ───────────────────────────────
+       Najveća rupa stare liste: borba je prešla na fotografisanje i daljinu,
+       a nijedan predmet to nije dirao. */
+    flashFoil:  { type: 'combat', rarity: 'rare', pool: 'both', pickup: 'tap',   flashMs: 60000, flashOverM: 15 },
+    tripod:     { type: 'combat', rarity: 'rare', pool: 'corn', pickup: 'tap',   tripodCharge: true },
+    smokeBomb:  { type: 'combat', rarity: 'rare', pool: 'both', pickup: 'tap',   smokeMs: 60000, smokeRadiusM: 20 },
+    // ex-Napitak besa: `rageFirstRound` je čitao samo stari openFight.
+    adrenaline: { type: 'combat', rarity: 'epic', pool: 'both', pickup: 'tap',   adrenalineMs: 90000 },
+    shield:     { type: 'combat', rarity: 'epic', pool: 'corn', pickup: 'hold3', shield: true, bigItem: true },
+    /* ── izviđanje i alat (8) ──────────────────────────────────────────────
+       Baklja sada otkriva TEBE — jedini tradeoff koji je istinit i uživo, i
+       jedini razlog da je iko ikad ugasi. Velika baklja izbačena. */
+    torch:      { type: 'tool', rarity: 'common',   pool: 'both',    pickup: 'tap',   light: 480000, lightBonusM: 6, revealsM: 100 },
+    compassItem:{ type: 'tool', rarity: 'uncommon', pool: 'both',    pickup: 'tap',   nearestArrowMs: 300000, nearestRefreshMs: 30000 },
+    flare:      { type: 'tool', rarity: 'uncommon', pool: 'both',    pickup: 'tap',   flareRevealMs: 30000, freePackage: true },
+    // Durbin je bio najslabiji „retko" u igri (vid za PREDMETE 15 → 20 m).
+    // Sada daje vid na IGRAČE, ali samo u pravcu telefona i samo 15 s.
+    binoculars: { type: 'tool', rarity: 'rare',     pool: 'both',    pickup: 'tap',   scopeM: 60, scopeConeDeg: 25, scopeMs: 15000 },
+    zoneMap:    { type: 'tool', rarity: 'rare',     pool: 'both',    pickup: 'tap',   zonePeekMs: 300000 },
+    decoyBait:  { type: 'tool', rarity: 'rare',     pool: 'both',    pickup: 'hold3', decoy: true },
+    quiver:     { type: 'tool', rarity: 'rare',     pool: 'scatter', pickup: 'hold3', quiver: true },
+    camoCloak:  { type: 'tool', rarity: 'epic',     pool: 'corn',    pickup: 'tap',   hideAllMs: 300000 },
+    arrows:     { type: 'ammo', rarity: 'uncommon', pool: 'scatter', pickup: 'tap',   arrows: 3 },
+    /* ── oružja kao predmeti (9) ── epska i legendarno idu kroz sanduk ── */
+    wClub:    { type: 'weapon', rarity: 'common',    pool: 'scatter', pickup: 'hold3',  weapon: 'club' },
+    wSling:   { type: 'weapon', rarity: 'common',    pool: 'scatter', pickup: 'hold3',  weapon: 'sling' },
+    wNet:     { type: 'weapon', rarity: 'uncommon',  pool: 'both',    pickup: 'hold3',  weapon: 'net' },
+    wSpear:   { type: 'weapon', rarity: 'rare',      pool: 'corn',    pickup: 'hold3',  weapon: 'spear' },
+    wAxe:     { type: 'weapon', rarity: 'rare',      pool: 'corn',    pickup: 'hold3',  weapon: 'axe' },
+    wBlowgun: { type: 'weapon', rarity: 'rare',      pool: 'corn',    pickup: 'hold3',  weapon: 'blowgun' },
+    wBow:     { type: 'weapon', rarity: 'epic',      pool: 'corn',    pickup: 'chest8', weapon: 'bow' },
+    wKnife:   { type: 'weapon', rarity: 'epic',      pool: 'corn',    pickup: 'chest8', weapon: 'knife' },
+    wTrident: { type: 'weapon', rarity: 'legendary', pool: 'corn',    pickup: 'chest8', weapon: 'trident' },
   };
   const ITEM_IDS = Object.keys(ITEMS);
+  /** Predmeti koje generator sme da izvuče — mamac se samo postavlja. */
+  const SPAWNABLE_IDS = ITEM_IDS.filter((id) => ITEMS[id].pool !== 'none');
+  // Obnavljaju se samo hrana i piće. Oružja, ranac, zamke, alat i cela
+  // kategorija „kamera" se NE obnavljaju — inače prestaju da budu retki.
   const isRenewable = (id) => ITEMS[id] && (ITEMS[id].type === 'food' || ITEMS[id].type === 'drink');
 
   /* ═══════════════════ 2. PREPORUKE ZA LOBI ═══════════════════ */
@@ -208,15 +244,38 @@
   const SPARK_COSTS = Object.fromEntries(Object.entries(EVENTS).map(([k, v]) => [k, v.spark]));
   const GM_COOLDOWN_MS = 240000;
 
-  /* ═══════════════════ 11. GLAD, ŽEĐ, HP ═══════════════════ */
+  /* ═══════════════════ 11. GLAD, ŽEĐ, HP (v5) ═══════════════════
+     Ranije su glad i žeđ radile identično, pa su hrana i piće bili zamenljivi
+     i inventar se svodio na „nosi bilo šta jestivo". Sada su asimetrični:
+
+       ŽEĐ  pada brzo (~10 min) i kad padne ispod 30% SLEPIŠ — radijus vida
+            na minimapi pada na 10 m. Hitna je, tera te da se krećeš.
+       GLAD pada sporo (~15 min) i kad padne ispod 30% SLABIŠ — šteta −25%.
+            Strateška je: možeš je odložiti, ali ulaziš u sukob oslabljen.  */
   const SURVIVAL = {
-    thirstSecPerPoint: 7,
-    hungerSecPerPoint: 11,
+    thirstSecPerPoint: 6,          // 100 × 6 s = 10 min
+    hungerSecPerPoint: 9,          // 100 × 9 s = 15 min
     thirstHpSec: 20, thirstHpAmount: 2,
     hungerHpSec: 30, hungerHpAmount: 2,
+    bothEmptyHpSec: 30, bothEmptyHpAmount: 5,   // oba na nuli boli više od zbira
+    lowThreshold: 30,              // ispod ovoga počinju kazne
+    lowThirstVisionM: 10,          // slep: minimapa sa 15 m pada na 10 m
+    lowHungerDmgMul: 0.75,         // slab: šteta −25%
     lowWarn: 25,
     baseMax: 100, capMax: 150,
   };
+
+  /** Kazne od niske gladi/žeđi. Čista funkcija — koriste je i borba i vid. */
+  function survivalPenalty(p) {
+    const hunger = p && p.hunger != null ? p.hunger : 100;
+    const thirst = p && p.thirst != null ? p.thirst : 100;
+    return {
+      dmgMul: hunger < SURVIVAL.lowThreshold ? SURVIVAL.lowHungerDmgMul : 1,
+      visionCapM: thirst < SURVIVAL.lowThreshold ? SURVIVAL.lowThirstVisionM : 0,
+      starving: hunger < SURVIVAL.lowThreshold,
+      parched: thirst < SURVIVAL.lowThreshold,
+    };
+  }
 
   /**
    * Primeni protok vremena na igrača (§0.5 — iz proteklog vremena, ne tajmerom).
@@ -236,8 +295,12 @@
     if (!ctx || !ctx.frozen) {
       thirst = Math.max(0, thirst - (sec / SURVIVAL.thirstSecPerPoint) * mul * thirstMul);
       hunger = Math.max(0, hunger - (sec / SURVIVAL.hungerSecPerPoint) * mul);
-      if (thirst <= 0) hp -= (sec / SURVIVAL.thirstHpSec) * SURVIVAL.thirstHpAmount;
-      if (hunger <= 0) hp -= (sec / SURVIVAL.hungerHpSec) * SURVIVAL.hungerHpAmount;
+      if (thirst <= 0 && hunger <= 0) {
+        hp -= (sec / SURVIVAL.bothEmptyHpSec) * SURVIVAL.bothEmptyHpAmount;
+      } else {
+        if (thirst <= 0) hp -= (sec / SURVIVAL.thirstHpSec) * SURVIVAL.thirstHpAmount;
+        if (hunger <= 0) hp -= (sec / SURVIVAL.hungerHpSec) * SURVIVAL.hungerHpAmount;
+      }
     }
 
     // Šteta od zone — Snagator trpi upola (§5)
@@ -247,9 +310,14 @@
     }
     // Traker ose (§15)
     if (ctx && ctx.inWasps && !ctx.frozen) hp -= (sec / 10) * EVENTS.wasps.dmgPer10s;
-    // Otrov od duvaljke traje i 2 min posle borbe (§8)
-    if (ctx && ctx.poisonedUntilMs && ctx.nowMs < ctx.poisonedUntilMs && !ctx.frozen) {
-      hp -= (sec / 10) * 3;
+    /* Otrov od duvaljke. Polje se zove `poisonUntilMs` — isto ime koje piše
+       Attack.land i koje briše Protivotrov. Ranije je ovde stajalo
+       `poisonedUntilMs` (sa D), a borba je pisala `poisonUntilMs`, pa
+       protivotrov nije skidao otrov od duvaljke. Uživo otrov otkucava
+       Attack.tick, pa mu engine namerno NE prosleđuje ovaj ključ — inače bi
+       se šteta brojala dvaput. Ostaje zbog testova i simulacije. */
+    if (ctx && ctx.poisonUntilMs && ctx.nowMs < ctx.poisonUntilMs && !ctx.frozen) {
+      hp -= (sec / 10) * POISON_DMG;
     }
 
     out.hunger = hunger; out.thirst = thirst; out.hp = Math.max(0, hp);
@@ -378,7 +446,7 @@
   const CORN_RADIUS_M = 40, EDGE_MARGIN_M = 20;
 
   function itemsOfPool(pool, rarity) {
-    return ITEM_IDS.filter((id) => {
+    return SPAWNABLE_IDS.filter((id) => {
       const it = ITEMS[id];
       return it.rarity === rarity && (it.pool === pool || it.pool === 'both');
     });
@@ -447,7 +515,7 @@
     for (let i = 0; i < n; i++) {
       const p = U.pointInCircle(rng, center, 70, 20);
       const rarity = U.weighted(rng, { uncommon: 40, rare: 35, epic: 20, legendary: 5 });
-      const pool = ITEM_IDS.filter((id) => ITEMS[id].rarity === rarity);
+      const pool = SPAWNABLE_IDS.filter((id) => ITEMS[id].rarity === rarity);
       out.push({ id: `h${bucket}_${i}`, type: U.pick(rng, pool), rarity, lat: p.lat, lng: p.lng, fake: true });
     }
     return out;
@@ -460,9 +528,9 @@
   const CHEER_FAVOR = 0.5, CHEER_COOLDOWN_MS = 600000;
   const PACKAGE_TIERS = {
     water:    { minCost: 1, items: ['waterBottle', 'springWater'] },
-    food:     { minCost: 1, items: ['bread', 'driedMeat'] },
-    medkit:   { minCost: 3, items: ['medkit', 'bandage'] },
-    backpack: { minCost: 3, items: ['smallBag', 'backpack'] },
+    food:     { minCost: 1, items: ['ration', 'berries'] },
+    medkit:   { minCost: 3, items: ['bandage', 'antidote'] },
+    backpack: { minCost: 3, items: ['backpack', 'supplyBelt', 'thermos'] },
     weapon:   { minCost: 6, items: ['wSpear', 'wAxe', 'wBow', 'wKnife', 'wBlowgun', 'wTrident'] },
   };
   const packageCost = (sent) => PACKAGE_COSTS[Math.min(sent || 0, PACKAGE_COSTS.length - 1)];
@@ -544,21 +612,39 @@
    */
   function attackDamage(attacker, distM, opts) {
     opts = opts || {};
+    const now = opts.nowMs || 0;
     const w = opts.weapon || weaponOf(attacker);
     const state = rangeState(w, distM);
     if (state === 'far') return { miss: true, dmg: 0, state, weapon: w.id, reason: 'far' };
 
     const rng = opts.rng || Math.random;
-    if (state === 'close' && !opts.ignoresRangePenalty && rng() < CLOSE_MISS_CHANCE) {
+    /* Adrenalin (ex-Napitak besa) skida kaznu za preblizu — u borbi v4 to je
+       ekvivalent onoga što je „prva runda duplo" značilo u staroj borbi. */
+    const adrenaline = (attacker && attacker.adrenalineUntilMs || 0) > now;
+    const tripod = (attacker && attacker.tripodCharges || 0) > 0;
+    const ignoresRange = opts.ignoresRangePenalty || adrenaline;
+
+    /* Blic-folija: meta je oblepljena reflektujućom folijom, pa snimak sa
+       daljine ne valja. Stativ (i samo stativ) to probija — to je jedini
+       par predmeta u igri koji se direktno kontrira. */
+    const flashOverM = ITEMS.flashFoil.flashOverM;
+    if (opts.targetFlashUntilMs > now && distM > flashOverM && !tripod) {
+      return { miss: true, dmg: 0, state, weapon: w.id, reason: 'flash' };
+    }
+    if (state === 'close' && !ignoresRange && rng() < CLOSE_MISS_CHANCE) {
       return { miss: true, dmg: 0, state, weapon: w.id, reason: 'close' };
     }
     let dmg = w.dmg;
     if (ownsWeapon(attacker)) dmg += OWN_WEAPON_BONUS;
-    if (state === 'close' && !opts.ignoresRangePenalty) dmg *= CLOSE_DMG_MUL;
+    if (state === 'close' && !ignoresRange) dmg *= CLOSE_DMG_MUL;
     if (opts.betrayal) dmg *= BETRAYAL_MUL;
+    // Gladan si → slabiji si. Traka gladi konačno nešto znači pre nego što padne na nulu.
+    dmg *= survivalPenalty(attacker).dmgMul;
+    if (tripod) dmg *= 2;
     return {
       miss: false, dmg: Math.max(1, Math.round(dmg)), state, weapon: w.id,
       poison: !!w.poison, entangle: !!w.entangle,
+      usedTripod: tripod, adrenaline,
     };
   }
 
@@ -577,6 +663,11 @@
     if (ctx.lastMoveMs && now - ctx.lastMoveMs > STALE_MS) return 'stale';
     if ((attacker.weaponCooldownUntilMs || 0) > now) return 'cooldown';
     if ((attacker.entangledUntilMs || 0) > now) return 'entangled';
+    // Mreža-zamka: napadaš kamerom, pa „uhvaćen u mrežu" znači da kamera ne radi
+    if ((attacker.cameraBlockedUntilMs || 0) > now) return 'netted';
+    // U dimu se niko ne detektuje u kadru — ni ti, ni meta
+    if (ctx.inSmoke) return 'smoke';
+    if (ctx.targetInSmoke) return 'smokeTarget';
     const w = weaponOf(attacker);
     if (w.ammo === 'arrow' && (attacker.arrows || 0) <= 0) return 'ammo';
     return null;
@@ -597,8 +688,16 @@
     return Math.max(0, ticks) * POISON_DMG;
   }
   /* ═══════════════════ 12/13. INVENTAR ═══════════════════ */
-  const BASE_SLOTS = 4, PICKUP_RADIUS_M = 10;
+  // 10 m je u gradu unutar same greške GPS-a (5–20 m između zgrada), pa je
+  // radijus uzimanja podignut na 12 m.
+  const BASE_SLOTS = 4, PICKUP_RADIUS_M = 12;
   const ITEM_RESPAWN_MS = 90000, ITEM_MOVE_MS = 600000, NO_PICKUP_AFTER_START_MS = 10000;
+
+  /* Zamke: radijus 15 m, ali okidaju tek posle 5 s NEPREKIDNOG zadržavanja.
+     Stari radijus od 10 m je bio unutar greške GPS-a, pa su zamke okidale na
+     ljude koji nisu ni prišli. Uslov zadržavanja filtrira i drift i prolaznike,
+     a tematski je bolji: zamka hvata onog ko se zadržava, ne onog ko projuri. */
+  const TRAP_RADIUS_M = 15, TRAP_DWELL_MS = 5000;
 
   function slotsOf(p) {
     const cls = CLASSES[p && p.classId];
@@ -606,9 +705,13 @@
     if (cls && cls.extraSlots) s += cls.extraSlots;
     return s;
   }
+  /* Stack po TIPU, ne po retkosti: hrana i piće 3 po slotu, sve ostalo 1.
+     Jasnije je i lakše se objasni igraču od „obično 3, neobično 2, retko 1". */
+  const STACKABLE = { food: 3, drink: 3, ammo: 3 };
   function stackLimit(itemType) {
     const it = ITEMS[itemType];
-    return it ? RARITY[it.rarity].stack : 1;
+    if (!it || it.bigItem) return 1;
+    return STACKABLE[it.type] || 1;
   }
   /** Gde staje novi predmet? {mode:'stack'|'slot'|'full', index} */
   function fitItem(inv, itemType, slots) {
@@ -621,21 +724,22 @@
     return { mode: 'full' };
   }
 
-  /** Efekat konzumiranja predmeta — vraća izmene igrača. */
-  function consume(p, itemType, rng) {
+  /**
+   * Efekat konzumiranja predmeta — vraća izmene igrača.
+   * `nowMs` je potreban za sve predmete sa trajanjem (kamera, alat).
+   */
+  function consume(p, itemType, rng, nowMs) {
     const it = ITEMS[itemType];
     if (!it) return null;
     const cls = CLASSES[p.classId] || {};
+    const now = nowMs || 0;
     const out = {};
     const maxHunger = SURVIVAL.baseMax + (p.maxHungerBonus || 0);
     const maxThirst = SURVIVAL.baseMax + (p.maxThirstBonus || 0);
     let hp = p.hp, msg = null;
 
     if (it.hunger) out.hunger = Math.min(maxHunger, (p.hunger || 0) + it.hunger);
-    if (it.thirst) {
-      let t = it.thirst;
-      out.thirst = Math.min(maxThirst, (p.thirst || 0) + t);
-    }
+    if (it.thirst) out.thirst = Math.min(maxThirst, (p.thirst || 0) + it.thirst);
     if (it.hp) {
       // Sakupljaču prljava voda ne škodi (§5)
       const safe = it === ITEMS.dirtyWater && cls.dirtyWaterSafe;
@@ -648,37 +752,144 @@
       hp += h;
     }
     if (it.healFull) hp = p.maxHp;
-    if (it.curesPoison) out.poisonedUntilMs = 0;
-    if (it.poisonChance && (rng || Math.random)() < it.poisonChance) {
-      hp -= it.poisonHp; msg = 'poisoned';
+
+    /* Protivotrov briše ISTO polje koje piše borba (`poisonUntilMs`) i daje
+       60 s imuniteta — inače je preuzak predmet za retkost „retko". */
+    if (it.curesPoison) {
+      out.poisonUntilMs = null;
+      if (it.poisonImmuneMs) out.poisonImmuneUntilMs = now + it.poisonImmuneMs;
     }
+    /* Pečurke uvek truju: nije 15% da te zezne, nego siguran trošak za
+       najveću količinu hrane u divljini. Imunitet od protivotrova drži. */
+    if (it.poisonsAlways && (p.poisonImmuneUntilMs || 0) <= now) {
+      out.poisonUntilMs = now + POISON_MS;
+      msg = 'poisoned';
+    }
+
     if (it.maxHunger) out.maxHungerBonus = Math.min(50, (p.maxHungerBonus || 0) + it.maxHunger);
     if (it.maxThirst) out.maxThirstBonus = Math.min(50, (p.maxThirstBonus || 0) + it.maxThirst);
     if (it.slots) out.capacity = Math.max(p.capacity || BASE_SLOTS, it.slots);
+    // Ranac je krupan: od trenutka kad ga obučeš vidi te se na 50 m, trajno.
+    if (it.bulkyVisibleM) out.bulkyVisibleM = it.bulkyVisibleM;
     if (it.arrows) out.arrows = (p.arrows || 0) + it.arrows;
     if (it.quiver) out.hasQuiver = true;
-    if (it.visionM) out.visionBonusM = Math.max(p.visionBonusM || 0, it.visionM - 15);
+
+    /* — kamera i borba — */
+    if (it.flashMs) out.flashUntilMs = now + it.flashMs;
+    if (it.tripodCharge) out.tripodCharges = (p.tripodCharges || 0) + 1;
+    if (it.adrenalineMs) out.adrenalineUntilMs = now + it.adrenalineMs;
+    if (it.shield) out.hasShield = true;
+    /* Dim se pamti na igraču koji ga je bacio, sa mestom i rokom — tako svaki
+       telefon može da izračuna sve aktivne zone iz spiska igrača, bez novog
+       čvora u bazi koji bi trebalo posebno sinhronizovati. */
+    if (it.smokeMs) {
+      out.smokeUntilMs = now + it.smokeMs;
+      out.smokeRadiusM = it.smokeRadiusM;
+    }
+
+    /* — izviđanje i alat — */
+    if (it.light) out.torchUntilMs = now + it.light;
+    if (it.nearestArrowMs) out.nearestArrowUntilMs = now + it.nearestArrowMs;
+    if (it.scopeMs) out.scopeUntilMs = now + it.scopeMs;
+    if (it.zonePeekMs) out.zonePeekUntilMs = now + it.zonePeekMs;
+    if (it.hideAllMs) out.hiddenUntilMs = now + it.hideAllMs;
+    if (it.flareRevealMs) out.revealedUntilMs = now + it.flareRevealMs;
+    if (it.freePackage) out.freePackage = true;
 
     out.hp = U.clamp(Math.round(hp), 0, p.maxHp);
     if (msg) out._msg = msg;
     return out;
   }
 
+  /* ═══════════════════ AKTIVNI EFEKTI (traka odbrojavača) ═══════════════════
+     Sedam predmeta traje X minuta i do sada nigde nije pisalo koliko je ostalo
+     — igrač ne može da planira oko nečega što ne vidi. Ovo je jedini izvor
+     istine za tu traku, pa UI ne mora da zna imena polja. */
+  const TIMED_EFFECTS = [
+    { key: 'torchUntilMs',       id: 'torch',      icon: 'torch',  tone: 'gold'   },
+    { key: 'hiddenUntilMs',      id: 'camo',       icon: 'eyeOff', tone: 'good'   },
+    { key: 'adrenalineUntilMs',  id: 'adrenaline', icon: 'flame',  tone: 'gold'   },
+    { key: 'flashUntilMs',       id: 'flash',      icon: 'sun',    tone: 'good'   },
+    { key: 'smokeUntilMs',       id: 'smoke',      icon: 'cloud',  tone: 'good'   },
+    { key: 'scopeUntilMs',       id: 'scope',      icon: 'binoculars', tone: 'good' },
+    { key: 'zonePeekUntilMs',    id: 'zonePeek',   icon: 'map',    tone: 'good'   },
+    { key: 'nearestArrowUntilMs',id: 'nearest',    icon: 'compass',tone: 'good'   },
+    { key: 'revealedUntilMs',    id: 'revealed',   icon: 'alert',  tone: 'danger' },
+    { key: 'poisonUntilMs',      id: 'poison',     icon: 'flask',  tone: 'danger' },
+    { key: 'cameraBlockedUntilMs', id: 'netted',   icon: 'net',    tone: 'danger' },
+    { key: 'entangledUntilMs',   id: 'entangled',  icon: 'net',    tone: 'danger' },
+    { key: 'trackedUntilMs',     id: 'tracked',    icon: 'target', tone: 'danger' },
+  ];
+  /** Svi efekti koji upravo teku, sa preostalim vremenom u ms. */
+  function activeEffects(p, nowMs) {
+    if (!p) return [];
+    const now = nowMs || 0;
+    const out = [];
+    for (const e of TIMED_EFFECTS) {
+      const until = p[e.key] || 0;
+      if (until > now) out.push({ ...e, untilMs: until, leftMs: until - now });
+    }
+    // Stativ i štit nemaju rok nego naboj — prikazuju se kao brojka
+    if (p.tripodCharges > 0) out.push({ id: 'tripod', icon: 'crosshair', tone: 'gold', charges: p.tripodCharges });
+    if (p.hasShield) out.push({ id: 'shield', icon: 'shield', tone: 'gold', charges: 1 });
+    return out.sort((a, b) => (a.leftMs || Infinity) - (b.leftMs || Infinity));
+  }
+
+  /* ═══════════════════ DIM ═══════════════════
+     Zona u kojoj kamera ne radi NIKOME, ni onom ko ju je bacio. Bacaš je da
+     prekineš tuđi napad ili da se izvučeš iz kornukopije — nije pasivni buff. */
+  function smokeZones(players, nowMs) {
+    const out = [];
+    for (const [pid, p] of Object.entries(players || {})) {
+      if (!p || !(p.smokeUntilMs > nowMs) || !p.smokeAt) continue;
+      out.push({
+        ownerId: pid, lat: p.smokeAt.lat, lng: p.smokeAt.lng,
+        radiusM: p.smokeRadiusM || ITEMS.smokeBomb.smokeRadiusM, untilMs: p.smokeUntilMs,
+      });
+    }
+    return out;
+  }
+  const inSmoke = (zones, pos) => !!(pos && (zones || []).some((z) => U.dist(pos, z) <= z.radiusM));
+
   /* ═══════════════════ vidljivost (§5, §12, §15) ═══════════════════ */
   function visionFor(p, ctx) {
     const cls = CLASSES[p.classId] || {};
     let items = cls.itemVisionM || 15;
-    if (p.visionBonusM) items += p.visionBonusM;
     if (ctx && ctx.night && !(ctx.hasLight)) items = Math.min(items, EVENTS.night.visionM);
-    if (ctx && ctx.hasLight && ctx.lightBonusM) items += ctx.lightBonusM;
+    if (ctx && ctx.hasLight) items += ITEMS.torch.lightBonusM;
+    /* Žedan si → slepiš. Ovo je jedina kazna koja se vidi bez otvaranja menija.
+
+       ALI: vid za PIĆE ostaje pun. Da žeđ smanjuje i vid za vodu, upao bi u
+       spiralu — što si žedniji, to ti je teže da nađeš vodu, pa si još
+       žedniji. Ovako kazna i dalje boli (ne vidiš oružje, zamke, ni hranu),
+       a igra ti ne oduzima način da je skineš. Tematski je i tačnije:
+       očajan si i skeniraš okolinu tražeći baš vodu.                        */
+    const pen = survivalPenalty(p);
+    const full = Math.round(items);
+    if (pen.visionCapM) items = Math.min(items, pen.visionCapM);
     const players = cls.playerVisionM || 0;
-    return { itemsM: items, playersM: players };
+    return { itemsM: Math.round(items), drinksM: full, playersM: players, penalty: pen };
+  }
+
+  /**
+   * Da li se `p` vidi na tuđoj mapi zbog nečega što sam nosi.
+   * Baklja i ranac su jedina dva predmeta koja te ODAJU — i to je namerno:
+   * oba su čista dobit bez toga.
+   */
+  function selfRevealM(p, nowMs) {
+    if (!p) return 0;
+    let m = 0;
+    if ((p.torchUntilMs || 0) > (nowMs || 0)) m = Math.max(m, ITEMS.torch.revealsM);
+    if (p.bulkyVisibleM) m = Math.max(m, p.bulkyVisibleM);
+    return m;
   }
 
   return {
     CLASSES, CLASS_IDS, WEAPONS, OWN_WEAPON_BONUS, SPECIALS, warnsAt, rangeState,
     CLOSE_DMG_MUL, CLOSE_MISS_CHANCE,
-    RARITY, ITEMS, ITEM_IDS, isRenewable,
+    RARITY, PICKUP, pickupOf, ITEMS, ITEM_IDS, SPAWNABLE_IDS, STACKABLE, isRenewable,
+    TIMED_EFFECTS, activeEffects, smokeZones, inSmoke, selfRevealM, survivalPenalty,
+    TRAP_RADIUS_M, TRAP_DWELL_MS,
     RECOMMENDED, recommendFor, MIN_PLAYERS, MAX_PLAYERS, maxAllianceSize,
     dealClasses, classCensus,
     ZONE_PHASES, ZONE_WARN_MS, EVENTS, SPARK_COSTS, GM_COOLDOWN_MS,

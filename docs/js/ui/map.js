@@ -106,8 +106,10 @@ function makeMap(elId, opts) {
       L_.corn = L.circleMarker([cfg.center.lat, cfg.center.lng], { radius: 7, color: '#E8B64C', weight: 3, fillColor: '#FF6A1A', fillOpacity: 1, interactive: false }).addTo(map);
     } else { L_.zone.setLatLng(c); L_.zone.setRadius(z.radiusM); }
     L_.zone.setStyle({ color: z.shrinking ? '#E03131' : '#E8B64C', dashArray: z.shrinking ? '8 8' : null });
-    // najavni prsten sledeće faze
-    if (z.next && (z.warn || z.shrinking)) {
+    /* Najavni prsten sledeće faze. Normalno se pali tek uz upozorenje, ali
+       Karta zone (`z.peek`) ga pokazuje 5 min ranije — u igri gde je hodanje
+       skupo, ta prednost u kretanju vredi više od pune flaše vode. */
+    if (z.next && (z.warn || z.shrinking || z.peek)) {
       const nc = [z.next.centerLat, z.next.centerLng];
       if (!L_.zoneNext) L_.zoneNext = L.circle(nc, { radius: z.next.radiusM, color: '#E03131', weight: 2, dashArray: '4 10', fill: false, interactive: false }).addTo(map);
       else { L_.zoneNext.setLatLng(nc); L_.zoneNext.setRadius(z.next.radiusM); }
@@ -123,6 +125,23 @@ function makeMap(elId, opts) {
   function drawWasps(w) {
     if (!w) { if (L_.wasps) { map.removeLayer(L_.wasps); L_.wasps = null; } return; }
     if (!L_.wasps) L_.wasps = L.circle([w.lat, w.lng], { radius: w.radiusM, color: '#A855F7', weight: 2, fillColor: '#A855F7', fillOpacity: .18, interactive: false }).addTo(map);
+  }
+
+  /* Zone dima — u njima kamera ne radi nikome. Moraju da se vide na mapi,
+     inače igrač ne zna zašto mu se meta odjednom ne pojavljuje u kadru. */
+  function drawSmoke(list) {
+    const want = list || [];
+    L_.smoke = L_.smoke || [];
+    while (L_.smoke.length > want.length) map.removeLayer(L_.smoke.pop());
+    want.forEach((z, i) => {
+      const c = [z.lat, z.lng];
+      if (!L_.smoke[i]) {
+        L_.smoke[i] = L.circle(c, {
+          radius: z.radiusM, color: '#9CA3AF', weight: 2, dashArray: '6 6',
+          fillColor: '#9CA3AF', fillOpacity: .22, interactive: false,
+        }).addTo(map);
+      } else { L_.smoke[i].setLatLng(c); L_.smoke[i].setRadius(z.radiusM); }
+    });
   }
 
   function setStart(p) {
@@ -174,7 +193,7 @@ function makeMap(elId, opts) {
   }
 
   return {
-    map, setMe, recenter, drawZone, drawFire, drawWasps, drawItems, drawPlayers, drawTraps, setStart, drawFog,
+    map, setMe, recenter, drawZone, drawFire, drawWasps, drawSmoke, drawItems, drawPlayers, drawTraps, setStart, drawFog,
     setVision(v) { if (v === visionM) return; visionM = v; autoZoom(); drawFog(); },
     setFull(v) { if (v === fullMap) return; fullMap = v; drawFog(); },
     /** Pun pregled arene ne sme da juri igrača — inače se vraća na zum oko tebe. */

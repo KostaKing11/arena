@@ -77,22 +77,21 @@ const Engine = (() => {
     if (pos && out.wasps) out.inWasps = U.dist(pos, { lat: out.wasps.lat, lng: out.wasps.lng }) <= out.wasps.radiusM;
     if (pos && out.firewall) out.inFire = U.distToLine(pos, out.firewall.a, out.firewall.b) <= out.firewall.widthM / 2;
 
+    // zone dima — računaju se iz spiska igrača, bez posebnog čvora u bazi
+    out.smoke = R.smokeZones(Store.players(), now);
+    out.inSmoke = R.inSmoke(out.smoke, pos);
+
     // vidljivost
     if (me) {
-      const hasLight = hasActive(me, 'light');
-      const v = R.visionFor(me, { night: out.night, hasLight, lightBonusM: hasLight === 'big' ? 6 : 0 });
-      out.vision = v;
+      out.vision = R.visionFor(me, { night: out.night, hasLight: hasActive(me, 'light') });
+      out.effects = R.activeEffects(me, now);
+      out.penalty = out.vision.penalty;
     }
     return out;
   }
   function hasActive(p, kind) {
-    const eff = (p && p.effects) || {};
     const now = Clock.now();
-    if (kind === 'light') {
-      if (eff.bigTorchUntil > now) return 'big';
-      if (eff.torchUntil > now) return 'small';
-      return false;
-    }
+    if (kind === 'light') return (p && p.torchUntilMs || 0) > now;
     return false;
   }
 
@@ -115,7 +114,9 @@ const Engine = (() => {
       outsideZone: d.outsideZone,
       zoneDmgPer10s: d.zone ? d.zone.dmgPer10s : 0,
       inWasps: !!d.inWasps,
-      poisonedUntilMs: (me.effects && me.effects.poisonedUntilMs) || 0,
+      // otrov NAMERNO ne ide ovde: otkucava ga Attack.tick, koji je jedini
+      // vlasnik polja `poisonUntilMs`. Da ga i survivalTick broji, šteta bi
+      // se primenjivala dvaput.
     });
     if (!patch) return;
 
@@ -306,6 +307,13 @@ const Engine = (() => {
           await Store.ref(`items/${nid}`).set({ type: it.type, rarity: it.rarity, lat: p.lat, lng: p.lng, spawnedAtMs: d.now });
           if (++n > 4) break;
         }
+      }
+      /* Mamac se nikad ne seli, ne obnavlja i ne uvlači u zonu — a nestaje
+         kad njegov vlasnik pogine, da ne ostane da vara i posle njega. */
+      if (it.decoyFake) {
+        const owner = Store.players()[it.ownerId];
+        if (!owner || owner.alive === false) await Store.ref(`items/${iid}`).remove();
+        continue;
       }
       // predmet koji niko ne uzme 10 min se seli
       if (!it.takenBy && d.now - (it.spawnedAtMs || 0) > R.ITEM_MOVE_MS && !it.dropped) {

@@ -73,9 +73,28 @@ console.log('\n4. Predmeti (§12, §13)');
   let minS = Infinity;
   for (let i = 0; i < scat.length; i++) for (let j = i + 1; j < scat.length; j++) minS = Math.min(minS, U.dist(scat[i], scat[j]));
   ok('min 12 m izmedju rasutih', minS >= 11.9, Math.round(minS) + ' m');
-  ok('stack: obicno 3, neobicno 2, retko 1',
-    R.stackLimit('berries') === 3 && R.stackLimit('bread') === 2 && R.stackLimit('driedMeat') === 1);
-  ok('radijus kupljenja je 10 m', R.PICKUP_RADIUS_M === 10);
+  ok('stack po TIPU: hrana i pice 3, sve ostalo 1',
+    R.stackLimit('berries') === 3 && R.stackLimit('waterBottle') === 3
+    && R.stackLimit('backpack') === 1 && R.stackLimit('trapBasic') === 1
+    && R.stackLimit('feastMeal') === 1);
+  ok('radijus kupljenja je 12 m', R.PICKUP_RADIUS_M === 12);
+  ok('uzimanje zavisi od TIPA, ne od retkosti',
+    R.pickupOf('springWater').id === 'tap'          // retko, ali se pije
+    && R.pickupOf('berries').id === 'tap'
+    && R.pickupOf('trapBasic').id === 'hold3'
+    && R.pickupOf('backpack').id === 'hold3'
+    && R.pickupOf('wTrident').id === 'chest8'
+    && R.pickupOf('wBow').id === 'chest8'
+    && R.pickupOf('feastMeal').id === 'chest8');
+  ok('samo sanduk javlja svima',
+    R.PICKUP.chest8.announce === true && !R.PICKUP.hold3.announce && !R.PICKUP.tap.announce);
+  ok('adrenalin polovi vreme drzanja',
+    R.pickupOf('wTrident', { adrenalineUntilMs: 9e9 }, 0).pickMs === 4000
+    && R.pickupOf('wTrident', {}, 0).pickMs === 8000);
+  ok('svaki predmet ima klasu uzimanja',
+    R.ITEM_IDS.every((id) => !!R.PICKUP[R.ITEMS[id].pickup || 'tap']));
+  ok('mamac se nikad ne izvlaci iz bazena',
+    R.SPAWNABLE_IDS.length === R.ITEM_IDS.length || !R.SPAWNABLE_IDS.includes('decoyBait'));
   ok('nijedan predmet nije bez tipa', items.every((i) => !!i.type && !!R.ITEMS[i.type]));
   ok('svaka retkost ima sta da izvuce u oba bazena', (() => {
     for (const pool of ['scatter', 'corn']) for (const r of Object.keys(R.RARITY)) {
@@ -91,12 +110,64 @@ console.log('\n4. Predmeti (§12, §13)');
     }
     return true;
   })());
-  ok('hrana i voda se obnavljaju, oruzja ne',
-    R.isRenewable('bread') && R.isRenewable('waterBottle') && !R.isRenewable('wBow') && !R.isRenewable('backpack'));
+  ok('hrana i voda se obnavljaju, oruzja i kamera ne',
+    R.isRenewable('ration') && R.isRenewable('waterBottle')
+    && !R.isRenewable('wBow') && !R.isRenewable('backpack')
+    && !R.isRenewable('flashFoil') && !R.isRenewable('adrenaline'));
   const fit = R.fitItem([{ itemType: 'berries', qty: 2 }], 'berries', 4);
   ok('dopunjava postojeci stack', fit.mode === 'stack');
   ok('pun inventar trazi zamenu',
-    R.fitItem([1, 2, 3, 4].map(() => ({ itemType: 'bread', qty: 2 })), 'medkit', 4).mode === 'full');
+    R.fitItem([1, 2, 3, 4].map(() => ({ itemType: 'ration', qty: 3 })), 'bandage', 4).mode === 'full');
+  ok('izbaceni duplikati vise ne postoje',
+    ['bread', 'driedMeat', 'juice', 'medkit', 'smallBag', 'bigBackpack', 'bigTorch', 'ragePotion']
+      .every((id) => !R.ITEMS[id]));
+  ok('nova kategorija kamere postoji',
+    ['flashFoil', 'tripod', 'smokeBomb', 'adrenaline', 'shield']
+      .every((id) => R.ITEMS[id] && R.ITEMS[id].type === 'combat'));
+  ok('ukupno 41 predmet', R.ITEM_IDS.length === 41, String(R.ITEM_IDS.length));
+}
+
+console.log('\n4b. Zamke i GPS (§9)');
+{
+  ok('zamka okida na 15 m posle 5 s zadrzavanja',
+    R.TRAP_RADIUS_M === 15 && R.TRAP_DWELL_MS === 5000);
+  ok('mreza-zamka blokira kameru 30 s, ne bekstvo',
+    R.ITEMS.trapNet.blocksCameraMs === 30000 && R.ITEMS.trapNet.blocksFlee === undefined);
+  const ctx = { nowMs: 1000, myAccM: 5, lastMoveMs: 900 };
+  const t = { alive: true, hp: 100, pos: { accM: 5 } };
+  ok('u mrezi ne mozes da napadas',
+    R.attackBlocked({ cameraBlockedUntilMs: 5000 }, t, ctx) === 'netted');
+  ok('u dimu ne mozes da napadas',
+    R.attackBlocked({}, t, { ...ctx, inSmoke: true }) === 'smoke'
+    && R.attackBlocked({}, t, { ...ctx, targetInSmoke: true }) === 'smokeTarget');
+  const zones = R.smokeZones({ p1: { smokeUntilMs: 9e9, smokeRadiusM: 20, smokeAt: { lat: 0, lng: 0 } } }, 0);
+  ok('dim se cita iz spiska igraca, bez novog cvora',
+    zones.length === 1 && R.inSmoke(zones, { lat: 0, lng: 0 }) && !R.inSmoke(zones, { lat: 0.01, lng: 0 }));
+}
+
+console.log('\n4c. Kamera i borba (§10)');
+{
+  const shooter = { classId: 'hunter', weapon: 'spear', hunger: 100, thirst: 100 };
+  const far = 10;
+  ok('blic-folija obara snimak sa preko 15 m',
+    R.attackDamage(shooter, 20, { weapon: R.WEAPONS.bow, targetFlashUntilMs: 9e9, nowMs: 0 }).reason === 'flash');
+  ok('blic ne smeta izbliza',
+    !R.attackDamage(shooter, far, { targetFlashUntilMs: 9e9, nowMs: 0 }).miss);
+  ok('stativ probija blic i duplira stetu', (() => {
+    const r = R.attackDamage({ classId: 'hunter', weapon: 'bow', tripodCharges: 1 }, 20,
+      { weapon: R.WEAPONS.bow, targetFlashUntilMs: 9e9, nowMs: 0 });
+    return !r.miss && r.usedTripod && r.dmg === 60;      // luk 30 × 2, nije njegovo oruzje
+  })());
+  ok('adrenalin skida kaznu za preblizu', (() => {
+    const close = { ...shooter, weapon: 'bow', classId: 'archer', adrenalineUntilMs: 9e9 };
+    const r = R.attackDamage(close, 5, { nowMs: 0, rng: () => 0 });
+    return !r.miss && r.dmg === 38;                       // 30 + 8 svoje oruzje, bez polovljenja
+  })());
+  ok('gladan igrac radi 25% manje stete', (() => {
+    const hungry = { ...shooter, hunger: 10 };
+    return R.attackDamage(hungry, far, { nowMs: 0 }).dmg
+      === Math.round(R.attackDamage(shooter, far, { nowMs: 0 }).dmg * 0.75);
+  })());
 }
 
 console.log('\n5. Oruzja i udarac (borba v4 §2)');
@@ -233,17 +304,17 @@ console.log('\n8. Glad, zed, HP (§11) — iz proteklog vremena, ne tajmerom');
 {
   const p = { hp: 100, hunger: 100, thirst: 100, maxHp: 100 };
   let r = R.survivalTick(p, null, 70000, { nowMs: T0 });
-  ok('zed -1 na 7 s', Math.abs(r.thirst - 90) < .01, String(r.thirst));
-  ok('glad -1 na 11 s', Math.abs(r.hunger - (100 - 70 / 11)) < .01, r.hunger.toFixed(2));
+  ok('zed -1 na 6 s (prazna za 10 min)', Math.abs(r.thirst - (100 - 70 / 6)) < .01, r.thirst.toFixed(2));
+  ok('glad -1 na 9 s (prazna za 15 min)', Math.abs(r.hunger - (100 - 70 / 9)) < .01, r.hunger.toFixed(2));
   ok('HP se ne dira dok ima hrane', r.hp === 100);
   r = R.survivalTick({ ...p, thirst: 0 }, null, 20000, { nowMs: T0 });
   ok('prazna zed -2 HP na 20 s', Math.abs(r.hp - 98) < .01, String(r.hp));
   r = R.survivalTick({ ...p, thirst: 0, hunger: 0 }, null, 60000, { nowMs: T0 });
-  ok('glad i zed se sabiraju', Math.abs(r.hp - (100 - 6 - 4)) < .01, String(r.hp));
+  ok('oba prazna: -5 HP na 30 s, jace od zbira', Math.abs(r.hp - 90) < .01, String(r.hp));
   const gat = R.survivalTick(p, R.CLASSES.gatherer, 70000, { nowMs: T0 });
-  ok('Sakupljac 40% sporije', gat.thirst > r.thirst && Math.abs(gat.thirst - 94) < .01, String(gat.thirst));
+  ok('Sakupljac 40% sporije', Math.abs(gat.thirst - (100 - (70 / 6) * 0.6)) < .01, gat.thirst.toFixed(2));
   const dr = R.survivalTick(p, null, 70000, { nowMs: T0, drought: true });
-  ok('susa duplo brze', Math.abs(dr.thirst - 80) < .01, String(dr.thirst));
+  ok('susa duplo brze', Math.abs(dr.thirst - (100 - (70 / 6) * 2)) < .01, dr.thirst.toFixed(2));
   const zn = R.survivalTick(p, null, 10000, { nowMs: T0, outsideZone: true, zoneDmgPer10s: 7 });
   ok('zona radi stetu po 10 s', Math.abs(zn.hp - 93) < .01, String(zn.hp));
   const st = R.survivalTick(p, R.CLASSES.strong, 10000, { nowMs: T0, outsideZone: true, zoneDmgPer10s: 12 });
@@ -265,16 +336,72 @@ console.log('\n9. Savezi i lobi (§2, §10)');
 console.log('\n10. Konzumiranje (§12)');
 {
   const p = { hp: 50, maxHp: 100, hunger: 40, thirst: 40, classId: 'hunter' };
-  ok('hleb +35 gladi', R.consume(p, 'bread').hunger === 75);
+  ok('obrok +45 gladi', R.consume(p, 'ration').hunger === 85);
   ok('izvorska voda +70 zedji, do 100', R.consume(p, 'springWater').thirst === 100);
   ok('prljava voda -8 HP', R.consume(p, 'dirtyWater').hp === 42);
   ok('Sakupljacu prljava voda ne skodi', R.consume({ ...p, classId: 'gatherer' }, 'dirtyWater').hp === 50);
   ok('bilje +15, Lekaru duplo',
     R.consume(p, 'herbs').hp === 65 && R.consume({ ...p, classId: 'medic' }, 'herbs').hp === 80);
-  ok('mast vraca pun HP', R.consume(p, 'salve').hp === 100);
-  ok('ranac dize kapacitet na 7', R.consume(p, 'backpack').capacity === 7);
+  ok('zavoj +35 (popunio rupu od medkita)', R.consume(p, 'bandage').hp === 85);
+  ok('mast vraca pun HP i skida otrov',
+    R.consume(p, 'salve').hp === 100 && R.consume(p, 'salve').poisonUntilMs === null);
+  ok('ranac dize kapacitet na 7 i cini te vidljivim', (() => {
+    const r = R.consume(p, 'backpack');
+    return r.capacity === 7 && r.bulkyVisibleM === 50;
+  })());
+  ok('gozba puni i glad i zedj',
+    R.consume(p, 'feastMeal').hunger === 100 && R.consume(p, 'feastMeal').thirst === 90);
   ok('pojas dize max glad', R.consume(p, 'supplyBelt').maxHungerBonus === 30);
   ok('Trkac ima +1 slot', R.slotsOf({ classId: 'runner', capacity: 4 }) === 5);
+
+  /* Ovo je bio bag: protivotrov je pisao `poisonedUntilMs` (sa D), a borba je
+     citala `poisonUntilMs`, pa protivotrov nije skidao otrov od duvaljke. */
+  ok('protivotrov brise ISTO polje koje pise borba', (() => {
+    const r = R.consume({ ...p, poisonUntilMs: 9e9 }, 'antidote', null, 1000);
+    return r.poisonUntilMs === null && r.poisonImmuneUntilMs === 61000;
+  })());
+  ok('pecurke uvek truju, ali hrane najvise u divljini', (() => {
+    const r = R.consume(p, 'mushrooms', null, 1000);
+    return r.hunger === 80 && r._msg === 'poisoned' && r.poisonUntilMs === 1000 + R.POISON_MS;
+  })());
+  ok('protivotrov stiti od pecuraka 60 s',
+    R.consume({ ...p, poisonImmuneUntilMs: 9e9 }, 'mushrooms', null, 1000).poisonUntilMs === undefined);
+
+  ok('efekti sa trajanjem se vide u traci', (() => {
+    const fx = R.activeEffects({ torchUntilMs: 5000, hasShield: true, tripodCharges: 2 }, 1000);
+    const ids = fx.map((e) => e.id);
+    return ids.includes('torch') && ids.includes('shield') && ids.includes('tripod')
+      && fx.find((e) => e.id === 'torch').leftMs === 4000;
+  })());
+  ok('baklja i ranac te odaju, ostalo ne',
+    R.selfRevealM({ torchUntilMs: 9e9 }, 0) === 100
+    && R.selfRevealM({ bulkyVisibleM: 50 }, 0) === 50
+    && R.selfRevealM({ camoUntilMs: 9e9 }, 0) === 0);
+}
+
+console.log('\n10b. Glad i zedj su asimetricne (§3)');
+{
+  const S = R.SURVIVAL;
+  ok('zedj ~10 min, glad ~15 min',
+    S.thirstSecPerPoint * 100 === 600 && S.hungerSecPerPoint * 100 === 900);
+  ok('zedjan slepis, gladan slabis', (() => {
+    const parched = R.survivalPenalty({ hunger: 100, thirst: 10 });
+    const starving = R.survivalPenalty({ hunger: 10, thirst: 100 });
+    return parched.visionCapM === 10 && parched.dmgMul === 1
+      && starving.dmgMul === 0.75 && starving.visionCapM === 0;
+  })());
+  ok('zedj obara minimapu sa 15 na 10 m',
+    R.visionFor({ classId: 'hunter', hunger: 100, thirst: 10 }).itemsM === 10
+    && R.visionFor({ classId: 'hunter', hunger: 100, thirst: 100 }).itemsM === 15);
+  // bez ovoga bi zedj bila spirala: sto si zedniji, teze nadjes vodu
+  ok('vid za PICE ne pada od zedji',
+    R.visionFor({ classId: 'hunter', hunger: 100, thirst: 10 }).drinksM === 15);
+  ok('baklja dize vid za predmete', R.visionFor({ classId: 'hunter' }, { hasLight: true }).itemsM === 21);
+  ok('oba na nuli bole vise od zbira', (() => {
+    const both = R.survivalTick({ hp: 100, hunger: 0, thirst: 0, alive: true },
+      null, 30000, { nowMs: 0 });
+    return Math.round(100 - both.hp) === 5;
+  })());
 }
 
 console.log('\n11. Iskre, halucinacije, mentor (§15, §16, §17)');

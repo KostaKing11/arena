@@ -66,15 +66,6 @@
   content: ''; position: absolute; inset: -3px; border-radius: 50%;
   border: 1.5px dashed color-mix(in srgb, var(--gold) 65%, transparent);
 }
-/* Mentor nema lika — samo uža kartica zakačena ispod tvoje (§17). */
-.mentor-row {
-  display: flex; align-items: center; gap: var(--s2);
-  margin: -6px 0 0 var(--s5); padding: var(--s2) var(--s3);
-  font-size: var(--fs-sm); color: var(--text-2);
-  background: var(--ink-2); border: 1px solid var(--line-2); border-top: 0;
-  border-radius: 0 0 var(--r-md) var(--r-md);
-}
-.mentor-row .ic { color: var(--gold); }
 
 .setup-map { height: 260px; border-radius: var(--r-lg); overflow: hidden; border: 2px solid var(--line); background: var(--map-bg); }
 /* Puna mapa arene — otvara se iz donjeg dugmeta "Mapa". */
