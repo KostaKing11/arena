@@ -6,7 +6,7 @@ const App = (() => {
   const params = new URLSearchParams(location.search);
   // `/arena/test` i `?test=1` pale iste botove — ista aplikacija, samo flag (§1)
   const TEST = params.get('test') === '1' || /\/test\/?$/.test(location.pathname);
-  let booted = false, camScreen = null;
+  let booted = false;
   let MODE = 'player';                       // 'player' | 'mentor' | 'spectator'
 
   /* ───────────────── pokretanje ───────────────── */
@@ -131,7 +131,7 @@ const App = (() => {
     };
     $('#btnMenu').onclick = () => openSettings();
     $('#btnRecenter').onclick = () => { if (UI.gmap) { UI.gmap.recenter(); Haptics.fire('tap'); } };
-    $('#btnCamera').onclick = () => openEncounter();
+    $('#btnCamera').onclick = () => UI.openAim();
 
     ['pointerdown', 'keydown'].forEach((e) => document.addEventListener(e, () => { Sfx.unlock(); goFullscreen(); }, { once: true }));
     // Zumiranje prstima gasi doživljaj i pomera HUD — igra je fiksnog razmera.
@@ -259,10 +259,9 @@ const App = (() => {
     Nav.on('end', () => { });
     // Iz žive partije se ne izlazi slučajnim pritiskom
     const block = () => toast(T('cantGoBackInGame'), 'gold', 'menu');
-    ['game', 'fight', 'chase', 'deploy'].forEach((s) => Nav.on(s, () => {
-      if (s === 'fight' && UI.spectateFid) { UI.spectateFid = null; Screens.go(Store.me() ? 'ghost' : 'mentor'); return; }
-      block();
-    }));
+    ['game', 'deploy'].forEach((s) => Nav.on(s, () => block()));
+    // sa nisanjenja se izlazi normalno — to nije stanje iz kog se ne moze nazad
+    Nav.on('aim', () => UI.closeAim());
   }
 
   function askBotCount() {
@@ -282,22 +281,11 @@ const App = (() => {
 
   /* ───────────────── rutiranje ───────────────── */
   function route() {
-    if (MODE === 'mentor' || MODE === 'spectator') {
-      if (UI.spectateFid && Store.fights()[UI.spectateFid]) { Screens.go('fight'); return; }
-      Screens.go('mentor');
-      return;
-    }
+    if (MODE === 'mentor' || MODE === 'spectator') { Screens.go('mentor'); return; }
     if (!Store.room) { Screens.go('home'); return; }
     const me = Store.me();
     if (!me) { Screens.go('home'); return; }
     const s = Store.state();
-
-    // duh gleda tuđu borbu
-    if (UI.spectateFid) {
-      const sf = Store.fights()[UI.spectateFid];
-      if (sf && sf.state === 'live') { Screens.go('fight'); return; }
-      UI.spectateFid = null;
-    }
 
     if (s === 'LOBBY') {
       // Dozvole i slika su odrađene pre ulaska; ovde ostaje samo živa provera
@@ -310,9 +298,8 @@ const App = (() => {
     if (Screens.cur === 'settings') return;                  // podešavanja se ne prekidaju
     if (s === 'END') { Screens.go('end'); UI.renderEnd(); return; }
 
-    if (me.fightId && Store.fights()[me.fightId] && Store.fights()[me.fightId].state === 'live') { Screens.go('fight'); return; }
-    if (me.chaseId && Store.chases()[me.chaseId]) { Screens.go('chase'); return; }
-    if (Screens.cur === 'ghost' || Screens.cur === 'sky' || Screens.cur === 'mentor') return;
+    // nisanjenje je ekran koji se otvara namerno i sam se zatvara
+    if (Screens.cur === 'aim' || Screens.cur === 'ghost' || Screens.cur === 'sky' || Screens.cur === 'mentor') return;
     Screens.go('game');
   }
 
@@ -403,14 +390,16 @@ const App = (() => {
       upd[`${id}/kills`] = 0; upd[`${id}/fights`] = 0; upd[`${id}/itemsTaken`] = 0;
       upd[`${id}/distanceWalkedM`] = 0; upd[`${id}/deathAtMs`] = null; upd[`${id}/killedBy`] = null;
       upd[`${id}/classId`] = null; upd[`${id}/startPos`] = null; upd[`${id}/arrived`] = false;
-      upd[`${id}/allianceId`] = null; upd[`${id}/fightId`] = null; upd[`${id}/chaseId`] = null;
+      upd[`${id}/allianceId`] = null;
+      upd[`${id}/specialUsedThisGame`] = null; upd[`${id}/weaponCooldownUntilMs`] = null;
+      upd[`${id}/poisonUntilMs`] = null; upd[`${id}/entangledUntilMs`] = null;
+      upd[`${id}/attacksLanded`] = 0; upd[`${id}/attacksMissed`] = 0;
       upd[`${id}/effects`] = null; upd[`${id}/capacity`] = R.BASE_SLOTS;
     }
     await Store.hostUpdate('players', upd);
     await Store.hostSet('items', null);
     await Store.hostSet('traps', null);
-    await Store.hostSet('fights', null);
-    await Store.hostSet('chase', null);
+    await Store.hostSet('hits', null);
     await Store.hostSet('feed', null);
     await Store.hostSet('schedule', null);
     await Store.hostUpdate('meta', { state: 'LOBBY', startedAtMs: null, endedAtMs: null, winnerId: null, skyAtMs: null });
@@ -429,136 +418,6 @@ const App = (() => {
       const ok = await Items.runPickup(item);
       if (ok) await Items.take(item);
     } finally { picking = false; }
-  }
-
-  /* ───────────────── slikanje protivnika (§7) ───────────────── */
-  function openEncounter() {
-    const d = Engine.d;
-    if (!d.me || d.me.alive === false) { Screens.go('ghost'); UI.renderGhost(d); return; }
-    if (d.state !== 'LIVE' && d.state !== 'FINAL_TWO') return;
-
-    const s = sheet(null, `
-      <div class="stack">
-        <div class="row between"><h2>${esc(T('photoTitle'))}</h2>
-          <div class="chip" id="encZoom">1×</div></div>
-        <div class="cam-wrap"><video id="encVid" playsinline muted></video>
-          <div class="face-oval" style="background:none"></div></div>
-        <canvas id="encCan" hidden></canvas>
-        <div class="row-tight wrap" id="encStatus"></div>
-        <p class="tiny dim center" id="encHint">${esc(T('photoHint'))}</p>
-        <input type="range" min="1" max="3" step="0.5" value="1" id="encZoomRange">
-        <button class="action-btn" id="encShoot">${icon('camera', { size: 26 })}<span>${esc(T('photoShoot'))}</span></button>
-        <div id="encList" class="stack"></div>
-      </div>`, { onClose: () => { Encounter.stop(); clearInterval(statusTimer); } });
-    camScreen = s;
-    Encounter.openCamera($('#encVid', s), 'environment').catch(() => { toast(T('denied'), 'danger'); s.close(); });
-    Encounter.loadDetector();
-
-    // Živi prikaz stanja senzora — bez ovoga ne znaš da li je filter aktivan
-    // ili se tiho preskače, pa ne možeš da protumačiš rezultat.
-    const statusTimer = setInterval(drawStatus, 700);
-    drawStatus();
-    function drawStatus() {
-      const box = $('#encStatus', s);
-      if (!box) return;
-      const st = Encounter.detectorState;
-      const det = st === 'ready' ? ['good', T('detReady')]
-        : st === 'loading' ? ['gold', T('detLoading')]
-        : st === 'failed' ? ['danger', T('detOff')] : ['', T('detLoading')];
-      const h = Compass.heading;
-      const comp = h == null ? ['danger', T('detNoCompass')]
-        : Compass.absolute ? ['good', `${Math.round(h)}° ±${Math.round(Compass.accuracy || 0)}°`]
-          : ['gold', `${Math.round(h)}° ${T('detRelative')}`];
-      const acc = Geo.accuracy;
-      const gps = acc == null ? ['danger', 'GPS —']
-        : acc <= 20 ? ['good', `GPS ±${Math.round(acc)} m`] : ['gold', `GPS ±${Math.round(acc)} m`];
-      const n = Encounter.candidatesInCone(Engine.d).list.length;
-      box.innerHTML = [det, comp, gps, ['', `${icon('users', { size: 13 })}${n}`]]
-        .map(([c, t]) => `<span class="chip ${c}">${t}</span>`).join('');
-    }
-    $('#encZoomRange', s).oninput = (e) => {
-      const z = Encounter.setZoom(+e.target.value);
-      $('#encZoom', s).textContent = z + '×';
-    };
-    $('#encShoot', s).onclick = async () => {
-      const res = await Encounter.shoot(Engine.d, $('#encCan', s));
-      if (!res.ok) {
-        const msg = res.reason === 'cooldown' ? `${T('photoCooldown')} ${res.waitS}s`
-          : res.reason === 'noperson' ? T('photoNoPerson') : T('photoNoneInCone');
-        toast(msg, 'danger', 'alert');
-        Haptics.fire('alert');
-        return;
-      }
-      Haptics.fire('tap');
-      renderCandidates(s, res.candidates);
-    };
-  }
-
-  function renderCandidates(s, list) {
-    const d = Engine.d;
-    $('#encList', s).innerHTML = `<div class="card-title">${esc(T('photoCandidates'))}</div>` +
-      list.map((c, i) => `<button class="cand ${i === 0 ? 'best' : ''}" data-pid="${c.pid}">
-        <div class="avatar" style="width:52px;height:52px">${avatarSvg(c.p.avatar, 52)}</div>
-        <div class="grow"><div class="name">${esc(c.p.name)}</div>
-          <div class="meta">${fmtDist(c.distM)} · ${Math.round(c.angleDiff)}°${i === 0 ? ' · ' + esc(T('photoBest')) : ''}</div></div>
-        ${icon('chevronRight', { size: 20 })}</button>`).join('');
-    $$('#encList .cand', s).forEach((b) => b.onclick = () => {
-      const pid = b.dataset.pid;
-      const c = list.find((x) => x.pid === pid);
-      s.close();
-      actionsFor(c);
-    });
-  }
-
-  function actionsFor(c) {
-    const d = Engine.d, me = d.me;
-    const ally = c.p.allianceId && c.p.allianceId === me.allianceId;
-    const canBetray = ally && c.distM < 12;
-    const archer = me.classId === 'archer' && me.weapon === 'bow';
-    const rangedWhy = archer ? Encounter.rangedBlocked(d, c.p) : 'class';
-
-    const m = modal(`
-      <div class="center stack">
-        <div class="avatar ring" style="width:88px;height:88px;margin:0 auto">${avatarSvg(c.p.avatar, 88)}</div>
-        <h2>${esc(c.p.name)}</h2>
-        <div class="chip">${fmtDist(c.distM)}</div>
-        <div class="stack" style="width:100%;margin-top:var(--s4)">
-          ${!ally ? `<button class="btn good lg full" id="aAlly">${icon('handshake', { size: 22 })}<span>${esc(T('actAlliance'))}</span></button>` : ''}
-          ${canBetray ? `<button class="btn danger lg full" id="aBetray">${icon('knife', { size: 22 })}<span>${esc(T('actBetray'))}</span></button>` : ''}
-          ${!ally ? `<button class="btn danger lg full" id="aFight">${icon('swords', { size: 22 })}<span>${esc(T('actFight'))}</span></button>` : ''}
-          ${archer && !rangedWhy && c.distM <= R.RANGED_MAX_M ? `<button class="btn gold lg full" id="aShoot">${icon('bow', { size: 22 })}<span>${esc(T('aimTitle'))}</span></button>` : ''}
-          <button class="btn ghost full" id="aClose">${esc(T('close'))}</button>
-        </div>
-      </div>`);
-    $('#aClose', m).onclick = () => m.close();
-    const ab = $('#aAlly', m); if (ab) ab.onclick = async () => { m.close(); await Encounter.proposeAlliance(c.pid); };
-    const fb = $('#aFight', m); if (fb) fb.onclick = async () => { m.close(); await Encounter.startFight(c.pid, c.distM, false); route(); };
-    const bb = $('#aBetray', m); if (bb) bb.onclick = async () => { m.close(); await Encounter.startFight(c.pid, c.distM, true); route(); };
-    const sb = $('#aShoot', m); if (sb) sb.onclick = () => { m.close(); aimAt(c); };
-  }
-
-  /* — nišanjenje strelca — */
-  function aimAt(c) {
-    const m = modal(`
-      <div class="center stack-lg">
-        <h2>${esc(T('aimTitle'))}</h2>
-        <div class="aim-wrap"><div class="aim-ring" id="aimRing">
-          ${ring(0, 220)}<div class="display" id="aimN" style="font-size:var(--fs-2xl)">8</div></div></div>
-        <p class="dangerc" style="font-weight:800">${esc(T('aimHold'))}</p>
-        <button class="btn ghost full" id="aimCancel">${esc(T('cancel'))}</button>
-      </div>`, { dismissible: false });
-    let cancelled = false;
-    $('#aimCancel', m).onclick = () => { cancelled = true; m.close(); };
-    Encounter.fireRanged(c.pid, (p) => {
-      if (cancelled) return;
-      setRing($('#aimRing svg', m), p);
-      $('#aimN', m).textContent = Math.max(0, Math.ceil(8 - p * 8));
-    }).then((res) => {
-      if (cancelled) return;
-      m.close();
-      if (res.hit) { toast(T('shotHit'), 'good', 'bow'); Haptics.fire('hit'); Sfx.zap(); }
-      else toast(T('aimMissed'), 'danger', 'alert');
-    });
   }
 
   /* ───────────────── tvorci igara ───────────────── */
@@ -594,19 +453,13 @@ const App = (() => {
   /* ───────────────── petlja prikaza ───────────────── */
   Engine.on(async (kind, d) => {
     if (kind === 'tick') {
-      await Combat.tick(d);
-      await Chase.tick(d);
+      await Attack.tick(d);
       await Items.checkTraps(d);
       handleOffers(d);
       route();
       const s = Screens.cur;
       if (s === 'deploy') UI.renderDeploy(d);
       else if (s === 'game') UI.renderGame(d);
-      else if (s === 'fight') {
-        if (UI.spectateFid) { const sf = Store.fights()[UI.spectateFid]; if (sf) UI.renderFight(d, { fid: UI.spectateFid, ...sf }, true); }
-        else { const f = Combat.myFight(); if (f) UI.renderFight(d, f); }
-      }
-      else if (s === 'chase') UI.renderChase(d);
       else if (s === 'ghost') UI.renderGhost(d);
       else if (s === 'mentor') UI.renderMentor(d);
       else if (s === 'lobby') { /* lobi se osvežava na promenu sobe */ }
@@ -630,7 +483,7 @@ const App = (() => {
   });
 
   /* — ponude saveza i dolazeći hitac — */
-  let offerShown = null, shotShown = null, pkgShown = null;
+  let offerShown = null, shotShown = null, pkgShown = null, hitShown = null;
   function handleOffers(d) {
     const me = d.me;
     if (!me) return;
@@ -658,11 +511,25 @@ const App = (() => {
       Store.setMe('incomingPackage', null);
     }
 
-    if (me.incomingShot && shotShown !== me.incomingShot.atMs) {
-      shotShown = me.incomingShot.atMs;
-      const dir = compassName(me.incomingShot.bearing);
+    // neko te nišani oružjem koje se najavljuje — imaš rok da se skloniš
+    if (me.incomingAim && shotShown !== me.incomingAim.atMs) {
+      shotShown = me.incomingAim.atMs;
+      const dir = compassName(me.incomingAim.bearing);
       toast(`${T('incomingShot')} ${dir} — ${T('incomingMove')}`, 'danger', 'alert');
       Haptics.fire('incoming'); Sfx.warn();
+    }
+    if (!me.incomingAim) shotShown = null;
+
+    // pogodak: crveni bljesak, vibracija, ko te je pogodio čime i sa koje strane
+    if (me.incomingHit && hitShown !== me.incomingHit.atMs) {
+      hitShown = me.incomingHit.atMs;
+      const h = me.incomingHit;
+      const from = (Store.players()[h.from] || {}).name || T('unknown');
+      toast(`${T('hitBy')} ${weaponName(h.weapon)} ${T('fromDist')} ${h.distM} m — ${from}`, 'danger', 'swords');
+      Haptics.fire('hurt'); Sfx.hurt();
+      const flash = $('#zoneFlash');
+      if (flash) { flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go'); }
+      Store.setMe('incomingHit', null);
     }
   }
   function compassName(b) {
@@ -671,7 +538,7 @@ const App = (() => {
   }
 
   return {
-    boot, route, requestPerm, startGame, playAgain, tryPickup, openEncounter, buyEvent, leaveRoom, goHome,
+    boot, route, requestPerm, startGame, playAgain, tryPickup, buyEvent, leaveRoom, goHome,
     quickTest, askBotCount, openSettings, checkPerms, goFullscreen,
     get TEST() { return TEST; }, get MODE() { return MODE; },
   };

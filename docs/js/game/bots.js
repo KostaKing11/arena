@@ -8,8 +8,6 @@
 const Bots = (() => {
   'use strict';
   const HUNT_M = 120;        // koliko daleko bot traži plen
-  const ATTACK_M = 30;       // na kojoj razdaljini kreće borba
-  const THINK_MS = 6000;     // pauza pre nego što ponovo razmišlja o napadu
   const FLEE_HP = 30;        // ispod ovoga se ne lovi, nego beži (§21)
   const S = new Map();
   const NAMES = ['Kato', 'Marvel', 'Glimer', 'Treš', 'Foxface', 'Klov', 'Ruta', 'Brutus',
@@ -67,36 +65,20 @@ const Bots = (() => {
       }
       const pos = { lat: p.pos.lat, lng: p.pos.lng };
 
-      /* — u borbi: bira potez — */
-      if (p.fightId) {
-        const f = Store.fights()[p.fightId];
-        if (!f || f.state !== 'live') continue;
-        if ((f.moves || {})[pid]) continue;
-        if (d.now < b.moveAt) continue;
-        b.moveAt = d.now + 1500 + Math.random() * 3500;
-        const isA = f.a === pid;
-        const hp = isA ? f.hpA : f.hpB;
-        if (hp < 30 && Math.random() < 0.5) {
-          await Store.ref(`fights/${p.fightId}/moves/${pid}`).set({ kind: 'flee' });
-          continue;
+      // ranjen bot beži od najbližeg igrača umesto da lovi
+      if ((p.hp || 100) < FLEE_HP) {
+        let near = null, nd = 1e9;
+        for (const [qid, q] of Object.entries(P)) {
+          if (qid === pid || q.alive === false || !q.pos) continue;
+          const m = U.dist(pos, q.pos);
+          if (m < nd && m < 40) { nd = m; near = q; }
         }
-        const w = R.weaponOf(p);
-        const inR = R.inRange(w, f.distance);
-        const move = inR ? (Math.random() < 0.65 ? 'attack' : 'block')
-          : (f.distance < w.min ? 'retreat' : 'approach');
-        await Store.ref(`fights/${p.fightId}/moves/${pid}`).set({ kind: 'move', move });
-        continue;
-      }
-      if (p.chaseId) {
-        // beži pravo od progonioca
-        const c = Store.chases()[p.chaseId];
-        const other = c && P[c.fleeing === pid ? c.chaser : c.fleeing];
-        if (other && other.pos) {
-          const away = U.destPoint(pos, (U.bearing(other.pos, pos)), b.speed * dt * 1.4);
+        if (near) {
+          const away = U.destPoint(pos, U.bearing(near.pos, pos), b.speed * dt * 1.4);
           upd.pos = { lat: away.lat, lng: away.lng, accM: 5, atMs: d.now };
           await Store.ref(`players/${pid}`).update(upd);
+          continue;
         }
-        continue;
       }
 
       /* — glad i žeđ i zona: host ih primenjuje umesto bota — */
@@ -170,28 +152,49 @@ const Bots = (() => {
       upd.pos = { lat: np.lat, lng: np.lng, accM: 5, atMs: d.now };
       upd.distanceWalkedM = Math.round((p.distanceWalkedM || 0) + stepM);
 
-      /* — napad na igrača u blizini — */
-      if ((p.hp || 100) >= FLEE_HP && d.now > (b.thinkAt || 0)) {
+      /* — udarac: borba v4, jedna akcija, bez stanja —
+         Bot ne nišani kamerom (nema je), ali poštuje isti opseg oružja,
+         cooldown i uplitanje kao igrač. */
+      const bw = R.weaponOf(p);
+      if ((p.hp || 100) >= FLEE_HP
+          && (p.weaponCooldownUntilMs || 0) <= d.now
+          && (p.entangledUntilMs || 0) <= d.now) {
         for (const [qid, q] of Object.entries(P)) {
-          if (qid === pid || q.alive === false || q.fightId || q.chaseId || !q.pos) continue;
+          if (qid === pid || q.alive === false || !q.pos) continue;
           if (q.allianceId && q.allianceId === p.allianceId) continue;
           const m = U.dist(np, q.pos);
-          if (m > ATTACK_M) continue;
-          if (Clock.now() - ((p.lastFight || {})[qid] || 0) < R.FIGHT_COOLDOWN_MS) continue;
-          b.thinkAt = d.now + THINK_MS;
-          const band = R.distanceBand(m, false);
-          if (band < 0) break;
-          const t1 = await Store.ref(`players/${qid}/fightId`).transaction((c) => (c == null ? 'pending' : undefined));
-          if (!t1.committed) break;
-          const fid = U.uid('f');
-          await Store.ref(`players/${qid}/fightId`).set(fid);
-          await Store.ref(`players/${pid}/fightId`).set(fid);
-          await Store.ref(`fights/${fid}`).set({
-            a: pid, b: qid, state: 'live', round: 1, distance: band,
-            hpA: p.hp, hpB: q.hp, arrowsA: p.arrows || 0, arrowsB: q.arrows || 0,
-            startedAtMs: d.now, deadlineMs: d.now + R.ROUND_MS,
-            moves: null, specialUsedA: false, specialUsedB: false,
+          if (R.rangeState(bw, m) === 'far') continue;
+          const res = R.attackDamage(p, m, {});
+          upd.weaponCooldownUntilMs = d.now + R.cooldownFor(p, bw, d.now);
+          upd.lastAttackAtMs = d.now;
+          if (bw.ammo === 'arrow') upd.arrows = Math.max(0, (p.arrows || 0) - 1);
+          if (res.miss) { upd.attacksMissed = (p.attacksMissed || 0) + 1; break; }
+
+          const hp = Math.max(0, (q.hp || 0) - res.dmg);
+          upd.damageDone = (p.damageDone || 0) + res.dmg;
+          upd.attacksLanded = (p.attacksLanded || 0) + 1;
+          const tUpd = { hp };
+          if (res.entangle && !(R.CLASSES[q.classId] || {}).immuneToEntangle) {
+            tUpd.entangledUntilMs = d.now + R.ENTANGLE_MS;
+          }
+          if (res.poison) tUpd.poisonUntilMs = d.now + R.POISON_MS;
+          tUpd.incomingHit = {
+            from: pid, weapon: bw.id, dmg: res.dmg, atMs: d.now,
+            distM: Math.round(m), bearing: U.bearing(q.pos, np),
+          };
+          await Store.ref(`players/${qid}`).update(tUpd);
+          await Store.pushHit({
+            attackerId: pid, victimId: qid, weapon: bw.id,
+            distanceM: Math.round(m), damage: res.dmg, missed: false,
           });
+          if (hp <= 0) {
+            upd.kills = (p.kills || 0) + 1;
+            await Store.ref(`players/${qid}`).update({
+              alive: false, hp: 0, deathAtMs: d.now, killedBy: pid, deathCause: 'hit',
+            });
+            await Attack.dropLoot(qid, q);
+            await Store.pushFeed({ type: 'death', subjectId: qid, killerId: pid, scope: 'all', cause: 'hit' });
+          }
           break;
         }
       }

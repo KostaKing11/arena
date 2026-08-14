@@ -154,109 +154,160 @@
 .inv-slot.empty { border-style: dashed; opacity: .4; }
 .weapon-slot { display: flex; align-items: center; gap: var(--s3); padding: var(--s3); border-radius: var(--r-md); background: var(--ink-2); border: 1px solid var(--line-hi); }
 
-/* ── borba: likovi na terenu ── */
-#s-fight { background: var(--ink-1); }
-.arena-stage {
-  position: relative; height: 40vh; min-height: 230px; overflow: hidden;
-  padding-top: var(--safe-t);
-  background: linear-gradient(180deg, var(--ink-0) 0%, #14110F 62%, #191512 100%);
+/* ══════════════ NIŠANJENJE ══════════════
+   Najvažniji ekran u igri. Kamera preko celog ekrana, nišan u sredini, velika
+   brojka razdaljine i traka opsega koja bojom odmah kaže smeš li da opališ. */
+/* NE dirati `position` — `.screen` je vec `position:absolute; inset:0`, a
+   relativno pozicioniranje bi sekciju vratilo u normalan tok, gde joj sva deca
+   apsolutna pa visina ispadne nula i ekran je crn. */
+#s-aim { background: #000; overflow: hidden; }
+#aimVid {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; transform-origin: center;
 }
-/* Poljana: horizont, tlo i par zaklona da se vidi gde je ko */
-.arena-stage .horizon { position: absolute; left: 0; right: 0; top: 62%; height: 1px; background: color-mix(in srgb, var(--gold) 22%, transparent); }
-.arena-stage .ground {
-  position: absolute; left: 0; right: 0; top: 62%; bottom: 0;
-  background: linear-gradient(180deg, #1E1915, #15120F);
+/* vinjeta drži tekst čitljivim preko svetle slike */
+.aim-vig {
+  position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,.55) 0, transparent 22%),
+    linear-gradient(0deg, rgba(0,0,0,.72) 0, transparent 42%);
 }
-.arena-stage .ground::after {
-  content: ''; position: absolute; inset: 0;
-  background: repeating-linear-gradient(90deg, transparent 0 26px, rgba(255,255,255,.02) 26px 27px);
+
+.aim-top {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 3;
+  display: flex; align-items: flex-start; gap: var(--s2);
+  padding: calc(var(--safe-t) + var(--s2)) var(--s3) var(--s2);
 }
-.arena-stage .cover { position: absolute; bottom: 4%; opacity: .35; color: var(--ink-5); }
-.arena-stage .cover.l { left: 3%; } .arena-stage .cover.r { right: 3%; }
-.fighter-fig { position: absolute; bottom: 3%; transition: left .5s var(--ease), right .5s var(--ease); }
-.fighter-fig.me { left: 8%; } .fighter-fig.foe { right: 8%; }
-.fighter-fig.hit { animation: shake .35s; }
-@keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
-.fighter-tag { position: absolute; top: calc(var(--safe-t) + 6px); display: flex; flex-direction: column; gap: 2px; }
-.fighter-tag.me { left: var(--s3); align-items: flex-start; }
-.fighter-tag.foe { right: var(--s3); align-items: flex-end; }
-.fighter-tag .nm { font-weight: 700; font-size: var(--fs-md); }
-.fighter-tag .cl { font-size: var(--fs-xs); color: var(--text-2); text-transform: uppercase; letter-spacing: .08em; }
-.fighter-tag .hpline { display: flex; align-items: center; gap: 6px; }
-.fighter-tag .hpn { font-size: var(--fs-lg); font-weight: 800; font-variant-numeric: tabular-nums; }
-.fighter-tag.me .hpn { color: var(--good-hi); } .fighter-tag.foe .hpn { color: var(--danger-hi); }
-:root[data-theme="day"] .fighter-tag.me .hpn { color: var(--good); }
-:root[data-theme="day"] .fighter-tag.foe .hpn { color: var(--danger); }
-.fighter-tag .bar { width: 92px; }
-.dmg-pop { position: absolute; top: 26%; font-family: var(--ff-display); font-size: var(--fs-2xl); font-weight: 800; color: var(--danger-hi); opacity: 0; pointer-events: none; }
-.dmg-pop.me { left: 12%; } .dmg-pop.foe { right: 12%; }
-.dmg-pop.go { animation: dmgUp .85s ease-out; }
-@keyframes dmgUp { 0% { opacity: 0; transform: translateY(6px) scale(.8); } 22% { opacity: 1; transform: translateY(-10px) scale(1.1); } 100% { opacity: 0; transform: translateY(-34px); } }
+.aim-top .sp { flex: 1; }
+/* Oznaka oružja se ne sme prelamati — "0–3 m" je jedna informacija. */
+.aim-top .chip { white-space: nowrap; flex: none; }
+.aim-top #aimStatus { justify-content: flex-end; max-width: 52%; }
 
-.round-bar { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4) 0; }
-.round-bar .rn { font-size: var(--fs-sm); font-weight: 700; color: var(--text-2); }
-.round-bar .timer { flex: 1; height: 4px; border-radius: 2px; background: var(--ink-4); overflow: hidden; }
-.round-bar .timer i { display: block; height: 100%; background: var(--ember); transform-origin: left; }
-.round-bar.urgent .timer i { background: var(--danger); }
-
-.dtrack { position: relative; height: 40px; margin: var(--s2) var(--s4) 0; }
-.dtrack .line { position: absolute; left: 0; right: 0; top: 13px; height: 2px; background: var(--ink-4); }
-.dtrack .rngband { position: absolute; top: 10px; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--ember) 30%, transparent); }
-.dtrack .seg { position: absolute; top: 9px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink-3); border: 1px solid var(--ink-5); transform: translateX(-50%); }
-.dtrack .seg.inrange { border-color: var(--ember); }
-.dtrack .pip { position: absolute; top: 5px; width: 18px; height: 18px; border-radius: 50%; background: var(--text); border: 2px solid var(--ink-1); transform: translateX(-50%); transition: left .45s var(--ease); z-index: 2; }
-.dtrack .lbl { position: absolute; top: 24px; transform: translateX(-50%); font-size: 10px; color: var(--text-3); }
-.range-hint { text-align: center; font-size: var(--fs-sm); color: var(--text-2); padding: var(--s2) var(--s4) 0; }
-.range-hint b { color: var(--text); }
-.range-hint.ok b { color: var(--good-hi); }
-:root[data-theme="day"] .range-hint.ok b { color: var(--good); }
-
-.combat-log { min-height: 34px; padding: var(--s2) var(--s4); text-align: center; font-size: var(--fs-sm); color: var(--text-2); }
-.moves { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); padding: 0 var(--s3); }
-/* Dugme nosi naslov i ishod: "Priđi / 3 → 2". Ikonica levo, tekst desno,
-   da se u 10 s runde pročita jednim pogledom. */
-.move {
-  min-height: 62px; border-radius: var(--r-md); border: 1px solid var(--line);
-  background: var(--ink-2); display: grid; grid-template-columns: auto 1fr;
-  align-items: center; gap: 0 var(--s2); padding: var(--s2) var(--s3);
-  font-weight: 700; font-size: var(--fs-md); text-align: left;
-  transition: transform .12s var(--ease), background .16s var(--ease), border-color .16s var(--ease);
+/* — nišan — */
+.aim-reticle {
+  position: absolute; left: 50%; top: 34%; z-index: 2;
+  width: 96px; height: 96px; margin: -48px 0 0 -48px; pointer-events: none;
+  transition: opacity .2s;
 }
-.move .ic { color: var(--text-3); grid-row: 1 / 3; }
-.move .sub { grid-column: 2; font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); }
-.move.attack { border-color: color-mix(in srgb, var(--danger) 60%, transparent); } .move.attack .ic { color: var(--danger); }
-.move.block { border-color: color-mix(in srgb, var(--thirst) 60%, transparent); } .move.block .ic { color: var(--thirst); }
-.move.step .ic { color: var(--gold); }
-.move.on { background: var(--ember); border-color: transparent; color: var(--on-accent); }
-.move.on .ic, .move.on .sub { color: var(--on-accent); }
-.move:active:not(:disabled) { transform: scale(.97); }
-.move:disabled { opacity: .32; }
-/* Znak pitanja uz traku dometa — objašnjenje borbe je jedan tap daleko. */
-.range-hint { display: flex; align-items: center; justify-content: center; gap: var(--s2); }
-.helpdot {
-  flex: none; width: 22px; height: 22px; border-radius: 50%;
-  border: 1px solid var(--line-2); background: var(--ink-2);
-  color: var(--text-3); font-size: 12px; font-weight: 800; line-height: 1;
+.aim-reticle i { position: absolute; background: #fff; opacity: .9; }
+.aim-reticle .c {
+  left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px;
+  border-radius: 50%; background: var(--ember);
 }
-.fight-extra { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); padding: var(--s2) var(--s3) calc(var(--s3) + var(--safe-b)); }
+.aim-reticle .t { left: 50%; top: 0; width: 2px; height: 20px; margin-left: -1px; }
+.aim-reticle .b { left: 50%; bottom: 0; width: 2px; height: 20px; margin-left: -1px; }
+.aim-reticle .l { top: 50%; left: 0; height: 2px; width: 20px; margin-top: -1px; }
+.aim-reticle .r { top: 50%; right: 0; height: 2px; width: 20px; margin-top: -1px; }
+.aim-reticle.in i { background: var(--good); }
+.aim-reticle.close i { background: var(--gold); }
+.aim-reticle.far i { background: var(--danger); }
+.aim-reticle.in .c, .aim-reticle.close .c, .aim-reticle.far .c { background: #fff; }
+.aim-reticle.locked { animation: reticleLock .35s var(--ease-out); }
+@keyframes reticleLock { from { transform: scale(1.35); } to { transform: none; } }
 
-/* ── bekstvo ── */
-#s-chase { background: var(--ink-1); }
-.chase-ring { width: 190px; height: 190px; position: relative; display: grid; place-items: center; margin: 0 auto; }
-.chase-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
-.chase-ring circle { fill: none; stroke-width: 8; }
-.chase-ring .bg { stroke: var(--ink-4); }
-.chase-ring .fg { stroke: var(--danger); stroke-linecap: round; transition: stroke-dashoffset .3s linear; }
-.chase-count { font-family: var(--ff-display); font-size: 62px; font-weight: 800; color: var(--danger-hi); }
-:root[data-theme="day"] .chase-count { color: var(--danger); }
-.chase-arrow { transition: transform .3s var(--ease); color: var(--danger); }
+/* — ko je na nišanu — */
+.aim-lock {
+  position: absolute; left: 0; right: 0; top: calc(34% + 56px); z-index: 3;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  pointer-events: none; text-shadow: 0 2px 8px rgba(0,0,0,.85);
+}
+.aim-lock .nm { font-weight: 800; font-size: var(--fs-lg); }
+.aim-lock .dist {
+  font-family: var(--ff-display); font-size: 54px; font-weight: 800; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.aim-lock .dist u { font-family: var(--ff); font-size: 20px; text-decoration: none; }
+.aim-lock .dist.in { color: var(--good-hi); }
+.aim-lock .dist.close { color: var(--gold-hi); }
+.aim-lock .dist.far { color: var(--danger-hi); }
+.aim-lock .sub { font-size: var(--fs-sm); color: #fff; opacity: .85; }
+.aim-lock .ally { color: var(--ally); font-weight: 700; }
 
-/* ── nišanjenje ── */
-.aim-ring { width: 200px; height: 200px; position: relative; display: grid; place-items: center; margin: 0 auto; }
-.aim-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
-.aim-ring circle { fill: none; stroke-width: 8; }
-.aim-ring .bg { stroke: var(--ink-4); }
-.aim-ring .fg { stroke: var(--gold); stroke-linecap: round; }
+.aim-bottom {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  display: flex; flex-direction: column; gap: var(--s2);
+  padding: var(--s3) var(--s3) calc(var(--s3) + var(--safe-b));
+}
+
+/* — traka opsega: žuto preblizu, zeleno u dometu, crveno predaleko — */
+.aim-range { position: relative; height: 34px; }
+.aim-range .rb {
+  position: absolute; left: 0; right: 0; top: 8px; height: 10px;
+  border-radius: 5px; overflow: hidden; background: var(--ink-4);
+}
+.aim-range .z { position: absolute; top: 0; bottom: 0; }
+.aim-range .z.close { background: color-mix(in srgb, var(--gold) 70%, transparent); }
+.aim-range .z.in    { background: color-mix(in srgb, var(--good) 85%, transparent); }
+.aim-range .z.far   { background: color-mix(in srgb, var(--danger) 55%, transparent); }
+.aim-range .marker {
+  position: absolute; top: 2px; width: 4px; height: 22px; margin-left: -2px;
+  border-radius: 2px; background: #fff; box-shadow: 0 0 0 2px rgba(0,0,0,.55);
+  transition: left .18s var(--ease); z-index: 2;
+}
+.aim-range .tick {
+  position: absolute; top: 21px; transform: translateX(-50%);
+  font-size: 10px; color: #fff; opacity: .75; white-space: nowrap;
+}
+
+/* — ostali kandidati u konusu — */
+.aim-list {
+  display: flex; gap: var(--s2); overflow-x: auto;
+  /* lista se skroluje do ivice ekrana, pa poslednji ne ispada odsečen */
+  margin: 0 calc(var(--s3) * -1); padding: 0 var(--s3);
+  scrollbar-width: none;
+}
+.aim-list::-webkit-scrollbar { display: none; }
+.aim-list:empty { display: none; }
+.aim-cand {
+  flex: none; display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: var(--r-pill);
+  background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.22);
+  color: #fff; font-size: var(--fs-xs); font-weight: 600;
+}
+.aim-cand.on { border-color: var(--ember); background: color-mix(in srgb, var(--ember) 30%, rgba(0,0,0,.5)); }
+
+.aim-hint { min-height: 18px; text-align: center; font-size: var(--fs-xs); color: #fff; opacity: .8; }
+
+/* — dugme koje se DRŽI — */
+.aim-fire {
+  position: relative; height: 76px; border-radius: var(--r-lg);
+  background: var(--danger); color: #fff; font-weight: 800; font-size: var(--fs-lg);
+  display: flex; align-items: center; justify-content: center; gap: var(--s2);
+  overflow: hidden; touch-action: none; user-select: none;
+  transition: transform .1s var(--ease), background .2s;
+}
+.aim-fire:disabled { background: var(--ink-3); color: var(--text-3); }
+.aim-fire.holding { transform: scale(.98); }
+/* napredak nišanjenja se puni s leva udesno, vidljivo i bez gledanja u broj */
+.aim-fire .fill {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
+  background: rgba(255,255,255,.32); transform: scaleX(0); transform-origin: left;
+  pointer-events: none;
+}
+.aim-fire .lbl { position: relative; z-index: 1; display: flex; align-items: center; gap: var(--s2); }
+.aim-fire .cd {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgba(0,0,0,.45); font-variant-numeric: tabular-nums; z-index: 2;
+}
+.aim-extra { display: grid; grid-auto-flow: column; gap: var(--s2); }
+.aim-extra:empty { display: none; }
+
+/* — pogodak i promašaj — */
+.aim-flash {
+  position: absolute; inset: 0; z-index: 6; pointer-events: none; opacity: 0;
+  display: grid; place-items: center;
+}
+.aim-flash.go { animation: aimHit 1.5s ease-out; }
+.aim-flash .n {
+  font-family: var(--ff-display); font-size: 84px; font-weight: 800;
+  color: var(--danger-hi); text-shadow: 0 4px 20px rgba(0,0,0,.9);
+}
+@keyframes aimHit {
+  0% { opacity: 0; transform: scale(.7); }
+  18% { opacity: 1; transform: scale(1.08); }
+  70% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
 
 /* ── upozorenja preko mape ── */
 .danger-vignette { position: absolute; inset: 0; z-index: 405; pointer-events: none; opacity: 0; box-shadow: inset 0 0 70px 18px color-mix(in srgb, var(--danger) 55%, transparent); transition: opacity .4s; }

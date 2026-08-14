@@ -5,7 +5,7 @@ const UI = (() => {
   'use strict';
   let myAvatar = JSON.parse(localStorage.getItem('arena.avatar') || 'null') || randomAvatar();
   let gmap = null, smap = null, smapCenter = null;
-  let lastFightRound = -1, lastHp = null, spectateFid = null;
+  let lastHp = null;
 
   const saveAvatar = () => localStorage.setItem('arena.avatar', JSON.stringify(myAvatar));
 
@@ -881,7 +881,7 @@ const UI = (() => {
     const nm = (id) => (P[id] ? P[id].name : T('unknown'));
     switch (f.type) {
       case 'death':
-        if (f.killerId) return f.cause === 'shot' ? T('fDeathShot', nm(f.subjectId), nm(f.killerId)) : T('fDeathBy', nm(f.subjectId), nm(f.killerId));
+        if (f.killerId) return T('fDeathBy', nm(f.subjectId), nm(f.killerId));
         return T({ zone: 'fDeathZone', hunger: 'fDeathHunger', thirst: 'fDeathThirst', fire: 'fDeathFire', trap: 'fDeathTrap' }[f.cause] || 'fDeathZone', nm(f.subjectId));
       case 'prep': return T('fPrep');
       case 'start': return T('fStart');
@@ -892,6 +892,7 @@ const UI = (() => {
       case 'alliance': return T('fAlliance');
       case 'package': return T('fPackage');
       case 'shot': return T('fShot', nm(f.subjectId), nm(f.targetId), f.hit);
+      case 'special': return T('fSpecial', nm(f.subjectId), specialName(f.special));
       case 'event': return f.eventType === 'feast' ? T('fFeast') : T('fEvent', eventName(f.eventType));
       case 'zone': return T('fZone', f.phase || '', f.diameter || '');
       case 'alarm': return T('fAlarm');
@@ -1022,172 +1023,267 @@ const UI = (() => {
     };
   }
 
-  /* ═══════════════ borba ═══════════════ */
-  /** `spectate` = gledam tuđu borbu (duh ili mentor): isti ekran, bez komandi. */
-  function renderFight(d, f, spectate) {
-    const P = Store.players();
-    const side = spectate ? 'A' : Combat.sideOf(f);
-    const meId = spectate ? f.a : Store.myId;
-    const foeId = spectate ? f.b : Combat.foeIdOf(f);
-    const me = spectate ? (P[f.a] || {}) : d.me;
-    const foe = P[foeId] || {};
-    const myHp = side === 'A' ? f.hpA : f.hpB;
-    const fHp = side === 'A' ? f.hpB : f.hpA;
-    const w = R.WEAPONS[me.weapon] || R.WEAPONS.fists;
-    const picked = spectate ? false : !!(f.moves || {})[Store.myId];
-    const left = Math.max(0, (f.deadlineMs - d.now) / 1000);
+  /* ═══════════════ NIŠANJENJE (borba v4) ═══════════════
+     Jedini način napada, i najvažniji ekran u igri.
 
-    // ── likovi na terenu: razmak prati razdaljinu iz borbe ──
-    // Razdaljina 0 = jedan drugom u lice (blizu sredine), 5 = svako na svojoj
-    // ivici. Ranije je bilo obrnuto, pa je primicanje izgledalo kao odmicanje.
-    const near = 6, far = 34;                        // procenti od ivice
-    const t = f.distance / 5;
-    const edgePct = (far - (far - near) * t) + '%';
-    $('#figMe').style.left = edgePct;
-    $('#figFoe').style.right = edgePct;
-    $('#figMe').innerHTML = avatarFigure(me.avatar, 132, { weapon: me.weapon });
-    $('#figFoe').innerHTML = avatarFigure(foe.avatar, 132, { weapon: foe.weapon, facing: -1 });
-    $('#coverL').innerHTML = icon('flame', { size: 26 });
-    $('#coverR').innerHTML = icon('box', { size: 26 });
+     Radi u dva sloja:
+     · petlja uživo (4×/s) — konus po kompasu bira cilj, pa se osvežavaju nišan,
+       brojka razdaljine i traka opsega. Ovo NE traži sliku.
+     · držanje dugmeta — tek tada se uslika kadar, proveri da li u njemu ima
+       osobe, i pokrene nišanjenje koje traje onoliko koliko oružje traži. */
+  let aimTick = null, aimHandle = null, aimTargetId = null, aimBusy = false;
 
-    const tag = (who, name, cls, hp, max) => `
-      <div class="nm">${esc(name)}</div>
-      <div class="cl">${cls ? esc(clsName(cls)) : '—'}</div>
-      <div class="hpline"><span class="hpn">${Math.round(hp)}</span>${bar('hp', hp, max || 100)}</div>`;
-    $('#tagMe').innerHTML = tag('me', spectate ? (me.name || '?') : T('you'), me.classId, myHp, me.maxHp);
-    $('#tagFoe').innerHTML = tag('foe', foe.name || '?', foe.classId, fHp, foe.maxHp);
+  function openAim() {
+    const d = Engine.d;
+    if (!d.me || d.me.alive === false) { Screens.go('ghost'); renderGhost(d); return; }
+    Screens.go('aim');
+    aimTargetId = null; aimBusy = false;
 
-    $('#roundNum').textContent = `${T('round')} ${Math.min(f.round, f.maxRounds || R.MAX_ROUNDS)}/${f.maxRounds || R.MAX_ROUNDS}`;
-    $('#roundBar').className = 'round-bar' + (left < 4 ? ' urgent' : '');
-    $('#roundTimer').style.transform = `scaleX(${U.clamp(left / (R.ROUND_MS / 1000), 0, 1)})`;
+    $('#aimBack').innerHTML = icon('chevronLeft', { size: 22 });
+    $('#aimBack').onclick = () => closeAim();
 
-    // ── traka razdaljine sa pojasom dometa oružja ──
-    const segs = [];
-    for (let i = 0; i <= 5; i++) {
-      const pct = (i / 5) * 100;
-      segs.push(`<div class="seg ${R.inRange(w, i) ? 'inrange' : ''}" style="left:${pct}%"></div>`);
-      segs.push(`<div class="lbl" style="left:${pct}%">${i}</div>`);
-    }
-    const bandL = (w.min / 5) * 100, bandR = (w.max / 5) * 100;
-    $('#dtrack').innerHTML = `<div class="line"></div>
-      <div class="rngband" style="left:${bandL}%;width:${Math.max(2, bandR - bandL)}%"></div>
-      ${segs.join('')}<div class="pip" style="left:${(f.distance / 5) * 100}%"></div>`;
-    const inRange = R.inRange(w, f.distance);
-    $('#rangeHint').className = 'range-hint ' + (inRange ? 'ok' : '');
-    $('#rangeHint').innerHTML =
-      `<span>${esc(T('distNow'))} <b>${f.distance}</b> · `
-      + `${icon(WEAPON_ICON[me.weapon] || 'hand', { size: 13, cls: 'inline' })}`
-      + `${esc(weaponName(me.weapon))} ${w.min}–${w.max} · `
-      + (inRange ? `<b>${esc(T('moveAttack'))}</b>` : esc(T('outOfRange'))) + '</span>'
-      + `<button class="helpdot" id="fightHelp" aria-label="?">?</button>`;
-    $('#fightHelp').onclick = () => {
-      const m = modal(`
-        <div class="stack">
-          <h2>${esc(T('fightHelp'))}</h2>
-          <p class="dim" style="line-height:1.65;white-space:pre-line">${esc(T('fightHelpBody'))}</p>
-          <button class="btn primary full" id="fhOk">${esc(T('ok'))}</button>
-        </div>`);
-      $('#fhOk', m).onclick = () => m.close();
-    };
+    Encounter.openCamera($('#aimVid'), 'environment')
+      .catch(() => { toast(T('denied'), 'danger'); closeAim(); });
+    Encounter.loadDetector();
 
-    // gledalac vidi sve isto, samo bez dugmadi
-    if (spectate) {
-      $('#moves').innerHTML = '';
-      $('#fightExtra').innerHTML = `<button class="btn ghost" id="specBack" style="grid-column:1/-1">
-        ${icon('chevronLeft', { size: 20 })}<span>${esc(T('back'))}</span></button>`;
-      const sb = $('#specBack');
-      if (sb) sb.onclick = () => { spectateFid = null; Screens.go(Store.me() ? 'ghost' : 'mentor'); };
-      $('#combatLog').textContent = describeLog(f, me, foe);
-      bumpRound(f, meId, foeId);
-      return;
+    wireFire();
+    drawAim();
+    clearInterval(aimTick);
+    aimTick = setInterval(drawAim, 250);
+  }
+
+  function closeAim() {
+    clearInterval(aimTick); aimTick = null;
+    if (aimHandle) { aimHandle.cancel(); aimHandle = null; }
+    Encounter.stop();
+    Screens.go('game');
+  }
+
+  /* — petlja uživo — */
+  function drawAim() {
+    const d = Engine.d;
+    if (!d.me) return;
+    if (d.me.alive === false) { closeAim(); return; }
+
+    const me = d.me;
+    const w = R.weaponOf(me);
+    const { list, noHeading } = Encounter.candidatesInCone(d);
+
+    // cilj je onaj najbliži sredini nišana; ostaje izabran dok je u konusu
+    let target = list.find((c) => c.pid === aimTargetId) || list[0] || null;
+    aimTargetId = target ? target.pid : null;
+
+    $('#aimWeapon').innerHTML =
+      `${icon(WEAPON_ICON[me.weapon] || 'hand', { size: 15 })}<span>${esc(weaponName(me.weapon))}</span>`
+      + `<span class="dim"> ${w.minM}–${w.maxM} m</span>`;
+
+    // stanje senzora — bez ovoga ne znaš zašto te ne pušta da opališ
+    const st = Encounter.detectorState;
+    const det = st === 'ready' ? ['good', T('detReady')] : st === 'failed' ? ['danger', T('detOff')] : ['gold', T('detLoading')];
+    const h = Compass.heading;
+    const comp = h == null ? ['danger', T('detNoCompass')] : ['good', `${Math.round(h)}°`];
+    const acc = Geo.accuracy;
+    const gps = acc == null ? ['danger', 'GPS —'] : acc <= R.MIN_ACC_M ? ['good', `±${Math.round(acc)} m`] : ['danger', `±${Math.round(acc)} m`];
+    $('#aimStatus').innerHTML = [det, comp, gps].map(([c, t]) => `<span class="chip ${c}">${esc(t)}</span>`).join('');
+
+    const state = target ? R.rangeState(w, target.distM) : null;
+    $('#aimReticle').className = 'aim-reticle' + (state ? ' ' + state : '');
+
+    // ko je na nišanu
+    if (!target) {
+      $('#aimLock').innerHTML = `<div class="sub">${esc(noHeading ? T('detNoCompass') : T('photoNoneInCone'))}</div>`;
+    } else {
+      $('#aimLock').innerHTML = `
+        <div class="nm">${esc(target.p.name)}</div>
+        <div class="dist ${state}">${Math.round(target.distM)}<u> m</u></div>
+        ${target.ally ? `<div class="ally">${icon('handshake', { size: 14 })} ${esc(T('isAlly'))}</div>`
+          : `<div class="sub">${esc(state === 'in' ? T('rangeIn') : state === 'close' ? T('rangeClose') : T('rangeFar'))}</div>`}`;
     }
 
-    /* ── potezi ──
-       Iz same reči "Priđi" se ne vidi šta se dešava, pa svako dugme ispod
-       naslova nosi konkretan ishod: koliko šteta, ili sa koje razdaljine na
-       koju te vodi. Nemoguć potez je ugašen, a ne tiho bez efekta. */
-    const dist = f.distance;
-    const hit = R.attackDamage(me, dist, {});
-    const sub = {
-      attack: hit.miss ? T('outOfRange') : `−${hit.dmg} ${T('hpShort')}`,
-      block: T('blockSub'),
-      approach: dist <= 0 ? T('alreadyClosest') : `${dist} → ${dist - 1}`,
-      retreat: dist >= 5 ? T('alreadyFarthest') : `${dist} → ${dist + 1}`,
-    };
-    const off = {
-      attack: hit.miss, block: false,
-      approach: dist <= 0, retreat: dist >= 5,
-    };
-    const mk = (m, label, ic, cls) => `<button class="move ${cls || ''}" data-m="${m}"
-      ${picked || off[m] ? 'disabled' : ''}>
-      ${icon(ic, { size: 22 })}<span>${esc(label)}</span>
-      <span class="sub">${esc(sub[m])}</span></button>`;
-    $('#moves').innerHTML =
-      mk('attack', T('moveAttack'), 'swords', 'attack') +
-      mk('block', T('moveBlock'), 'shield', 'block') +
-      mk('approach', T('moveApproach'), 'stepIn', 'step') +
-      mk('retreat', T('moveRetreat'), 'stepOut', 'step');
-    $$('#moves .move').forEach((b) => b.onclick = () => { Combat.submit('move', b.dataset.m); b.classList.add('on'); });
+    drawRangeBar(w, target ? target.distM : null);
 
+    // ostali u konusu — tap bira drugog
+    $('#aimList').innerHTML = list.slice(0, 5).map((c) => `
+      <button class="aim-cand ${c.pid === aimTargetId ? 'on' : ''}" data-pid="${c.pid}">
+        ${esc(c.p.name)} · ${Math.round(c.distM)} m</button>`).join('');
+    $$('#aimList .aim-cand').forEach((b) => b.onclick = () => { aimTargetId = b.dataset.pid; drawAim(); });
+
+    updateFire(d, target, state);
+    drawExtra(d, target);
+  }
+
+  /** Traka opsega: žuto preblizu, zeleno u dometu, crveno predaleko. */
+  function drawRangeBar(w, distM) {
+    const scale = Math.max(w.maxM * 1.35, 12);
+    const pct = (m) => U.clamp((m / scale) * 100, 0, 100);
+    const a = pct(w.minM), b = pct(w.maxM);
+    const marker = distM == null ? null : pct(distM);
+    $('#aimRange').innerHTML = `
+      <div class="rb">
+        ${a > 0 ? `<i class="z close" style="left:0;width:${a}%"></i>` : ''}
+        <i class="z in" style="left:${a}%;width:${b - a}%"></i>
+        <i class="z far" style="left:${b}%;width:${100 - b}%"></i>
+      </div>
+      ${marker != null ? `<b class="marker" style="left:${marker}%"></b>` : ''}
+      ${w.minM > 0 ? `<span class="tick" style="left:${a}%">${w.minM} m</span>` : ''}
+      <span class="tick" style="left:${b}%">${w.maxM} m</span>`;
+  }
+
+  /* — dugme koje se drži — */
+  function updateFire(d, target, state) {
+    const btn = $('#aimFire');
+    const cd = Attack.cooldownLeft(d);
+    const why = target ? Attack.blockedReason(d, target.p) : 'nocone';
+    const can = !!target && state !== 'far' && !why && !aimBusy;
+
+    btn.disabled = !can;
+    const w = R.weaponOf(d.me);
+    btn.innerHTML = `<i class="fill"></i>`
+      + `<span class="lbl">${icon('target', { size: 22 })}${esc(T('aimHoldBtn'))} · ${(w.aimMs / 1000).toFixed(w.aimMs % 1000 ? 1 : 0)} s</span>`
+      + (cd > 0 ? `<span class="cd">${Math.ceil(cd)} s</span>` : '');
+
+    $('#aimHint').textContent = !target ? ''
+      : why ? blockedText(why)
+      : state === 'far' ? T('rangeFarHint')
+      : state === 'close' ? T('rangeCloseHint')
+      : target.ally ? T('allyHint') : '';
+  }
+
+  function blockedText(why) {
+    return ({
+      dead: T('targetDead'), grace: T('blockGrace'), zone: T('blockZone'),
+      gps: T('blockGps'), gpsTarget: T('blockGpsTarget'), stale: T('blockStale'),
+      cooldown: T('blockCooldown'), entangled: T('blockEntangled'),
+      ammo: T('noArrows'), nocone: T('photoNoneInCone'),
+    })[why] || T('aimBlocked');
+  }
+
+  /** Savez, specijal i lečenje — sve što nije običan udarac. */
+  function drawExtra(d, target) {
+    const me = d.me;
+    const out = [];
+    if (target && !target.ally) out.push(`<button class="btn ghost" id="aimAlly">${icon('handshake', { size: 18 })}<span>${esc(T('actAlliance'))}</span></button>`);
     const sp = R.SPECIALS[me.classId];
-    const spUsed = side === 'A' ? f.specialUsedA : f.specialUsedB;
-    const canSp = sp && R.ownsWeapon(me) && !spUsed && !picked;
-    $('#fightExtra').innerHTML = `
-      <button class="btn ${canSp ? 'gold' : 'ghost'}" id="btnSpecial" ${canSp ? '' : 'disabled'}>
-        ${icon('spark', { size: 20 })}<span>${sp ? esc(specialName(sp.id)) : esc(T('special'))}</span></button>
-      <button class="btn danger-ghost" id="btnFlee" ${picked ? 'disabled' : ''}>
-        ${icon('run', { size: 20 })}<span>${esc(T('fleeBtn'))}</span></button>`;
-    const bs = $('#btnSpecial'); if (bs) bs.onclick = () => Combat.submit('special');
-    $('#btnFlee').onclick = () => Combat.flee();
-
-    $('#combatLog').textContent = picked ? T('waitingOpponent') : describeLog(f, me, foe);
-
-    bumpRound(f, Store.myId, foeId);
-  }
-
-  /* Trzaj i brojka štete kad stigne nova runda. */
-  function bumpRound(f, meId, foeId) {
-    if (f.round === lastFightRound) return;
-    if (lastFightRound >= 0 && f.lastLog) {
-      for (const l of f.lastLog) {
-        if (!l.dmg) continue;
-        const mine = l.to === meId;
-        const pop = $(mine ? '#popMe' : '#popFoe');
-        if (pop) { pop.textContent = '−' + l.dmg; pop.classList.remove('go'); void pop.offsetWidth; pop.classList.add('go'); }
-        const fig = $(mine ? '#figMe' : '#figFoe');
-        if (fig) { fig.classList.remove('hit'); void fig.offsetWidth; fig.classList.add('hit'); }
-      }
-      Haptics.fire('round'); Sfx.hit();
+    if (sp && !me.specialUsedThisGame) {
+      const why = Attack.specialBlocked(d, target && target.pid, target && target.distM);
+      out.push(`<button class="btn ${why ? 'ghost' : 'gold'}" id="aimSpecial" ${why ? 'disabled' : ''}>
+        ${icon('spark', { size: 18 })}<span>${esc(specialName(sp.id))}</span></button>`);
     }
-    lastFightRound = f.round;
-  }
-  function describeLog(f, me, foe) {
-    if (!f.lastLog || !f.lastLog.length) return '';
-    return f.lastLog.map((l) => {
-      const who = l.from === Store.myId ? T('you') : (foe.name || '?');
-      if (l.kind === 'miss') return `${who}: ${T('missed')}`;
-      if (l.kind === 'block') return `${who}: ${T('moveBlock')}`;
-      if (l.kind === 'counter') return `${who}: ${T('counterHit')} −${l.dmg}`;
-      if (l.kind === 'special') return `${who}: ${specialName(l.special)}`;
-      if (l.kind === 'poison') return `${T('diedFrom')}: −${l.dmg}`;
-      if (l.dmg) return `${who} −${l.dmg}${l.blocked ? ' (' + T('blockedHit') + ')' : ''}`;
-      return '';
-    }).filter(Boolean).join(' · ');
+    $('#aimExtra').innerHTML = out.join('');
+    const ab = $('#aimAlly');
+    if (ab) ab.onclick = () => Encounter.proposeAlliance(target.pid);
+    const sb = $('#aimSpecial');
+    if (sb) sb.onclick = () => fireSpecial(target);
   }
 
-  /* ═══════════════ bekstvo ═══════════════ */
-  function renderChase(d) {
-    const v = Chase.view(d);
-    if (!v) return;
-    const rot = v.bearing != null && Compass.heading != null ? v.bearing - Compass.heading : (v.bearing || 0);
-    $('#chaseBody').innerHTML = `
-      <div class="chip danger">${icon('run', { size: 16 })}<span>${esc(v.fleeing ? T('chaseFleeing') : T('chaseChasing'))}</span></div>
-      <div class="chase-ring">${ring(v.secondsLeft / v.need, 220)}
-        <div class="chase-count">${Math.ceil(v.secondsLeft)}</div></div>
-      <div class="huge">${fmtDist(v.distM)}</div>
-      <p class="dim">${esc(v.leftRadius ? T('chaseHold') : T('chaseGetAway'))}</p>
-      <div class="chase-arrow" style="transform:rotate(${rot}deg)">${icon('navigation', { size: 72 })}</div>
-      <p class="tiny mute">${esc(T('chaseNoHeal'))} · ${U.mmss(v.timeoutIn)}</p>`;
+  async function fireSpecial(target) {
+    if (aimBusy) return;
+    aimBusy = true;
+    const d = Engine.d;
+    const sp = R.SPECIALS[d.me.classId];
+    try {
+      // Strelčev precizan hitac se i dalje nišani, samo duže
+      let photo = null;
+      if (sp.maxM != null && target) {
+        const conf = await Encounter.confirmPerson($('#aimCan'));
+        if (!conf.ok) { toast(confirmText(conf), 'danger', 'alert'); return; }
+        photo = conf.photo;
+        if (sp.aimMs) {
+          const held = await holdAim(target.pid, { aimMs: sp.aimMs, warns: sp.warns });
+          if (!held || held.reason === 'cancelled') return;
+          if (held.miss) { showMiss(held.reason); return; }
+        }
+      }
+      const res = await Attack.special(d, target && target.pid, target && target.distM, { photo });
+      if (!res.ok) { toast(blockedText(res.reason), 'danger', 'alert'); return; }
+      if (res.kind === 'hit') showHit(res.res.dmg, res.out && res.out.killed);
+      else { toast(specialName(sp.id), 'good', 'spark'); Haptics.fire('pickup'); }
+    } finally { aimBusy = false; drawAim(); }
+  }
+
+  const confirmText = (c) => (c.reason === 'noperson' ? T('photoNoPerson')
+    : c.reason === 'cooldown' ? `${T('photoCooldown')} ${c.waitS} s` : T('denied'));
+
+  /** Drži dugme; otpuštanje pre vremena prekida. */
+  function holdAim(targetId, opts) {
+    return new Promise((res) => {
+      const btn = $('#aimFire');
+      const fill = $('.fill', btn);
+      btn.classList.add('holding');
+      Haptics.fire('tap');
+      aimHandle = Encounter.startAim(Engine.d, targetId, {
+        ...opts,
+        onProgress: (p) => { if (fill) fill.style.transform = `scaleX(${p})`; },
+      });
+      const done = (r) => {
+        btn.classList.remove('holding');
+        if (fill) fill.style.transform = 'scaleX(0)';
+        aimHandle = null;
+        res(r);
+      };
+      aimHandle.promise.then(done);
+      const release = () => { if (aimHandle) aimHandle.cancel(); };
+      btn.addEventListener('pointerup', release, { once: true });
+      btn.addEventListener('pointercancel', release, { once: true });
+      btn.addEventListener('pointerleave', release, { once: true });
+    });
+  }
+
+  function wireFire() {
+    const btn = $('#aimFire');
+    btn.onpointerdown = async (e) => {
+      e.preventDefault();
+      if (aimBusy || btn.disabled) return;
+      const d = Engine.d;
+      const { list } = Encounter.candidatesInCone(d);
+      const target = list.find((c) => c.pid === aimTargetId) || list[0];
+      if (!target) return;
+      aimBusy = true;
+      try {
+        // saveznika se ne napada slučajno — prvo pitanje (§8)
+        if (target.ally && !(await confirmBox(T('betrayAsk'), T('actBetray'), true))) return;
+
+        const conf = await Encounter.confirmPerson($('#aimCan'));
+        if (!conf.ok) { toast(confirmText(conf), 'danger', 'alert'); Haptics.fire('alert'); return; }
+
+        const held = await holdAim(target.pid, {});
+        if (!held || held.reason === 'cancelled') { toast(T('aimReleased'), 'gold'); return; }
+        if (held.miss) { showMiss(held.reason); return; }
+
+        const me = Store.me();
+        const res = R.attackDamage(me, held.distM, { betrayal: target.ally });
+        const out = await Attack.land(d, target.pid, held.distM, res, { photo: conf.photo });
+        if (target.ally) {
+          await Store.updateMe({ allianceId: null });
+          await Store.pushFeed({ type: 'betrayal', subjectId: Store.myId, targetId: target.pid, scope: 'all' });
+        }
+        if (res.miss) showMiss('close');
+        else showHit(res.dmg, out && out.killed);
+      } finally { aimBusy = false; drawAim(); }
+    };
+  }
+
+  /* — ishod: broj štete preko ekrana, 1,5 s (§3) — */
+  function showHit(dmg, killed) {
+    flash(`−${dmg}`, 'var(--danger-hi)');
+    Haptics.fire(killed ? 'death' : 'hit');
+    Sfx.zap();
+    if (killed) toast(T('youKilled'), 'good', 'skull');
+  }
+  function showMiss(reason) {
+    flash(T('missed'), 'var(--text-2)');
+    Haptics.fire('alert');
+    const why = reason === 'dodged' ? T('missDodged') : reason === 'moved' ? T('missMoved') : T('missClose');
+    toast(why, 'gold', 'alert');
+  }
+  function flash(text, color) {
+    const s = $('#s-aim');
+    let n = $('.aim-flash', s);
+    if (!n) { n = el('div', 'aim-flash', '<div class="n"></div>'); s.appendChild(n); }
+    const num = $('.n', n);
+    num.textContent = text;
+    num.style.color = color;
+    n.classList.remove('go'); void n.offsetWidth; n.classList.add('go');
   }
 
   /* ═══════════════ nebo (§16) ═══════════════ */
@@ -1251,7 +1347,6 @@ const UI = (() => {
       <div class="card stack">
         <div class="card-title">${esc(T('allPlayers'))}</div>
         ${aliveList.map(([pid, p]) => {
-          const inFight = p.fightId && (Store.fights()[p.fightId] || {}).state === 'live';
           const followed = (d.me && d.me.following) === pid;
           return `<div class="list-item">
           <div class="avatar ${followed ? 'ring' : ''}" style="width:40px;height:40px">${avatarSvg(p.avatar, 40)}</div>
@@ -1259,7 +1354,6 @@ const UI = (() => {
             <div class="tiny dim">${esc(clsName(p.classId))} · ${esc(weaponName(p.weapon))}
               · ${icon('heart', { size: 11 })} ${Math.round(p.hp)}
               · ${Math.round(p.hunger || 0)} / ${Math.round(p.thirst || 0)}</div></div>
-          ${inFight ? `<button class="btn sm danger-ghost" data-watch="${p.fightId}">${icon('eye', { size: 16 })}</button>` : ''}
           <button class="btn sm ${followed ? 'gold' : 'ghost'}" data-follow="${pid}">
             ${icon(followed ? 'check' : 'target', { size: 16 })}</button>
         </div>`; }).join('')}
@@ -1273,11 +1367,6 @@ const UI = (() => {
       Store.updateMe({ following: cur === pid ? null : pid });
       toast(cur === pid ? T('unfollowBtn') : T('following'), '', 'target');
     });
-    $$('#ghostBody [data-watch]').forEach((b) => b.onclick = () => {
-      spectateFid = b.dataset.watch;
-      lastFightRound = -1;
-      Screens.go('fight');
-    });
     $('#ghostMap').onclick = () => Screens.go('game');
   }
 
@@ -1289,7 +1378,6 @@ const UI = (() => {
     $('#favorChip').innerHTML = `${icon('spark', { size: 16 })}<span>${Mentor.favor().toFixed(1)}</span>`;
 
     if (!p) { $('#mentorBody').innerHTML = `<div class="card center"><p>${esc(T('loading'))}</p></div>`; return; }
-    const inFight = p.fightId && (Store.fights()[p.fightId] || {}).state === 'live';
     const cost = R.packageCost(Mentor.sent());
     const cd = Math.max(0, ((Mentor.rec().lastPackageMs || 0) + R.PACKAGE_COOLDOWN_MS - d.now) / 1000);
 
@@ -1307,8 +1395,6 @@ const UI = (() => {
           ${vitalBox('thirst', 'droplet', p.thirst || 0, 100, (p.thirst || 0) < 25)}
         </div>
         ${p.alive === false ? `<p class="dangerc center" style="margin-top:var(--s3)">${esc(T('youDied'))}</p>` : ''}
-        ${inFight ? `<button class="btn danger full" id="mWatch" style="margin-top:var(--s3)">
-          ${icon('eye', { size: 20 })}<span>${esc(T('watchFight'))}</span></button>` : ''}
       </div>
 
       ${isMentor ? `
@@ -1349,8 +1435,6 @@ const UI = (() => {
           .map((f) => `<div class="feed-item ${f.type === 'death' ? 'death' : 'event'}">${esc(feedText(f))}</div>`).join('') || '<p class="dim">—</p>'}
       </div>`;
 
-    const w = $('#mWatch');
-    if (w) w.onclick = () => { spectateFid = p.fightId; lastFightRound = -1; Screens.go('fight'); };
     $$('#mentorBody [data-ch]').forEach((b) => b.onclick = () => Mentor.earn(b.dataset.ch));
     $$('#mentorBody [data-pkg]').forEach((b) => b.onclick = () => Mentor.sendPackage(b.dataset.pkg));
     const c = $('#mCheer');
@@ -1417,11 +1501,9 @@ const UI = (() => {
     onboarding, onboardingDone, permState, FACE_KEY,
     renderLobby, resetLobby, showQr, shareLink, arenaMapSheet, renderPrep, nextStep, get prepStep() { return prepStep; },
     set prepStep(v) { prepStep = v; }, renderDeploy, ensureMap, renderGame, inventorySheet,
-    feedSheet, playersSheet, renderFight, renderChase, showSky, renderGhost, renderEnd, feedText,
+    feedSheet, playersSheet, openAim, closeAim, showSky, renderGhost, renderEnd, feedText,
     renderMentor, renderSettings, devMode,
     get gmap() { return gmap; },
-    get spectateFid() { return spectateFid; },
-    set spectateFid(v) { spectateFid = v; lastFightRound = -1; },
     mentorLinkSheet(pid) {
       const url = Mentor.mentorLinkFor(Store.code, pid);
       const s = sheet(T('mentorLink'), `

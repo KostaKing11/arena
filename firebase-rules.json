@@ -39,9 +39,8 @@
 
         "items":  { "$iid": { "lat": { ".validate": "newData.isNumber()" }, "lng": { ".validate": "newData.isNumber()" } } },
         "traps":  { "$tid": { "lat": { ".validate": "newData.isNumber()" }, "lng": { ".validate": "newData.isNumber()" } } },
-        "fights": { "$fid": { "round": { ".validate": "newData.isNumber() && newData.val() <= 60" },
-                              "distance": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5" } } },
-        "chase":  { "$fid": { "leftRadius": { ".validate": "newData.isBoolean()" } } },
+        "hits":   { "$hid": { "damage": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 200" },
+                              "distanceM": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" } } },
         "sparks": { "pool": { ".validate": "newData.isNumber() && newData.val() >= 0" } },
 
         "feed": {

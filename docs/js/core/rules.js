@@ -12,58 +12,70 @@
 })(typeof self !== 'undefined' ? self : this, function (U) {
   'use strict';
 
-  /* ═══════════════════ 5. KLASE ═══════════════════ */
+  /* ═══════════════════ 5. KLASE ═══════════════════
+     Izmene zbog borbe v4 (§7 tog dokumenta): bekstvo i potera više ne postoje,
+     pa su Trkaču i Zamkaru plus i minus prepravljeni. */
   const CLASSES = {
     archer:   { id: 'archer',   weapon: 'bow',     maxHp: 100, playerVisionM: 40, itemVisionM: 15 },
     shadow:   { id: 'shadow',   weapon: 'knife',   maxHp: 100, invisible: true, blindToMap: true },
     strong:   { id: 'strong',   weapon: 'axe',     maxHp: 130, zoneDamageMul: 0.5, alwaysVisible: true },
     gatherer: { id: 'gatherer', weapon: 'club',    maxHp: 100, survivalMul: 0.6, dirtyWaterSafe: true, itemVisionM: 25 },
     medic:    { id: 'medic',    weapon: 'blowgun', maxHp: 80,  healMul: 1.5, canHealAlly: true },
-    trapper:  { id: 'trapper',  weapon: 'net',     maxHp: 100, trapCapacityMul: 2, trapPowerMul: 1.5, seesTrapsM: 10, cannotFlee: true },
-    runner:   { id: 'runner',   weapon: 'sling',   maxHp: 85,  fleeSeconds: 10, freeHitOnFlee: false, extraSlots: 1 },
+    // ranije `cannotFlee`; bekstva nema, pa minus postaje −10 max HP
+    trapper:  { id: 'trapper',  weapon: 'net',     maxHp: 90,  trapCapacityMul: 2, trapPowerMul: 1.5, seesTrapsM: 10 },
+    // ranije brže bekstvo; sada svi cooldowni −25% i imun na uplitanje
+    runner:   { id: 'runner',   weapon: 'sling',   maxHp: 85,  cooldownMul: 0.75, immuneToEntangle: true, extraSlots: 1 },
     hunter:   { id: 'hunter',   weapon: 'spear',   maxHp: 100 },
     fisher:   { id: 'fisher',   weapon: 'trident', maxHp: 90 },
   };
   const CLASS_IDS = Object.keys(CLASSES);
 
-  // Modifikator štete po razdaljini, iz tabele u §5.
-  function classRangeMod(classId, distance) {
-    switch (classId) {
-      case 'archer':   return distance <= 1 ? -8 : 0;
-      case 'hunter':   return distance === 0 ? -6 : (distance >= 1 && distance <= 3 ? 6 : 0);
-      case 'fisher':   return 6;                       // najširi domet, +6 svuda u svom dometu
-      case 'gatherer': return -5;
-      default:         return 0;
-    }
-  }
-
-  /* ═══════════════════ 6. ORUŽJA ═══════════════════ */
+  /* ═══════════════════ 6. ORUŽJA ═══════════════════
+     Opseg je u METRIMA, prava razdaljina iz GPS-a. Nema apstraktne trake 0–5.
+     `aimMs` je koliko se drži dugme, `cdMs` cooldown posle udarca, `warns`
+     da li žrtva dobija upozorenje čim počneš da nišaniš. */
   const WEAPONS = {
-    fists:   { id: 'fists',   dmg: 8,  min: 0, max: 1, cls: null },
-    club:    { id: 'club',    dmg: 12, min: 0, max: 1, cls: 'gatherer' },
-    sling:   { id: 'sling',   dmg: 12, min: 2, max: 4, cls: 'runner' },
-    net:     { id: 'net',     dmg: 10, min: 0, max: 2, cls: 'trapper' },
-    spear:   { id: 'spear',   dmg: 18, min: 1, max: 3, cls: 'hunter' },
-    axe:     { id: 'axe',     dmg: 20, min: 0, max: 2, cls: 'strong' },
-    bow:     { id: 'bow',     dmg: 22, min: 3, max: 5, cls: 'archer', ammo: 'arrow' },
-    knife:   { id: 'knife',   dmg: 24, min: 0, max: 1, cls: 'shadow' },
-    trident: { id: 'trident', dmg: 26, min: 0, max: 3, cls: 'fisher' },
-    blowgun: { id: 'blowgun', dmg: 10, min: 2, max: 4, cls: 'medic', poison: true },
+    fists:   { id: 'fists',   dmg: 10, minM: 0,  maxM: 3,  aimMs: 1000, cdMs: 15000, warns: false, cls: null },
+    knife:   { id: 'knife',   dmg: 45, minM: 0,  maxM: 5,  aimMs: 1000, cdMs: 20000, warns: false, cls: 'shadow' },
+    club:    { id: 'club',    dmg: 22, minM: 0,  maxM: 5,  aimMs: 1500, cdMs: 20000, warns: false, cls: 'gatherer' },
+    axe:     { id: 'axe',     dmg: 35, minM: 0,  maxM: 8,  aimMs: 2000, cdMs: 25000, warns: false, cls: 'strong' },
+    net:     { id: 'net',     dmg: 10, minM: 0,  maxM: 8,  aimMs: 2000, cdMs: 40000, warns: false, cls: 'trapper', entangle: true },
+    spear:   { id: 'spear',   dmg: 28, minM: 3,  maxM: 12, aimMs: 2000, cdMs: 25000, warns: true,  cls: 'hunter' },
+    trident: { id: 'trident', dmg: 30, minM: 0,  maxM: 15, aimMs: 2000, cdMs: 25000, warns: 'over8', cls: 'fisher' },
+    blowgun: { id: 'blowgun', dmg: 12, minM: 5,  maxM: 20, aimMs: 3000, cdMs: 40000, warns: true,  cls: 'medic', poison: true },
+    sling:   { id: 'sling',   dmg: 15, minM: 8,  maxM: 25, aimMs: 3000, cdMs: 20000, warns: true,  cls: 'runner' },
+    bow:     { id: 'bow',     dmg: 30, minM: 15, maxM: 40, aimMs: 5000, cdMs: 60000, warns: true,  cls: 'archer', ammo: 'arrow' },
   };
   const OWN_WEAPON_BONUS = 8;
-  const inRange = (w, d) => d >= w.min && d <= w.max;
 
-  /* ═══════════════════ 8. SPECIJALI ═══════════════════ */
+  /** Da li oružje upozorava žrtvu na ovoj razdaljini. Trozubac tek preko 8 m. */
+  function warnsAt(w, m) {
+    if (w.warns === 'over8') return m > 8;
+    return !!w.warns;
+  }
+
+  /* Opseg: 'in' u dometu, 'close' preblizu (pola štete, 40% promašaj),
+     'far' predaleko (ne može ni da se uslika). */
+  const CLOSE_DMG_MUL = 0.5, CLOSE_MISS_CHANCE = 0.4;
+  function rangeState(w, m) {
+    if (m > w.maxM) return 'far';
+    if (m < w.minM) return 'close';
+    return 'in';
+  }
+
+  /* ═══════════════════ SPECIJALI — jednom po IGRI ═══════════════════
+     Pošto borbi kao stanja više nema, specijal je jedan potez po celoj partiji.
+     Zato su znatno jači nego ranije. */
   const SPECIALS = {
-    shadow:   { id: 'stab',      dmg: 35, blockedDmg: 12 },
-    fisher:   { id: 'throw',     dmg: 45, anyRange: true, losesWeapon: true },
-    strong:   { id: 'smash',     dmg: 28, piercesBlock: true },
-    archer:   { id: 'aimedShot', dmg: 40, chargeRounds: 2 },
-    trapper:  { id: 'entangle',  lockRounds: 3 },
-    hunter:   { id: 'breakthrough', dmg: 30, push: 1 },
-    runner:   { id: 'vanish',    guaranteedFlee: true },
-    gatherer: { id: 'daze',      skipsOpponentTurn: true },
-    medic:    { id: 'poison',    dot: 6, afterFightMs: 120000 },
+    shadow:   { id: 'backstab',   dmg: 90, maxM: 3, needsBackTurned: true, facingTolDeg: 60 },
+    fisher:   { id: 'throwTrident', dmg: 60, maxM: 25, losesWeapon: true },
+    archer:   { id: 'preciseShot', dmg: 55, maxM: 60, aimMs: 10000, warns: true },
+    strong:   { id: 'charge',     dmg: 50, maxM: 8, ignoresRangePenalty: true },
+    hunter:   { id: 'volley',     dmg: 20, hits: 3, windowMs: 15000, maxM: 12 },
+    trapper:  { id: 'bigNet',     radiusM: 12, entangleMs: 40000 },
+    runner:   { id: 'secondWind', durationMs: 60000, cooldownMul: 0.5 },
+    gatherer: { id: 'stash',      fillsSurvival: true },
+    medic:    { id: 'potion',     heal: 70, maxM: 15, canTargetAlly: true },
   };
 
   /* ═══════════════════ 12. PREDMETI ═══════════════════ */
@@ -477,23 +489,24 @@
     return out;
   }
 
-  /* ═══════════════════ 7. RAZDALJINA ═══════════════════ */
-  function distanceBand(meters, isArcher) {
-    if (meters < 8) return 0;
-    if (meters < 15) return 1;
-    if (meters < 25) return 2;
-    if (meters < 35) return 3;
-    if (isArcher && meters < 50) return 4;
-    return -1;                      // predaleko za borbu
-  }
-  const PHOTO_MAX_M = 35, PHOTO_MAX_ARCHER_M = 60, PHOTO_CONE_DEG = 30, PHOTO_COOLDOWN_MS = 15000;
-  const RANGED_MAX_M = 30, RANGED_AIM_MS = 8000, RANGED_COOLDOWN_MS = 90000;
-  const RANGED_DODGE_M = 12, RANGED_SELF_MOVE_M = 5, RANGED_MIN_ACC_M = 20, RANGED_STALE_M = 20;
+  /* ═══════════════════ SLIKANJE I NIŠANJENJE ═══════════════════
+     Kandidati se traže u konusu ±30° (kompas greši 15–20°, uže ne radi).
+     `PHOTO_MAX_M` je samo dokle se kandidati uopšte prikazuju na ekranu
+     nišanjenja — da li smeš da opališ određuje opseg oružja. */
+  const PHOTO_MAX_M = 60, PHOTO_CONE_DEG = 30, PHOTO_COOLDOWN_MS = 15000;
+  const AIM_SELF_MOVE_M = 5;      // pomeriš se preko ovoga dok nišaniš → promašaj
+  const AIM_DODGE_M = 8;          // žrtva se pomeri preko ovoga → promašaj
 
-  /* ═══════════════════ 8. BORBA ═══════════════════ */
-  const ROUND_MS = 10000, MAX_ROUNDS = 10, STALEMATE_HP = 10;
-  const FIGHT_COOLDOWN_MS = 180000;
-  const MOVES = ['approach', 'retreat', 'attack', 'block'];
+  /* Anti-varanje (§10 borbe v4) — sada za SVAKI napad, ne samo za luk. */
+  const MIN_ACC_M = 20;           // GPS tačnost napadača i žrtve
+  const STALE_MOVE_M = 20, STALE_MS = 300000;   // ko sedi kod kuće ne napada
+  const START_GRACE_MS = 30000;   // prvih 30 s od starta nema napada
+
+  /* Efekti. */
+  const ENTANGLE_MS = 20000;                                     // mreža
+  const POISON_MS = 60000, POISON_DMG = 3, POISON_TICK_MS = 10000; // duvaljka
+  const BETRAYAL_MUL = 1.5;                                       // prvi udarac na saveznika
+  const HEAL_HOLD_MS = 3000, HEAL_MOVE_M = 5;                     // lečenje i jelo u mestu
 
   function weaponOf(p) { return WEAPONS[(p && p.weapon) || 'fists'] || WEAPONS.fists; }
   function ownsWeapon(p) {
@@ -501,162 +514,76 @@
     return !!(cls && p.weapon && cls.weapon === p.weapon);
   }
 
-  function attackDamage(attacker, distance, opts) {
-    const w = weaponOf(attacker);
-    if (!inRange(w, distance)) return { miss: true, dmg: 0, weapon: w.id };
-    let dmg = w.dmg;
-    if (ownsWeapon(attacker)) dmg += OWN_WEAPON_BONUS;
-    dmg += classRangeMod(attacker.classId, distance);
-    if (opts && opts.rage) dmg *= 2;
-    return { miss: false, dmg: Math.max(1, Math.round(dmg)), weapon: w.id, poison: !!w.poison };
+  /** Koliko traje cooldown oružja za ovog igrača (Trkač −25%, Drugi vetar −50%). */
+  function cooldownFor(p, w, nowMs) {
+    const cls = CLASSES[p && p.classId] || {};
+    let ms = (w || weaponOf(p)).cdMs;
+    if (cls.cooldownMul) ms *= cls.cooldownMul;
+    if (p && p.secondWindUntilMs > (nowMs || 0)) ms *= SPECIALS.runner.cooldownMul;
+    return Math.round(ms);
   }
 
   /**
-   * Jedna runda borbe. Čista funkcija — oba telefona je izvrše i dobiju isto.
-   * f: {a,b,distance,hpA,hpB,round,effA,effB,specialUsedA,specialUsedB}
-   * moves: {[pid]: {kind:'move'|'special'|'flee', move?}}
-   * P: {[pid]: player}
+   * Šteta jednog udarca. Čista funkcija — `rng` se ubrizgava da bi test mogao
+   * da je zada. Vraća {miss, dmg, state, weapon, poison, entangle}.
+   *
+   * Preblizu: pola štete i 40% šanse za promašaj (Strelac na 3 m je bespomoćan).
+   * Predaleko: uopšte nije napad — to hvata UI pre nego što se dođe dovde.
    */
-  function resolveRound(f, moves, P) {
-    const A = f.a, B = f.b;
-    const pa = P[A], pb = P[B];
-    const clsA = CLASSES[pa.classId], clsB = CLASSES[pb.classId];
-    const effA = f.effA || {}, effB = f.effB || {};
-    const log = [];
-    let hpA = f.hpA, hpB = f.hpB, dist = f.distance;
-    let fled = null, specialA = f.specialUsedA, specialB = f.specialUsedB;
+  function attackDamage(attacker, distM, opts) {
+    opts = opts || {};
+    const w = opts.weapon || weaponOf(attacker);
+    const state = rangeState(w, distM);
+    if (state === 'far') return { miss: true, dmg: 0, state, weapon: w.id, reason: 'far' };
 
-    const norm = (pid, other, eff) => {
-      let m = moves[pid];
-      if (eff.skipTurn) return { kind: 'skipped' };
-      if (!m) return { kind: 'move', move: 'block' };           // ne odigra → Blok (§8)
-      if (m.kind === 'move' && !MOVES.includes(m.move)) return { kind: 'move', move: 'block' };
-      if (m.kind === 'move' && (m.move === 'approach' || m.move === 'retreat') && eff.lockedRounds > 0)
-        return { kind: 'move', move: 'block' };                 // Uplitanje (§8)
-      return m;
-    };
-    const ma = norm(A, B, effA), mb = norm(B, A, effB);
-
-    /* — kretanje se rešava prvo, napadi gađaju novu razdaljinu — */
-    const delta = (m) => (m.kind === 'move' && m.move === 'approach' ? -1
-      : m.kind === 'move' && m.move === 'retreat' ? 1 : 0);
-    dist = U.clamp(dist + delta(ma) + delta(mb), 0, 5);
-
-    const nEffA = { ...effA }, nEffB = { ...effB };
-    nEffA.skipTurn = false; nEffB.skipTurn = false;
-    if (nEffA.lockedRounds > 0) nEffA.lockedRounds--;
-    if (nEffB.lockedRounds > 0) nEffB.lockedRounds--;
-
-    const blocked = { [A]: ma.kind === 'move' && ma.move === 'block', [B]: mb.kind === 'move' && mb.move === 'block' };
-
-    // Senka: prva runda besplatna — protivnikov potez se ignoriše (§5)
-    const shadowFree = (pid) => f.round === 1 && P[pid].classId === 'shadow' && ownsWeapon(P[pid]);
-
-    function applyHit(from, to, dmg, opts) {
-      opts = opts || {};
-      let d = dmg;
-      if (blocked[to] && !opts.piercesBlock && !shadowFree(from)) d = Math.round(d * 0.4);
-      if (to === A) hpA -= d; else hpB -= d;
-      log.push({ from, to, dmg: d, blocked: blocked[to] && !opts.piercesBlock, kind: opts.kind || 'attack' });
-      // kontra 6 ako te napadnu izbliza a ti blokiraš (§8)
-      if (blocked[to] && dist <= 1 && !opts.noCounter && !shadowFree(from)) {
-        if (from === A) hpA -= 6; else hpB -= 6;
-        log.push({ from: to, to: from, dmg: 6, kind: 'counter' });
-      }
-      if (opts.poison) { (to === A ? nEffA : nEffB).poisonRounds = 99; }
+    const rng = opts.rng || Math.random;
+    if (state === 'close' && !opts.ignoresRangePenalty && rng() < CLOSE_MISS_CHANCE) {
+      return { miss: true, dmg: 0, state, weapon: w.id, reason: 'close' };
     }
-
-    function doAction(pid, other, m, isA) {
-      const me = P[pid];
-      const eff = isA ? nEffA : nEffB;
-      if (m.kind === 'skipped') { log.push({ from: pid, kind: 'skipped' }); return; }
-      if (m.kind === 'flee') { fled = pid; return; }
-
-      if (m.kind === 'special') {
-        const sp = SPECIALS[me.classId];
-        if (!sp || !ownsWeapon(me) || (isA ? specialA : specialB)) return;
-        if (isA) specialA = true; else specialB = true;
-        log.push({ from: pid, kind: 'special', special: sp.id });
-        if (sp.id === 'stab') {
-          applyHit(pid, other, blocked[other] ? sp.blockedDmg : sp.dmg, { kind: 'special', noCounter: true, piercesBlock: true });
-        } else if (sp.id === 'throw') {
-          applyHit(pid, other, sp.dmg, { kind: 'special', noCounter: true });
-          (isA ? nEffA : nEffB).lostWeapon = true;
-        } else if (sp.id === 'smash') {
-          applyHit(pid, other, sp.dmg, { kind: 'special', piercesBlock: true });
-        } else if (sp.id === 'aimedShot') {
-          eff.aiming = (eff.aiming || 0) + 1;
-          if (eff.aiming >= sp.chargeRounds) {
-            eff.aiming = 0;
-            applyHit(pid, other, sp.dmg, { kind: 'special', noCounter: true });
-          }
-        } else if (sp.id === 'entangle') {
-          (isA ? nEffB : nEffA).lockedRounds = sp.lockRounds;
-        } else if (sp.id === 'breakthrough') {
-          applyHit(pid, other, sp.dmg, { kind: 'special' });
-          dist = U.clamp(dist + sp.push, 0, 5);
-        } else if (sp.id === 'vanish') {
-          fled = pid;
-        } else if (sp.id === 'daze') {
-          (isA ? nEffB : nEffA).skipTurn = true;
-        } else if (sp.id === 'poison') {
-          (isA ? nEffB : nEffA).poisonRounds = 99;
-        }
-        return;
-      }
-
-      if (m.move === 'attack') {
-        const rage = eff.rageFirstRound && f.round === 1;
-        const res = attackDamage(me, dist, { rage });
-        if (res.miss) { log.push({ from: pid, kind: 'miss', weapon: res.weapon, dist }); return; }
-        if (weaponOf(me).ammo === 'arrow') {
-          const left = (isA ? f.arrowsA : f.arrowsB);
-          if (left != null && left <= 0) { log.push({ from: pid, kind: 'noAmmo' }); return; }
-          if (isA) f.arrowsA = (f.arrowsA || 0) - 1; else f.arrowsB = (f.arrowsB || 0) - 1;
-        }
-        applyHit(pid, other, res.dmg, { poison: res.poison });
-      } else if (m.move === 'block') {
-        log.push({ from: pid, kind: 'block' });
-      } else {
-        log.push({ from: pid, kind: m.move, dist });
-      }
-    }
-
-    doAction(A, B, ma, true);
-    doAction(B, A, mb, false);
-
-    // otrov po rundi (§8 — Lekarov specijal 6 po rundi)
-    if (nEffA.poisonRounds > 0) { hpA -= 6; log.push({ to: A, dmg: 6, kind: 'poison' }); }
-    if (nEffB.poisonRounds > 0) { hpB -= 6; log.push({ to: B, dmg: 6, kind: 'poison' }); }
-
-    hpA = Math.max(0, Math.round(hpA)); hpB = Math.max(0, Math.round(hpB));
-    const round = f.round + 1;
-    let state = 'live', winner = null;
-
-    if (fled) { state = 'chase'; }
-    else if (hpA <= 0 && hpB <= 0) { state = 'done'; winner = null; }
-    else if (hpA <= 0) { state = 'done'; winner = B; }
-    else if (hpB <= 0) { state = 'done'; winner = A; }
-    else if (round > MAX_ROUNDS) {
-      hpA = Math.max(0, hpA - STALEMATE_HP); hpB = Math.max(0, hpB - STALEMATE_HP);
-      log.push({ kind: 'stalemate' });
-      state = 'done';
-      if (hpA <= 0 && hpB > 0) winner = B; else if (hpB <= 0 && hpA > 0) winner = A;
-    }
-
+    let dmg = w.dmg;
+    if (ownsWeapon(attacker)) dmg += OWN_WEAPON_BONUS;
+    if (state === 'close' && !opts.ignoresRangePenalty) dmg *= CLOSE_DMG_MUL;
+    if (opts.betrayal) dmg *= BETRAYAL_MUL;
     return {
-      distance: dist, hpA, hpB, round, state, winner, fled,
-      effA: nEffA, effB: nEffB, specialUsedA: specialA, specialUsedB: specialB,
-      arrowsA: f.arrowsA, arrowsB: f.arrowsB, log,
+      miss: false, dmg: Math.max(1, Math.round(dmg)), state, weapon: w.id,
+      poison: !!w.poison, entangle: !!w.entangle,
     };
   }
 
-  /* ═══════════════════ 9. BEKSTVO ═══════════════════ */
-  const CHASE = {
-    escapeRadiusM: 20, escapeSec: 15, escapeSecRunner: 10,
-    rejoinRadiusM: 8, timeoutMs: 90000, immunityMs: 60000,
-  };
+  /**
+   * Sme li se uopšte napasti (§10). Vraća null ako sme, inače razlog.
+   * ctx: {nowMs, startedAtMs, myAccM, outsideZone, lastMoveMs}
+   */
+  function attackBlocked(attacker, target, ctx) {
+    ctx = ctx || {};
+    const now = ctx.nowMs || 0;
+    if (!target || target.alive === false) return 'dead';
+    if (ctx.startedAtMs && now - ctx.startedAtMs < START_GRACE_MS) return 'grace';
+    if (ctx.outsideZone) return 'zone';
+    if (ctx.myAccM == null || ctx.myAccM > MIN_ACC_M) return 'gps';
+    if (((target.pos || {}).accM == null) || target.pos.accM > MIN_ACC_M) return 'gpsTarget';
+    if (ctx.lastMoveMs && now - ctx.lastMoveMs > STALE_MS) return 'stale';
+    if ((attacker.weaponCooldownUntilMs || 0) > now) return 'cooldown';
+    if ((attacker.entangledUntilMs || 0) > now) return 'entangled';
+    const w = weaponOf(attacker);
+    if (w.ammo === 'arrow' && (attacker.arrows || 0) <= 0) return 'ammo';
+    return null;
+  }
 
+  /** Da li žrtva gleda u pravcu napadača — za Senkin ubod u leđa. */
+  function isBackTurned(victimHeadingDeg, bearingVictimToAttacker, tolDeg) {
+    if (victimHeadingDeg == null) return true;      // ne javlja smer → računa se kao leđa
+    const diff = Math.abs(U.angleDiff(victimHeadingDeg, bearingVictimToAttacker));
+    return diff > (tolDeg == null ? SPECIALS.shadow.facingTolDeg : tolDeg);
+  }
+
+  /** Koliko otrov nanese od `fromMs` do `toMs`, uz `POISON_TICK_MS` korak. */
+  function poisonDamage(fromMs, toMs, untilMs) {
+    const end = Math.min(toMs, untilMs || 0);
+    if (end <= fromMs) return 0;
+    const ticks = Math.floor((end - fromMs) / POISON_TICK_MS);
+    return Math.max(0, ticks) * POISON_DMG;
+  }
   /* ═══════════════════ 12/13. INVENTAR ═══════════════════ */
   const BASE_SLOTS = 4, PICKUP_RADIUS_M = 10;
   const ITEM_RESPAWN_MS = 90000, ITEM_MOVE_MS = 600000, NO_PICKUP_AFTER_START_MS = 10000;
@@ -737,7 +664,8 @@
   }
 
   return {
-    CLASSES, CLASS_IDS, classRangeMod, WEAPONS, OWN_WEAPON_BONUS, inRange, SPECIALS,
+    CLASSES, CLASS_IDS, WEAPONS, OWN_WEAPON_BONUS, SPECIALS, warnsAt, rangeState,
+    CLOSE_DMG_MUL, CLOSE_MISS_CHANCE,
     RARITY, ITEMS, ITEM_IDS, isRenewable,
     RECOMMENDED, recommendFor, MIN_PLAYERS, MAX_PLAYERS, maxAllianceSize,
     dealClasses, classCensus,
@@ -749,11 +677,11 @@
     HALLUCINATION_MS, HALLUCINATION_POP_M, hallucinations,
     PACKAGE_COSTS, PACKAGE_COOLDOWN_MS, PACKAGE_DROP_M, PACKAGE_TIERS,
     CHEER_FAVOR, CHEER_COOLDOWN_MS, packageCost, canAffordTier,
-    distanceBand, PHOTO_MAX_M, PHOTO_MAX_ARCHER_M, PHOTO_CONE_DEG, PHOTO_COOLDOWN_MS,
-    RANGED_MAX_M, RANGED_AIM_MS, RANGED_COOLDOWN_MS, RANGED_DODGE_M, RANGED_SELF_MOVE_M,
-    RANGED_MIN_ACC_M, RANGED_STALE_M,
-    ROUND_MS, MAX_ROUNDS, STALEMATE_HP, FIGHT_COOLDOWN_MS, MOVES,
-    weaponOf, ownsWeapon, attackDamage, resolveRound, CHASE,
+    PHOTO_MAX_M, PHOTO_CONE_DEG, PHOTO_COOLDOWN_MS, AIM_SELF_MOVE_M, AIM_DODGE_M,
+    MIN_ACC_M, STALE_MOVE_M, STALE_MS, START_GRACE_MS,
+    ENTANGLE_MS, POISON_MS, POISON_DMG, POISON_TICK_MS, BETRAYAL_MUL,
+    HEAL_HOLD_MS, HEAL_MOVE_M,
+    weaponOf, ownsWeapon, cooldownFor, attackDamage, attackBlocked, isBackTurned, poisonDamage,
     BASE_SLOTS, PICKUP_RADIUS_M, ITEM_RESPAWN_MS, ITEM_MOVE_MS, NO_PICKUP_AFTER_START_MS,
     slotsOf, stackLimit, fitItem, consume, visionFor,
   };

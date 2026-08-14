@@ -99,74 +99,134 @@ console.log('\n4. Predmeti (§12, §13)');
     R.fitItem([1, 2, 3, 4].map(() => ({ itemType: 'bread', qty: 2 })), 'medkit', 4).mode === 'full');
 }
 
-console.log('\n5. Oruzja i borba (§6, §8)');
+console.log('\n5. Oruzja i udarac (borba v4 §2)');
 {
-  const mk = (classId, weapon, hp) => ({ classId, weapon, hp: hp || 100, maxHp: 100 });
-  ok('svako oruzje ima domet', Object.values(R.WEAPONS).every((w) => w.max >= w.min));
-  ok('pesnice 8, trozubac 26', R.WEAPONS.fists.dmg === 8 && R.WEAPONS.trident.dmg === 26);
-  const own = R.attackDamage(mk('archer', 'bow'), 4).dmg;
-  const notOwn = R.attackDamage(mk('hunter', 'bow'), 4).dmg;
-  ok('sa svojom klasom +8', own - notOwn === 8, `${own} vs ${notOwn}`);
-  ok('napad van dometa je promasaj', R.attackDamage(mk('archer', 'bow'), 1).miss === true);
-  ok('strelac slab izbliza', R.classRangeMod('archer', 1) === -8);
-  ok('lovac jak na 1-3, slab na 0', R.classRangeMod('hunter', 2) === 6 && R.classRangeMod('hunter', 0) === -6);
+  const mk = (classId, weapon, extra) => ({ classId, weapon, hp: 100, maxHp: 100, ...(extra || {}) });
+  const W = R.WEAPONS;
 
-  const P = { A: mk('hunter', 'spear'), B: mk('strong', 'axe') };
-  const base = { a: 'A', b: 'B', distance: 2, hpA: 100, hpB: 100, round: 1, effA: {}, effB: {} };
-  let r = R.resolveRound({ ...base }, { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'block' } }, P);
-  ok('blok smanjuje stetu za 60%', r.hpB > 100 - 26 && r.hpB < 100, String(r.hpB));
-  // kontra radi samo ako je napad stvarno stigao (koplje ima domet 1–3)
-  r = R.resolveRound({ ...base, distance: 1 }, { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'block' } }, P);
-  ok('kontra 6 izbliza', r.hpA === 94, String(r.hpA));
-  r = R.resolveRound({ ...base, distance: 3 }, { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'block' } }, P);
-  ok('nema kontre sa daljine', r.hpA === 100, String(r.hpA));
-  r = R.resolveRound({ ...base }, { A: { kind: 'move', move: 'approach' }, B: { kind: 'move', move: 'approach' } }, P);
-  ok('oba prilaze -> razdaljina -2', r.distance === 0, String(r.distance));
-  r = R.resolveRound({ ...base }, { A: { kind: 'move', move: 'approach' }, B: { kind: 'move', move: 'retreat' } }, P);
-  ok('prilaz i odmak se ponistavaju', r.distance === 2);
-  r = R.resolveRound({ ...base }, { A: null, B: { kind: 'move', move: 'attack' } }, P);
-  ok('ko ne odigra -> automatski blok', r.log.some((l) => l.from === 'A' && l.kind === 'block') || r.hpA > 80);
-  r = R.resolveRound({ ...base, round: 10, hpA: 90, hpB: 90 }, { A: { kind: 'move', move: 'block' }, B: { kind: 'move', move: 'block' } }, P);
-  ok('posle 10 rundi obojica -10 i kraj', r.state === 'done' && r.hpA === 80 && r.hpB === 80, `${r.hpA}/${r.hpB} ${r.state}`);
-  r = R.resolveRound({ ...base, hpB: 5, distance: 2 }, { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'block' } }, P);
-  ok('pad na 0 zavrsava borbu', r.state === 'done' && r.winner === 'A', `${r.hpB} ${r.state}`);
-  // Kretanje se resava PRE napada: protivnik moze da izbegne napad menjanjem razdaljine.
-  r = R.resolveRound({ ...base, distance: 3 }, { A: { kind: 'move', move: 'attack' }, B: { kind: 'move', move: 'retreat' } }, P);
-  ok('odmicanjem se izbegava napad', r.hpB === 100 && r.log.some((l) => l.kind === 'miss'), String(r.hpB));
+  ok('svako oruzje ima opseg u metrima', Object.values(W).every((w) => w.maxM >= w.minM && w.aimMs > 0 && w.cdMs > 0));
+  ok('pesnice 0-3 m / 10, luk 15-40 m / 30',
+    W.fists.minM === 0 && W.fists.maxM === 3 && W.fists.dmg === 10
+    && W.bow.minM === 15 && W.bow.maxM === 40 && W.bow.dmg === 30);
+  ok('noz je najjaci izbliza', W.knife.dmg === 45 && W.knife.maxM === 5);
 
-  const PS = { A: mk('shadow', 'knife'), B: mk('gatherer', 'club') };
-  r = R.resolveRound({ ...base, distance: 1 }, { A: { kind: 'special' }, B: { kind: 'move', move: 'attack' } }, PS);
-  ok('Senkin ubod radi 35', r.hpB === 65, String(r.hpB));
-  r = R.resolveRound({ ...base, distance: 1 }, { A: { kind: 'special' }, B: { kind: 'move', move: 'block' } }, PS);
-  ok('Senkin ubod na blok radi 12', r.hpB === 88, String(r.hpB));
-  ok('specijal se trosi', r.specialUsedA === true);
-  const PT = { A: mk('trapper', 'net'), B: mk('hunter', 'spear') };
-  r = R.resolveRound({ ...base }, { A: { kind: 'special' }, B: { kind: 'move', move: 'attack' } }, PT);
-  ok('Uplitanje zakljucava 3 runde', r.effB.lockedRounds === 3, String(r.effB.lockedRounds));
-  const PR = { A: mk('runner', 'sling'), B: mk('hunter', 'spear') };
-  r = R.resolveRound({ ...base }, { A: { kind: 'special' }, B: { kind: 'move', move: 'attack' } }, PR);
-  ok('Trkacev nestanak = bekstvo', r.state === 'chase' && r.fled === 'A');
+  const own = R.attackDamage(mk('archer', 'bow'), 25, { rng: () => 0.99 }).dmg;
+  const notOwn = R.attackDamage(mk('hunter', 'bow'), 25, { rng: () => 0.99 }).dmg;
+  ok('sa svojom klasom +8', own - notOwn === R.OWN_WEAPON_BONUS, `${own} vs ${notOwn}`);
+
+  ok('opseg: u dometu / preblizu / predaleko',
+    [R.rangeState(W.bow, 25), R.rangeState(W.bow, 3), R.rangeState(W.bow, 55)].join(',') === 'in,close,far');
+  ok('predaleko je uvek promasaj', R.attackDamage(mk('archer', 'bow'), 55, {}).miss === true);
+
+  // preblizu: pola stete i 40% sanse za promasaj
+  const near = R.attackDamage(mk('archer', 'bow'), 3, { rng: () => 0.99 });
+  ok('preblizu radi pola stete', near.dmg === Math.round((30 + 8) * R.CLOSE_DMG_MUL), String(near.dmg));
+  ok('preblizu moze da promasi', R.attackDamage(mk('archer', 'bow'), 3, { rng: () => 0.1 }).miss === true);
+  ok('sansa promasaja izbliza je 40%', R.CLOSE_MISS_CHANCE === 0.4);
+
+  ok('izdaja radi +50%', R.attackDamage(mk('hunter', 'spear'), 6, { rng: () => 0.99, betrayal: true }).dmg
+    === Math.round((28 + 8) * R.BETRAYAL_MUL));
+
+  // upozorenje zrtvi
+  ok('noz i sekira ne najavljuju', !R.warnsAt(W.knife, 3) && !R.warnsAt(W.axe, 5));
+  ok('luk i koplje najavljuju', R.warnsAt(W.bow, 30) && R.warnsAt(W.spear, 8));
+  ok('trozubac najavljuje tek preko 8 m', !R.warnsAt(W.trident, 6) && R.warnsAt(W.trident, 12));
+
+  /* §5: "potrebno je 3 pogotka nozem ili 4 strele za 100 HP" — to je racun sa
+     OSNOVNOM stetom oruzja. Sa svojom klasom (+8) ide brze, i to je i poenta
+     bonusa. Jedan napad iz zasede ne sme da ubije ni u jednom slucaju. */
+  const knifeBase = R.attackDamage(mk('hunter', 'knife'), 2, { rng: () => 0.99 }).dmg;
+  ok('tri pogotka nozem obaraju 100 HP', knifeBase * 2 < 100 && knifeBase * 3 >= 100, String(knifeBase));
+  const bowBase = R.attackDamage(mk('hunter', 'bow'), 25, { rng: () => 0.99 }).dmg;
+  ok('cetiri strele obaraju 100 HP', bowBase * 3 < 100 && bowBase * 4 >= 100, String(bowBase));
+  const knifeOwn = R.attackDamage(mk('shadow', 'knife'), 2, { rng: () => 0.99 }).dmg;
+  ok('sa svojom klasom je brze, ali nikad iz jednog udarca', knifeOwn < 100 && knifeOwn * 2 >= 100, String(knifeOwn));
+  ok('ni najjaci specijal ne ubija iz jednog udarca sa punim HP', R.SPECIALS.shadow.dmg < 100);
+
+  // cooldown
+  ok('Trkac ima cooldown -25%',
+    R.cooldownFor(mk('runner', 'sling'), W.sling, 0) === Math.round(W.sling.cdMs * 0.75));
+  ok('Drugi vetar polovi cooldown',
+    R.cooldownFor(mk('runner', 'sling', { secondWindUntilMs: 9e15 }), W.sling, 0)
+    === Math.round(W.sling.cdMs * 0.75 * 0.5));
+
+  // efekti
+  ok('mreza uplice 20 s', R.WEAPONS.net.entangle === true && R.ENTANGLE_MS === 20000);
+  ok('duvaljka truje 3 HP na 10 s tokom 60 s',
+    R.POISON_DMG === 3 && R.POISON_TICK_MS === 10000 && R.POISON_MS === 60000);
+  ok('otrov za 30 s nanese 9', R.poisonDamage(0, 30000, 60000) === 9, String(R.poisonDamage(0, 30000, 60000)));
+  ok('otrov prestaje kad istekne', R.poisonDamage(0, 90000, 60000) === 18, String(R.poisonDamage(0, 90000, 60000)));
 }
 
-console.log('\n6. Razdaljina i slikanje (§7)');
+console.log('\n6. Nisanjenje i anti-varanje (borba v4 §3, §10)');
 {
-  ok('opsezi 0/1/2/3', [4, 10, 20, 30].map((m) => R.distanceBand(m, false)).join(',') === '0,1,2,3');
-  ok('opseg 4 samo za strelca', R.distanceBand(42, false) === -1 && R.distanceBand(42, true) === 4);
+  const me = { classId: 'hunter', weapon: 'spear', hp: 100 };
+  const foe = { alive: true, hp: 100, pos: { lat: 0, lng: 0, accM: 5 } };
+  const base = { nowMs: 1e6, startedAtMs: 0, myAccM: 5, outsideZone: false, lastMoveMs: 1e6 - 1000 };
+
   ok('konus je +-30 stepeni', R.PHOTO_CONE_DEG === 30);
   ok('cooldown na neuspelo slikanje 15 s', R.PHOTO_COOLDOWN_MS === 15000);
-  ok('strelac vidi 60, gadja 30', R.PHOTO_MAX_ARCHER_M === 60 && R.RANGED_MAX_M === 30);
-  ok('nisanjenje 8 s, cooldown 90 s', R.RANGED_AIM_MS === 8000 && R.RANGED_COOLDOWN_MS === 90000);
+  ok('nisanjenje puca ako se pomeris 5 m', R.AIM_SELF_MOVE_M === 5);
+  ok('zrtva izmice na 8 m', R.AIM_DODGE_M === 8);
+
+  ok('u redu -> nema prepreke', R.attackBlocked(me, foe, base) === null);
+  ok('mrtva meta', R.attackBlocked(me, { ...foe, alive: false }, base) === 'dead');
+  ok('prvih 30 s nema napada', R.attackBlocked(me, foe, { ...base, startedAtMs: base.nowMs - 10000 }) === 'grace');
+  ok('van arene ne moze', R.attackBlocked(me, foe, { ...base, outsideZone: true }) === 'zone');
+  ok('slab GPS napadaca', R.attackBlocked(me, foe, { ...base, myAccM: 30 }) === 'gps');
+  ok('slab GPS zrtve', R.attackBlocked(me, { ...foe, pos: { lat: 0, lng: 0, accM: 40 } }, base) === 'gpsTarget');
+  ok('ko se ne pomera 5 min ne napada',
+    R.attackBlocked(me, foe, { ...base, lastMoveMs: base.nowMs - 400000 }) === 'stale');
+  ok('cooldown oruzja blokira',
+    R.attackBlocked({ ...me, weaponCooldownUntilMs: base.nowMs + 5000 }, foe, base) === 'cooldown');
+  ok('uplitanje blokira',
+    R.attackBlocked({ ...me, entangledUntilMs: base.nowMs + 5000 }, foe, base) === 'entangled');
+  ok('luk bez strela ne puca',
+    R.attackBlocked({ classId: 'archer', weapon: 'bow', arrows: 0 }, foe, base) === 'ammo');
+  ok('anti-varanje trazi tacnost 20 m i pomeraj 20 m',
+    R.MIN_ACC_M === 20 && R.STALE_MOVE_M === 20 && R.STALE_MS === 300000 && R.START_GRACE_MS === 30000);
 }
 
-console.log('\n7. Bekstvo (§9)');
+console.log('\n7. Specijali — jednom po IGRI (borba v4 §6)');
 {
-  ok('van 20 m neprekidno 15 s', R.CHASE.escapeRadiusM === 20 && R.CHASE.escapeSec === 15);
-  ok('Trkac bezi za 10 s', R.CLASSES.runner.fleeSeconds === 10);
-  ok('Trkac bez besplatnog udarca', R.CLASSES.runner.freeHitOnFlee === false);
-  ok('Zamkar ne moze da bezi', R.CLASSES.trapper.cannotFlee === true);
-  ok('povratak u borbu na 8 m', R.CHASE.rejoinRadiusM === 8);
-  ok('90 s bez ishoda = pobegao', R.CHASE.timeoutMs === 90000);
-  ok('60 s imuniteta posle bekstva', R.CHASE.immunityMs === 60000);
+  const S = R.SPECIALS;
+  ok('svaka klasa ima specijal', R.CLASS_IDS.every((c) => S[c]));
+  ok('Ubod u leda 90 na 3 m', S.shadow.dmg === 90 && S.shadow.maxM === 3 && S.shadow.needsBackTurned === true);
+  ok('Baceni trozubac 60 do 25 m i gubi oruzje',
+    S.fisher.dmg === 60 && S.fisher.maxM === 25 && S.fisher.losesWeapon === true);
+  ok('Precizan hitac 55, nisani 10 s', S.archer.dmg === 55 && S.archer.aimMs === 10000);
+  ok('Nasrtaj 50 i ignorise kaznu za opseg', S.strong.dmg === 50 && S.strong.ignoresRangePenalty === true);
+  ok('Salva 3 x 20 u 15 s', S.hunter.hits === 3 && S.hunter.dmg === 20 && S.hunter.windowMs === 15000);
+  ok('Velika mreza 12 m / 40 s', S.trapper.radiusM === 12 && S.trapper.entangleMs === 40000);
+  ok('Drugi vetar 60 s', S.runner.durationMs === 60000 && S.runner.cooldownMul === 0.5);
+  ok('Zaliha puni glad i zed', S.gatherer.fillsSurvival === true);
+  ok('Napitak vraca 70 HP', S.medic.heal === 70 && S.medic.canTargetAlly === true);
+
+  ok('Nasrtaj ignorise kaznu za preblizu',
+    R.attackDamage({ classId: 'strong', weapon: 'axe' }, 0.5,
+      { rng: () => 0.1, ignoresRangePenalty: true, weapon: R.WEAPONS.spear }).miss === false);
+
+  // ubod u leda: gleda li zrtva u tvom pravcu
+  ok('leda okrenuta -> prolazi', R.isBackTurned(0, 180, 60) === true);
+  ok('gleda u tebe -> ne prolazi', R.isBackTurned(0, 10, 60) === false);
+  ok('bez kompasa se racuna kao leda', R.isBackTurned(null, 0, 60) === true);
+}
+
+console.log('\n7b. Klase posle borbe v4 (§7)');
+{
+  ok('Trkac: cooldown -25% i imun na uplitanje',
+    R.CLASSES.runner.cooldownMul === 0.75 && R.CLASSES.runner.immuneToEntangle === true);
+  ok('Trkac zadrzao +1 slot', R.CLASSES.runner.extraSlots === 1);
+  ok('Zamkar: -10 max HP umesto zabrane bekstva',
+    R.CLASSES.trapper.maxHp === 90 && R.CLASSES.trapper.cannotFlee === undefined);
+  ok('Zamkar zadrzao zamke', R.CLASSES.trapper.trapCapacityMul === 2 && R.CLASSES.trapper.trapPowerMul === 1.5);
+  ok('Lekar i dalje moze da leci saveznika', R.CLASSES.medic.canHealAlly === true);
+  ok('Strelac vidi igrace na 40 m', R.CLASSES.archer.playerVisionM === 40);
+  ok('Senka nevidljiva i slepa za mapu',
+    R.CLASSES.shadow.invisible === true && R.CLASSES.shadow.blindToMap === true);
+  ok('bekstva vise nema', R.CHASE === undefined && R.resolveRound === undefined);
+  ok('trake razdaljine 0-5 vise nema', R.distanceBand === undefined && R.MOVES === undefined);
+  ok('lecenje traje 3 s u mestu', R.HEAL_HOLD_MS === 3000 && R.HEAL_MOVE_M === 5);
 }
 
 console.log('\n8. Glad, zed, HP (§11) — iz proteklog vremena, ne tajmerom');

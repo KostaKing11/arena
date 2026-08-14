@@ -161,7 +161,7 @@ const Engine = (() => {
     if (!me || me.alive === false) return;
     await Store.updateMe({
       alive: false, hp: 0, deathAtMs: Clock.now(),
-      killedBy: killerId || null, deathCause: cause || 'zone', fightId: null,
+      killedBy: killerId || null, deathCause: cause || 'zone',
     });
     // sve što je nosio pada na zemlju (§8)
     await dropAll(me);
@@ -185,16 +185,28 @@ const Engine = (() => {
   }
 
   /* ═══════════════ pozicija ═══════════════ */
+  let lastMovePos = null;
   async function tickPos(d) {
     const pos = Geo.pos;
     if (!pos || !Store.myId) return;
     if (!Geo.shouldWrite(d.now)) return;
     Geo.markWritten(d.now);
-    await Store.updateMe({
+
+    /* `lastMoveMs` je anti-varanje (borba v4 §10): ko se nije pomerio 20 m u
+       poslednjih 5 minuta ne sme da napada. Beleži se samo pravi pomeraj, ne
+       podrhtavanje GPS-a. */
+    const patch = {
       pos: { lat: pos.lat, lng: pos.lng, accM: Math.round(pos.accM), atMs: d.now },
       distanceWalkedM: Math.round(Geo.walkedM),
       online: true, lastSeenMs: Store.SV(),
-    });
+    };
+    if (!lastMovePos || U.dist(lastMovePos, pos) > R.STALE_MOVE_M) {
+      lastMovePos = { lat: pos.lat, lng: pos.lng };
+      patch.lastMoveMs = d.now;
+    }
+    // smer u kom gledaš — treba Senki da zna da li joj je meta okrenuta leđima
+    if (Compass.heading != null) patch.headingDeg = Math.round(Compass.heading);
+    await Store.updateMe(patch);
   }
 
   /* ═══════════════ host: prelazi stanja ═══════════════ */

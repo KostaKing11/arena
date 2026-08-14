@@ -137,33 +137,34 @@
     </div>
   </section>
 
-  <!-- ═══ borba ═══ -->
-  <section class="screen" id="s-fight">
-    <div class="arena-stage" id="arenaStage">
-      <div class="ground"></div><div class="horizon"></div>
-      <div class="cover l" id="coverL"></div><div class="cover r" id="coverR"></div>
-      <div class="fighter-tag me" id="tagMe"></div>
-      <div class="fighter-tag foe" id="tagFoe"></div>
-      <div class="fighter-fig me" id="figMe"></div>
-      <div class="fighter-fig foe" id="figFoe"></div>
-      <div class="dmg-pop me" id="popMe"></div>
-      <div class="dmg-pop foe" id="popFoe"></div>
-    </div>
-    <div class="round-bar" id="roundBar">
-      <span class="rn" id="roundNum"></span>
-      <span class="timer"><i id="roundTimer"></i></span>
-    </div>
-    <div class="dtrack" id="dtrack"></div>
-    <div class="range-hint" id="rangeHint"></div>
-    <div class="combat-log" id="combatLog"></div>
-    <div class="sp"></div>
-    <div class="moves" id="moves"></div>
-    <div class="fight-extra" id="fightExtra"></div>
-  </section>
+  <!-- ═══ nišanjenje — jedini način napada (borba v4) ═══ -->
+  <section class="screen" id="s-aim">
+    <video id="aimVid" playsinline muted></video>
+    <canvas id="aimCan" hidden></canvas>
+    <div class="aim-vig" aria-hidden="true"></div>
 
-  <!-- ═══ bekstvo ═══ -->
-  <section class="screen" id="s-chase">
-    <div class="scroll"><div class="hold center stack-lg" id="chaseBody"></div></div>
+    <div class="aim-top">
+      <button class="iconbtn glass" id="aimBack" data-i-aria="back"></button>
+      <div class="chip glass" id="aimWeapon"></div>
+      <div class="sp"></div>
+      <div class="row-tight wrap" id="aimStatus"></div>
+    </div>
+
+    <!-- nišan u sredini ekrana -->
+    <div class="aim-reticle" id="aimReticle" aria-hidden="true">
+      <i class="c"></i><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i>
+    </div>
+
+    <!-- ko je na nišanu, i na kojoj razdaljini -->
+    <div class="aim-lock" id="aimLock"></div>
+
+    <div class="aim-bottom">
+      <div class="aim-range" id="aimRange"></div>
+      <div class="aim-list" id="aimList"></div>
+      <div class="aim-hint" id="aimHint"></div>
+      <button class="aim-fire" id="aimFire"></button>
+      <div class="aim-extra" id="aimExtra"></div>
+    </div>
   </section>
 
   <!-- ═══ nebo ═══ -->

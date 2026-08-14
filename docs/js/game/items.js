@@ -53,7 +53,7 @@ const Items = (() => {
     if (d.state !== 'LIVE' && d.state !== 'FINAL_TWO') return false;
     if (d.paused) return false;
     const me = d.me;
-    if (!me || me.alive === false || me.fightId) return false;
+    if (!me || me.alive === false) return false;
     return d.elapsedMs > R.NO_PICKUP_AFTER_START_MS;
   }
 
@@ -93,7 +93,7 @@ const Items = (() => {
         const p = (performance.now() - t0) / dur;
         setRing(ringEl, p);
         numEl.textContent = Math.max(0, Math.ceil((dur - (performance.now() - t0)) / 1000));
-        if (meta.cancelOnMove && startPos && Geo.pos && U.dist(startPos, Geo.pos) > 6) {
+        if (meta.cancelOnMove && startPos && Geo.pos && U.dist(startPos, Geo.pos) > (meta.moveM || 6)) {
           toast(T('pickupMoved'), 'danger'); return finish(false);
         }
         if (p >= 1) { Haptics.fire('pickup'); return finish(true); }
@@ -275,9 +275,19 @@ const Items = (() => {
     if (!s) return;
     const def = R.ITEMS[s.itemType];
     if (!def) return;
-    if (Chase.isFleeing()) { toast(T('chaseNoHeal'), 'danger'); return; }   // §9
 
     if (def.trap) return setTrap(index, s);
+
+    /* Borba v4 §9: nema više stanja borbe, pa je lečenje i jelo uvek dostupno —
+       ali traje 3 s stajanja u mestu i prekida se ako se pomeriš preko 5 m.
+       Tu je cena: dok jedeš, ranjiv si i ne bežiš. */
+    if (def.type === 'food' || def.type === 'drink' || def.type === 'heal') {
+      const okHold = await holdPick(
+        { type: s.itemType, rarity: def.rarity },
+        { pickMs: R.HEAL_HOLD_MS, cancelOnMove: true, moveM: R.HEAL_MOVE_M }
+      );
+      if (!okHold) return;
+    }
 
     const patch = R.consume(me, s.itemType, Math.random);
     const next = list.slice();

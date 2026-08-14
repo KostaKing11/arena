@@ -188,7 +188,6 @@ const Store = (() => {
   const state = () => meta().state || 'LOBBY';
   const items = () => (room && room.items) || {};
   const traps = () => (room && room.traps) || {};
-  const fights = () => (room && room.fights) || {};
   const feed = () => (room && room.feed) || {};
   const alive = () => Object.entries(players()).filter(([, p]) => p.alive !== false);
   const playerCount = () => Object.keys(players()).length;
@@ -241,43 +240,14 @@ const Store = (() => {
     }).then(() => id);
   }
 
-  /* — borbe — */
-  async function openFight(otherId, distanceBand, meta2) {
-    const fid = U.uid('f');
-    // rezerviši protivnika pa sebe; ako drugi ne prođe, oslobodi
-    const t1 = await ref(`players/${otherId}/fightId`).transaction((cur) => (cur == null ? fid : undefined));
-    if (!t1.committed) return null;
-    const t2 = await ref(`players/${myId}/fightId`).transaction((cur) => (cur == null ? fid : undefined));
-    if (!t2.committed) { ref(`players/${otherId}/fightId`).remove(); return null; }
-
-    const A = me(), B = players()[otherId];
-    await ref(`fights/${fid}`).set({
-      a: myId, b: otherId, state: 'live', round: 1,
-      distance: distanceBand, hpA: A.hp, hpB: B.hp,
-      arrowsA: A.arrows || 0, arrowsB: B.arrows || 0,
-      startedAtMs: Clock.now(), deadlineMs: Clock.now() + R.ROUND_MS,
-      moves: null, log: null,
-      // napitak besa se nosi iz inventara u borbu (§12)
-      effA: (A.effects && A.effects.rage) ? { rageFirstRound: true } : null,
-      effB: (B.effects && B.effects.rage) ? { rageFirstRound: true } : null,
-      specialUsedA: false, specialUsedB: false,
-      betrayal: !!(meta2 && meta2.betrayal),
-    });
-    return fid;
+  /* — udarci (borba v4 §11) —
+     Nema više čvorova `fights/` i `chase/`; borba nije stanje nego niz
+     pojedinačnih udaraca. `hits/` služi za feed, za recap na kraju i kao
+     dokaz duhovima. */
+  function pushHit(hit) {
+    return ref('hits').push({ atMs: Clock.now(), ...hit });
   }
-  function fightRef(fid) { return ref(`fights/${fid}`); }
-  function submitMove(fid, move) {
-    return ref(`fights/${fid}/moves/${myId}`).set(move);
-  }
-
-  /* — potera: zastavica leftRadius je obavezna (§9) — */
-  function startChase(fid, fleeing, chaser) {
-    return ref(`chase/${fid}`).set({
-      fid, fleeing, chaser, leftRadius: false, startedAtMs: Clock.now(),
-    });
-  }
-  function chaseRef(fid) { return ref(`chase/${fid}`); }
-  const chases = () => (room && room.chase) || {};
+  const hits = () => (room && room.hits) || {};
 
   /* — savezi — */
   const alliances = () => (room && room.alliances) || {};
@@ -307,12 +277,12 @@ const Store = (() => {
     createRoom, joinRoom, rejoin, attach, leave, watchRoom,
     get ready() { return ready; }, get code() { return code; }, get myId() { return myId; },
     get room() { return room; }, get db() { return db; },
-    meta, config, schedule, players, me, isHost, state, items, traps, fights, feed,
-    alive, playerCount, alliances, sparks, mentors, chases,
+    meta, config, schedule, players, me, isHost, state, items, traps, feed,
+    alive, playerCount, alliances, sparks, mentors, hits,
     updateMe, setMe, hostUpdate, hostSet, pushFeed, ref,
     saveFace, loadFace, wipeFaces,
     claimItem, releaseItem, dropItem,
-    openFight, fightRef, submitMove, startChase, chaseRef,
+    pushHit,
     setAlliance, addSpark, voteEvent, clearVotes, spendSparks, mentorRef,
     SV,
   };

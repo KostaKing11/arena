@@ -1,122 +1,113 @@
-/* Borba (§8) i bekstvo/potera (§9).
-   Rundu presuđuje bilo koji od dvojice — `resolveRound` je čista funkcija, pa
-   oba telefona dobiju isto; transakcija sprečava da se runda odigra dvaput. */
-const Combat = (() => {
+/* ═══════════════════════════════════════════════════════════════════════════
+   NAPAD (borba v4) — nema stanja borbe.
+
+   Nema rundi, nema trake razdaljine 0–5, nema potere, nema čvorova `fights/`
+   i `chase/`. Borba je fizička: kad se pomeriš uživo, pomerio si se i u igri.
+   Napad je JEDNA akcija — nišaniš kamerom i uslikaš protivnika, a razdaljina
+   u igri je prava razdaljina u metrima.
+
+   Odbrana je takođe fizička: ako si za zidom ili iza ćoška, protivnik te ne
+   može detektovati u kadru i napada nema. Zato ovde nema ni bloka.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const Attack = (() => {
   'use strict';
-  let curFid = null, lastRound = 0, resolving = false;
 
-  const myFight = () => {
-    const me = Store.me();
-    if (!me || !me.fightId) return null;
-    const f = Store.fights()[me.fightId];
-    return f ? { fid: me.fightId, ...f } : null;
-  };
-  const sideOf = (f) => (f.a === Store.myId ? 'A' : 'B');
-  const foeIdOf = (f) => (f.a === Store.myId ? f.b : f.a);
-  const myHp = (f) => (sideOf(f) === 'A' ? f.hpA : f.hpB);
-  const foeHp = (f) => (sideOf(f) === 'A' ? f.hpB : f.hpA);
-
-  async function submit(kind, move) {
-    const f = myFight();
-    if (!f || f.state !== 'live') return;
-    if ((f.moves || {})[Store.myId]) return;
-    await Store.submitMove(f.fid, kind === 'move' ? { kind: 'move', move } : { kind });
-    Haptics.fire('tap');
+  /* — kontekst za anti-varanje (§10) — */
+  function ctxFor(d) {
+    return {
+      nowMs: d.now,
+      startedAtMs: Store.meta().startedAtMs,
+      myAccM: Geo.accuracy,
+      outsideZone: !!d.outsideZone,
+      lastMoveMs: (d.me || {}).lastMoveMs,
+    };
   }
 
-  /** Poziva se svake sekunde iz motora. */
-  async function tick(d) {
-    const f = myFight();
-    if (!f) { curFid = null; return; }
-    if (f.fid !== curFid) { curFid = f.fid; lastRound = 0; }
+  /** Zašto napad nije moguć, ili null ako jeste. */
+  function blockedReason(d, target) {
+    if (!d.me) return 'dead';
+    return R.attackBlocked(d.me, target, ctxFor(d));
+  }
 
-    if (f.state !== 'live') return;
-    const moves = f.moves || {};
-    const both = moves[f.a] && moves[f.b];
-    const expired = d.now >= (f.deadlineMs || 0);
-    if (!both && !expired) return;
-    if (resolving) return;
+  /* — koliko još traje cooldown oružja, u sekundama — */
+  function cooldownLeft(d) {
+    const me = d.me;
+    if (!me) return 0;
+    return Math.max(0, ((me.weaponCooldownUntilMs || 0) - d.now) / 1000);
+  }
 
-    resolving = true;
+  /**
+   * Upiši udarac. Zove ga napadač pošto se nišanjenje završi.
+   * `res` je rezultat iz R.attackDamage, `opts` nosi {photo, special, betrayal}.
+   */
+  async function land(d, targetId, distM, res, opts) {
+    opts = opts || {};
+    const me = d.me;
     const P = Store.players();
-    const round = f.round;
-    try {
-      const res = await Store.fightRef(f.fid).transaction((cur) => {
-        if (!cur || cur.state !== 'live' || cur.round !== round) return;      // neko je već presudio
-        const shape = {
-          a: cur.a, b: cur.b, distance: cur.distance, hpA: cur.hpA, hpB: cur.hpB,
-          round: cur.round, effA: cur.effA || {}, effB: cur.effB || {},
-          specialUsedA: !!cur.specialUsedA, specialUsedB: !!cur.specialUsedB,
-          arrowsA: cur.arrowsA, arrowsB: cur.arrowsB,
-        };
-        const r = R.resolveRound(shape, cur.moves || {}, P);
-        cur.distance = r.distance; cur.hpA = r.hpA; cur.hpB = r.hpB;
-        cur.round = r.round; cur.effA = r.effA; cur.effB = r.effB;
-        cur.specialUsedA = r.specialUsedA; cur.specialUsedB = r.specialUsedB;
-        cur.arrowsA = r.arrowsA; cur.arrowsB = r.arrowsB;
-        cur.moves = null;
-        cur.lastLog = r.log;
-        cur.deadlineMs = Date.now() + R.ROUND_MS;
-        cur.state = r.state;
-        cur.winner = r.winner || null;
-        cur.fled = r.fled || null;
-        cur.settledBy = r.state !== 'live' ? Store.myId : null;
-        return cur;
-      });
-      if (res.committed) {
-        const v = res.snapshot.val();
-        if (v.state !== 'live' && v.settledBy === Store.myId) await settle(f.fid, v);
+    const target = P[targetId];
+    if (!target) return null;
+    const now = Clock.now();
+
+    const w = opts.weapon || R.weaponOf(me);
+    const upd = {};                       // moj čvor
+    const tUpd = {};                      // čvor žrtve
+
+    // cooldown i municija idu i na promašaj — pokušaj se broji
+    if (!opts.noCooldown) upd.weaponCooldownUntilMs = now + R.cooldownFor(me, w, now);
+    upd.lastAttackAtMs = now;
+    if (w.ammo === 'arrow') upd.arrows = Math.max(0, (me.arrows || 0) - 1);
+
+    let hp = target.hp || 0;
+    if (!res.miss) {
+      hp = Math.max(0, hp - res.dmg);
+      tUpd.hp = hp;
+      upd.damageDone = (me.damageDone || 0) + res.dmg;
+      upd.attacksLanded = (me.attacksLanded || 0) + 1;
+      if (res.entangle && !(R.CLASSES[target.classId] || {}).immuneToEntangle) {
+        tUpd.entangledUntilMs = now + R.ENTANGLE_MS;
       }
-    } catch (e) { console.error(e); }
-    resolving = false;
-  }
-
-  /** Ishod borbe upisuje onaj čija je transakcija prošla. */
-  async function settle(fid, f) {
-    const P = Store.players();
-    const upd = {};
-    upd[`${f.a}/hp`] = Math.max(0, f.hpA);
-    upd[`${f.b}/hp`] = Math.max(0, f.hpB);
-    upd[`${f.a}/fights`] = (P[f.a].fights || 0) + 1;
-    upd[`${f.b}/fights`] = (P[f.b].fights || 0) + 1;
-    upd[`${f.a}/lastFight/${f.b}`] = Clock.now();
-    upd[`${f.b}/lastFight/${f.a}`] = Clock.now();
-
-    if (f.state === 'chase') {
-      // bekstvo: pokreni poteru sa OBAVEZNOM zastavicom leftRadius (§9)
-      const fleeing = f.fled, chaser = fleeing === f.a ? f.b : f.a;
-      await Store.startChase(fid, fleeing, chaser);
-      upd[`${fleeing}/chaseId`] = fid;
-      upd[`${chaser}/chaseId`] = fid;
-      // dok traje potera nisi "u borbi" — Chase.rejoin vraća fightId kad se sustignete
-      upd[`${fleeing}/fightId`] = null;
-      upd[`${chaser}/fightId`] = null;
+      // otrov se ne slaže, novi pogodak samo produžava trajanje
+      if (res.poison) tUpd.poisonUntilMs = now + R.POISON_MS;
     } else {
-      upd[`${f.a}/fightId`] = null;
-      upd[`${f.b}/fightId`] = null;
-      if (f.winner) {
-        const loser = f.winner === f.a ? f.b : f.a;
-        upd[`${f.winner}/kills`] = (P[f.winner].kills || 0) + 1;
-        upd[`${loser}/alive`] = false;
-        upd[`${loser}/hp`] = 0;
-        upd[`${loser}/deathAtMs`] = Clock.now();
-        upd[`${loser}/killedBy`] = f.winner;
-        upd[`${loser}/deathCause`] = 'fight';
-        await dropLoot(loser, P[loser]);
-        await Store.pushFeed({ type: 'death', subjectId: loser, killerId: f.winner, scope: 'all', cause: 'fight' });
-      }
+      upd.attacksMissed = (me.attacksMissed || 0) + 1;
     }
-    await Store.ref('players').update(upd);
-    // otrov Lekara traje i 2 min posle borbe (§8)
-    const eff = (side) => (side === 'A' ? f.effA : f.effB) || {};
-    for (const [pid, side] of [[f.a, 'A'], [f.b, 'B']]) {
-      if ((eff(side === 'A' ? 'B' : 'A').poisonRounds || 0) > 0) {
-        await Store.ref(`players/${pid}/effects/poisonedUntilMs`).set(Clock.now() + 120000);
-      }
+
+    await Store.updateMe(upd);
+    if (Object.keys(tUpd).length) await Store.ref(`players/${targetId}`).update(tUpd);
+
+    // svaki udarac je dokaz — feed duhovima i recap na kraju (§10, §11)
+    await Store.pushHit({
+      attackerId: Store.myId, victimId: targetId, weapon: w.id,
+      distanceM: Math.round(distM), damage: res.miss ? 0 : res.dmg,
+      missed: !!res.miss, special: opts.special || null, photoRef: opts.photo || null,
+    });
+
+    if (!res.miss) {
+      // žrtva vidi ko ju je pogodio, čime i sa koje strane (§4)
+      await Store.ref(`players/${targetId}/incomingHit`).set({
+        from: Store.myId, weapon: w.id, dmg: res.dmg, atMs: now,
+        distM: Math.round(distM),
+        bearing: target.pos && me.pos ? U.bearing(target.pos, me.pos) : null,
+        special: opts.special || null,
+      });
     }
+
+    if (hp <= 0 && !res.miss) await kill(targetId, target);
+    return { hp, killed: hp <= 0 && !res.miss };
   }
 
-  /** Gubitnik ispušta SVE na svojoj GPS lokaciji (§8). */
+  /** Smrt: top svima, sve pada na mesto smrti, ubici +1 (§5). */
+  async function kill(targetId, target) {
+    const me = Store.me();
+    await Store.ref(`players/${targetId}`).update({
+      alive: false, hp: 0, deathAtMs: Clock.now(), killedBy: Store.myId, deathCause: 'hit',
+    });
+    await Store.updateMe({ kills: (me.kills || 0) + 1 });
+    await dropLoot(targetId, target);
+    await Store.pushFeed({ type: 'death', subjectId: targetId, killerId: Store.myId, scope: 'all', cause: 'hit' });
+  }
+
+  /** Sav inventar i oružje padaju na mesto smrti kao obični predmeti (§5). */
   async function dropLoot(pid, p) {
     if (!p || !p.pos) return;
     for (const s of (p.inv || []).filter(Boolean)) {
@@ -130,146 +121,123 @@ const Combat = (() => {
     await Store.ref(`players/${pid}`).update({ inv: null, weapon: 'fists', arrows: 0 });
   }
 
-  /** Bekstvo iz borbe: protivnik dobija jedan besplatan udarac (§9). */
-  async function flee() {
-    const f = myFight();
-    if (!f || f.state !== 'live') return;
-    const me = Store.me();
-    const cls = R.CLASSES[me.classId] || {};
-    if (cls.cannotFlee) { toast(T('aimBlocked'), 'danger'); return; }
-    if (me.cannotFleeUntilMs > Clock.now()) { toast(T('aimBlocked'), 'danger'); return; }
+  /* ═══════════════ specijali — jednom po IGRI ═══════════════ */
 
-    const foeId = foeIdOf(f);
-    const foe = Store.players()[foeId];
-    // Trkač je izuzet od besplatnog udarca
-    if (cls.freeHitOnFlee !== false) {
-      const hit = R.attackDamage(foe, f.distance, {});
-      if (!hit.miss) {
-        const side = sideOf(f);
-        const newHp = Math.max(0, (side === 'A' ? f.hpA : f.hpB) - hit.dmg);
-        await Store.fightRef(f.fid).update(side === 'A' ? { hpA: newHp } : { hpB: newHp });
-        await Store.updateMe({ hp: newHp });
-        Haptics.fire('hurt'); Sfx.hurt();
-        toast(T('chaseFreeHit') + ' −' + hit.dmg, 'danger', 'swords');
-        if (newHp <= 0) { await Store.fightRef(f.fid).update({ state: 'done', winner: foeId, settledBy: Store.myId }); return; }
-      }
+  /** Zašto specijal nije moguć, ili null. */
+  function specialBlocked(d, targetId, distM) {
+    const me = d.me;
+    const sp = R.SPECIALS[me.classId];
+    if (!sp) return 'class';
+    if (me.specialUsedThisGame) return 'used';
+    if (!R.ownsWeapon(me) && me.classId !== 'gatherer' && me.classId !== 'runner') return 'weapon';
+    if (sp.maxM != null && distM != null && distM > sp.maxM) return 'far';
+    if (sp.id === 'backstab') {
+      const t = Store.players()[targetId];
+      if (!t || !t.pos || !me.pos) return 'far';
+      const brg = U.bearing(t.pos, me.pos);
+      if (!R.isBackTurned(t.headingDeg, brg, sp.facingTolDeg)) return 'facing';
     }
-    await Store.submitMove(f.fid, { kind: 'flee' });
+    return null;
   }
 
-  return { myFight, sideOf, foeIdOf, myHp, foeHp, submit, tick, flee, dropLoot, settle };
-})();
+  /**
+   * Odigraj specijal. Vraća {ok, reason} ili {ok:true, res} kad je udarac.
+   * Specijali bez cilja (Zaliha, Drugi vetar, Velika mreža) ne traže `targetId`.
+   */
+  async function special(d, targetId, distM, opts) {
+    opts = opts || {};
+    const me = d.me;
+    const sp = R.SPECIALS[me.classId];
+    if (!sp) return { ok: false, reason: 'class' };
+    const now = Clock.now();
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   POTERA (§9) — zastavica `leftRadius` je suština.
-   Bez nje bi se borba nastavila istog trena po pokretanju, jer si i dalje
-   na 0 m od protivnika. Tek kad jednom izađeš van 20 m, prilazak na 8 m
-   ponovo pokreće borbu.
-   ═══════════════════════════════════════════════════════════════════════════ */
-const Chase = (() => {
-  'use strict';
-  let outsideSince = 0;
+    if (sp.id === 'stash') {                                   // Sakupljač
+      await Store.updateMe({
+        specialUsedThisGame: true,
+        hunger: 100 + (me.maxHungerBonus || 0),
+        thirst: 100 + (me.maxThirstBonus || 0),
+        lastTickMs: now,
+      });
+      return { ok: true, kind: 'self' };
+    }
+    if (sp.id === 'secondWind') {                              // Trkač
+      await Store.updateMe({ specialUsedThisGame: true, secondWindUntilMs: now + sp.durationMs });
+      return { ok: true, kind: 'self' };
+    }
+    if (sp.id === 'bigNet') {                                  // Zamkar
+      const P = Store.players(), pos = Geo.pos;
+      if (!pos) return { ok: false, reason: 'gps' };
+      const upd = {};
+      let n = 0;
+      for (const [pid, p] of Object.entries(P)) {
+        if (pid === Store.myId || p.alive === false || !p.pos) continue;
+        if ((R.CLASSES[p.classId] || {}).immuneToEntangle) continue;
+        if (U.dist(pos, p.pos) > sp.radiusM) continue;
+        upd[`${pid}/entangledUntilMs`] = now + sp.entangleMs;
+        n++;
+      }
+      if (Object.keys(upd).length) await Store.ref('players').update(upd);
+      await Store.updateMe({ specialUsedThisGame: true });
+      return { ok: true, kind: 'area', count: n };
+    }
+    if (sp.id === 'potion') {                                  // Lekar
+      const healTarget = targetId || Store.myId;
+      const t = Store.players()[healTarget];
+      if (!t) return { ok: false, reason: 'target' };
+      const hp = Math.min(t.maxHp || 100, (t.hp || 0) + sp.heal);
+      await Store.ref(`players/${healTarget}`).update({ hp });
+      await Store.updateMe({ specialUsedThisGame: true });
+      return { ok: true, kind: 'heal', healed: healTarget, hp };
+    }
 
-  const mine = () => {
-    const me = Store.me();
-    if (!me || !me.chaseId) return null;
-    const c = Store.chases()[me.chaseId];
-    return c ? { fid: me.chaseId, ...c } : null;
-  };
-  const isFleeing = () => { const c = mine(); return !!c && c.fleeing === Store.myId; };
-  const isChasing = () => { const c = mine(); return !!c && c.chaser === Store.myId; };
+    // ostali su udarci
+    const why = specialBlocked(d, targetId, distM);
+    if (why) return { ok: false, reason: why };
+    const w = R.weaponOf(me);
+    const res = {
+      miss: false, dmg: sp.dmg, state: 'in', weapon: w.id,
+      poison: false, entangle: false,
+    };
+    await Store.updateMe({ specialUsedThisGame: true });
+    const out = await land(d, targetId, distM, res, {
+      special: sp.id, photo: opts.photo, weapon: w,
+      noCooldown: sp.id === 'volley',
+    });
+    // Ribar gubi trozubac, pada kod žrtve (§6)
+    if (sp.losesWeapon) {
+      const t = Store.players()[targetId];
+      await Store.updateMe({ weapon: 'fists' });
+      if (t && t.pos) await Store.dropItem('wTrident', 'legendary', t.pos.lat, t.pos.lng, 1);
+    }
+    await Store.pushFeed({ type: 'special', subjectId: Store.myId, targetId, special: sp.id, scope: 'all' });
+    return { ok: true, kind: 'hit', res, out };
+  }
+
+  /* ═══════════════ otkucaj: otrov i isticanje efekata ═══════════════ */
+  let lastPoisonMs = 0;
 
   async function tick(d) {
-    const c = mine();
-    if (!c) { outsideSince = 0; return; }
-    const me = Store.me();
-    const otherId = c.fleeing === Store.myId ? c.chaser : c.fleeing;
-    const other = Store.players()[otherId];
+    const me = d.me;
+    if (!me || me.alive === false) { lastPoisonMs = 0; return; }
     const now = d.now;
 
-    if (!me || me.alive === false || !other || other.alive === false) return end(c, 'dead');
-    if (now - c.startedAtMs > R.CHASE.timeoutMs) return end(c, 'escaped');   // 90 s bez ishoda
-
-    const a = Geo.pos, b = other.pos;
-    if (!a || !b) return;
-    const m = U.dist(a, b);
-
-    // Zastavica: jednom kad se izađe van 20 m, otključava se povratak u borbu.
-    if (!c.leftRadius && m > R.CHASE.escapeRadiusM) {
-      await Store.chaseRef(c.fid).update({ leftRadius: true, leftAtMs: now });
-      outsideSince = now;
-    }
-    if (c.leftRadius) {
-      if (m > R.CHASE.escapeRadiusM) {
-        if (!outsideSince) outsideSince = now;
-        const cls = R.CLASSES[Store.players()[c.fleeing].classId] || {};
-        const need = (cls.fleeSeconds || R.CHASE.escapeSec) * 1000;
-        if (now - outsideSince >= need) return end(c, 'escaped');
-      } else {
-        outsideSince = 0;
-        // tek sada prilazak na 8 m nastavlja borbu, na razdaljini 0
-        if (m <= R.CHASE.rejoinRadiusM) return rejoin(c);
+    // otrov duvaljke: 3 HP na 10 s dok traje (§2)
+    const until = me.poisonUntilMs || 0;
+    if (until > 0) {
+      if (!lastPoisonMs) lastPoisonMs = Math.max(now - R.POISON_TICK_MS, until - R.POISON_MS);
+      const dmg = R.poisonDamage(lastPoisonMs, now, until);
+      if (dmg > 0) {
+        lastPoisonMs += Math.floor(dmg / R.POISON_DMG) * R.POISON_TICK_MS;
+        const hp = Math.max(0, (me.hp || 0) - dmg);
+        await Store.updateMe({ hp });
+        if (hp <= 0) Engine.die('poison');
       }
-    }
+      if (now >= until) { lastPoisonMs = 0; await Store.updateMe({ poisonUntilMs: null }); }
+    } else lastPoisonMs = 0;
   }
 
-  async function rejoin(c) {
-    await Store.chaseRef(c.fid).remove();
-    const f = Store.fights()[c.fid];
-    if (!f) return;
-    await Store.fightRef(c.fid).update({
-      state: 'live', distance: 0, round: (f.round || 1),
-      deadlineMs: Clock.now() + R.ROUND_MS, moves: null, fled: null,
-    });
-    await Store.ref('players').update({
-      [`${c.fleeing}/chaseId`]: null, [`${c.chaser}/chaseId`]: null,
-      [`${c.fleeing}/fightId`]: c.fid, [`${c.chaser}/fightId`]: c.fid,
-    });
-    toast(T('chaseCaught'), 'danger', 'swords');
-    Haptics.fire('hurt');
-  }
-
-  async function end(c, why) {
-    await Store.chaseRef(c.fid).remove();
-    const f = Store.fights()[c.fid];
-    if (f) await Store.fightRef(c.fid).update({ state: 'done', winner: null });
-    const upd = {
-      [`${c.fleeing}/chaseId`]: null, [`${c.chaser}/chaseId`]: null,
-      [`${c.fleeing}/fightId`]: null, [`${c.chaser}/fightId`]: null,
-    };
-    if (why === 'escaped') {
-      // 60 s imuniteta na ponovno slikanje od istog igrača (§9)
-      upd[`${c.fleeing}/immuneTo/${c.chaser}`] = Clock.now() + R.CHASE.immunityMs;
-    }
-    await Store.ref('players').update(upd);
-    if (why === 'escaped') {
-      toast(isFleeing() ? T('chaseEscaped') : T('chaseEscaped'), 'good', 'run');
-      Haptics.fire('win');
-    }
-    outsideSince = 0;
-  }
-
-  /** Podaci za ekran bekstva. */
-  function view(d) {
-    const c = mine();
-    if (!c) return null;
-    const otherId = c.fleeing === Store.myId ? c.chaser : c.fleeing;
-    const other = Store.players()[otherId];
-    const a = Geo.pos, b = other && other.pos;
-    const m = a && b ? U.dist(a, b) : null;
-    const cls = R.CLASSES[(Store.players()[c.fleeing] || {}).classId] || {};
-    const need = cls.fleeSeconds || R.CHASE.escapeSec;
-    let left = need;
-    if (c.leftRadius && m != null && m > R.CHASE.escapeRadiusM && outsideSince) {
-      left = Math.max(0, need - (d.now - outsideSince) / 1000);
-    }
-    return {
-      fid: c.fid, fleeing: c.fleeing === Store.myId, other, otherId,
-      distM: m, leftRadius: !!c.leftRadius, secondsLeft: left, need,
-      bearing: a && b ? U.bearing(a, b) : null,
-      timeoutIn: Math.max(0, (c.startedAtMs + R.CHASE.timeoutMs - d.now) / 1000),
-    };
-  }
-
-  return { mine, isFleeing, isChasing, tick, view, end };
+  return {
+    blockedReason, cooldownLeft, land, kill, dropLoot,
+    special, specialBlocked, tick,
+  };
 })();

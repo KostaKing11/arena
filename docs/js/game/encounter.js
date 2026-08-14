@@ -85,79 +85,34 @@ const Encounter = (() => {
     return U.clamp((1.7 * fPx) / h, 1, 120);
   }
 
-  /* — kandidati — */
+  /* — kandidati —
+     Konus se računa uživo, bez slikanja: ekran nišanjenja stalno pokazuje ko
+     ti je u pravcu i na kojoj razdaljini. Slika i detekcija osobe se traže tek
+     kad se pritisne dugme za nišanjenje. */
   function candidatesInCone(d) {
     const me = d.me, pos = Geo.pos, heading = Compass.heading;
     if (!me || !pos) return { list: [], noHeading: true };
-    const isArcher = me.classId === 'archer';
-    const maxM = isArcher ? R.PHOTO_MAX_ARCHER_M : R.PHOTO_MAX_M;
     const now = Clock.now();
     const out = [];
     for (const [pid, p] of Object.entries(Store.players())) {
       if (pid === Store.myId || p.alive === false || !p.pos) continue;
       if (p.hiddenUntilMs > now) continue;                 // kamuflažni ogrtač
       if (p.classId === 'shadow' && p.allianceId !== me.allianceId) continue;   // Senka je nevidljiva (§5)
-      if ((me.immuneTo || {})[pid] > now) continue;        // 60 s posle bekstva (§9)
       const m = U.dist(pos, p.pos);
-      if (m > maxM) continue;
+      if (m > R.PHOTO_MAX_M) continue;
       const brg = U.bearing(pos, p.pos);
       const diff = heading == null ? 0 : Math.abs(U.angleDiff(heading, brg));
       if (heading != null && diff > R.PHOTO_CONE_DEG) continue;
-      out.push({ pid, p, distM: m, bearing: brg, angleDiff: diff });
+      out.push({
+        pid, p, distM: m, bearing: brg, angleDiff: diff,
+        ally: !!(p.allianceId && p.allianceId === me.allianceId),
+      });
     }
+    out.sort((a, b) => a.angleDiff - b.angleDiff);
     return { list: out, noHeading: heading == null };
   }
 
-  /** Uslikaj i rangiraj. Vraća {ok, reason, candidates, shotDataUrl}. */
-  async function shoot(d, canvas) {
-    const now = Clock.now();
-    if (now - lastShotMs < R.PHOTO_COOLDOWN_MS) {
-      return { ok: false, reason: 'cooldown', waitS: Math.ceil((R.PHOTO_COOLDOWN_MS - (now - lastShotMs)) / 1000) };
-    }
-    if (!video || !video.videoWidth) return { ok: false, reason: 'nocamera' };
-
-    const ctx = canvas.getContext('2d');
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-    // Pregled je uvećan CSS-om, pa i snimak mora da bude isečen na isti deo
-    // slike — inače detektor gleda jedno a igrač vidi drugo, a procena
-    // razdaljine (koja deli visinu zumom) ispadne dvostruko pogrešna.
-    const sw = video.videoWidth / zoom, sh = video.videoHeight / zoom;
-    const sx = (video.videoWidth - sw) / 2, sy = (video.videoHeight - sh) / 2;
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-    const shot = canvas.toDataURL('image/jpeg', 0.5);
-
-    const { list, noHeading } = candidatesInCone(d);
-    if (!list.length) {
-      lastShotMs = now;
-      return { ok: false, reason: noHeading ? 'nocone' : 'nocone', shotDataUrl: shot };
-    }
-
-    let boxes = null;
-    if (detectorReady()) boxes = detectPersons(canvas);
-    // Ako detektor nije dostupan, preskačemo filter 2 umesto da blokiramo igru.
-    if (boxes && boxes.length === 0) {
-      lastShotMs = now;
-      return { ok: false, reason: 'noperson', shotDataUrl: shot };
-    }
-
-    const estM = boxes && boxes.length
-      ? boxes.map((b) => estimateDistance(b.h, canvas.height)).sort((a, b) => a - b)
-      : null;
-
-    const ranked = list.map((c) => {
-      let score = 100 - c.angleDiff * 2.2;                       // pravac je glavni kriterijum
-      if (estM && estM.length) {
-        const best = estM.reduce((m, e) => Math.min(m, Math.abs(e - c.distM)), Infinity);
-        score += Math.max(0, 30 - best * 1.5);                   // poklapanje razdaljine
-      }
-      return { ...c, score };
-    }).sort((a, b) => b.score - a.score);
-
-    lastShotMs = now;
-    return { ok: true, candidates: ranked, shotDataUrl: shot, usedDetector: !!boxes };
-  }
-
-  /* — akcije posle izbora — */
+  /* — savezi — */
   async function proposeAlliance(pid) {
     const me = Store.me();
     const size = R.maxAllianceSize(Store.playerCount());
@@ -185,100 +140,101 @@ const Encounter = (() => {
     toast(T('allianceAccepted'), 'good', 'handshake');
   }
 
-  /** Pokreni borbu iz slikanja. Razdaljina se računa iz GPS-a, nikad iz zuma. */
-  async function startFight(pid, distM, betrayal) {
-    const me = Store.me();
-    const band = R.distanceBand(distM, me.classId === 'archer');
-    if (band < 0) { toast(T('aimTooFar'), 'danger'); return null; }
-    const last = (me.lastFight || {})[pid] || 0;
-    if (Clock.now() - last < R.FIGHT_COOLDOWN_MS) { toast(T('photoCooldown'), 'danger'); return null; }
-    const fid = await Store.openFight(pid, band, { betrayal });
-    if (!fid) { toast(T('aimBlocked'), 'danger'); return null; }
-    if (betrayal) {
-      await Store.pushFeed({ type: 'betrayal', subjectId: Store.myId, targetId: pid, scope: 'all' });
-      // izdaja nožem: 25 štete odmah (§10)
-      if (me.weapon === 'knife') {
-        const f = Store.fights()[fid];
-        const isA = f && f.a === Store.myId;
-        await Store.fightRef(fid).update(isA ? { hpB: Math.max(0, f.hpB - 25) } : { hpA: Math.max(0, f.hpA - 25) });
-      }
-      await Store.updateMe({ allianceId: null });
-    }
-    Haptics.fire('hit');
-    return fid;
-  }
+  /* ═══════════════════ NIŠANJENJE ═══════════════════
+     Jedini način napada. Držiš dugme onoliko koliko oružje traži; ako se
+     pomeriš preko 5 m, promašaj. Oružja sa upozorenjem u tom trenutku javljaju
+     žrtvi odakle je gađaju, pa ona ima priliku da se pomeri preko 8 m.
 
-  /* — napad na daljinu, samo Strelac (§7) — */
-  function rangedBlocked(d, target) {
+     Vraća objekat sa `promise` i `cancel()` — otpuštanje dugmeta pre vremena
+     prekida nišanjenje bez ispaljivanja. */
+  function startAim(d, targetId, opts) {
+    opts = opts || {};
     const me = d.me;
-    if (me.classId !== 'archer' || me.weapon !== 'bow') return 'class';
-    if ((me.arrows || 0) <= 0) return 'ammo';
-    if (Clock.now() - (me.lastShotMs || 0) < R.RANGED_COOLDOWN_MS) return 'cooldown';
-    if (d.outsideZone) return 'zone';
-    const acc = Geo.accuracy;
-    if (acc == null || acc > R.RANGED_MIN_ACC_M) return 'gps';
-    if (target && (target.pos.accM || 99) > R.RANGED_MIN_ACC_M) return 'gpsTarget';
-    // ako se strelac nije pomerio 20 m u poslednjih 5 min — kamperisanje
-    if (me.lastMoveMs && Clock.now() - me.lastMoveMs > 300000) return 'stale';
-    return null;
-  }
-
-  async function fireRanged(targetId, onProgress) {
-    const me = Store.me();
+    const w = opts.weapon || R.weaponOf(me);
+    const aimMs = opts.aimMs != null ? opts.aimMs : w.aimMs;
     const startPos = Geo.pos;
     const target = Store.players()[targetId];
-    if (!startPos || !target || !target.pos) return { hit: false, reason: 'gps' };
-    const targetStart = { ...target.pos };
+    let cancelled = false, done = false;
 
-    await Store.ref(`players/${targetId}/incomingShot`).set({
-      from: Store.myId, atMs: Clock.now(),
-      bearing: U.bearing(target.pos, startPos),
-    });
+    if (!startPos || !target || !target.pos) {
+      return { cancel() {}, promise: Promise.resolve({ ok: false, reason: 'gps' }) };
+    }
+    const targetStart = { ...target.pos };
+    const warns = opts.warns != null ? opts.warns : R.warnsAt(w, U.dist(startPos, targetStart));
+
+    // upozorenje kreće ODMAH, ne na kraju — žrtva mora da ima šta da uradi
+    if (warns) {
+      Store.ref(`players/${targetId}/incomingAim`).set({
+        from: Store.myId, weapon: w.id, atMs: Clock.now(),
+        aimMs, bearing: U.bearing(targetStart, startPos),
+      }).catch(() => {});
+    }
 
     const t0 = Date.now();
-    return new Promise((res) => {
+    const promise = new Promise((res) => {
       const iv = setInterval(async () => {
+        if (cancelled) { clearInterval(iv); await clean(); res({ ok: false, reason: 'cancelled' }); return; }
         const el = Date.now() - t0;
-        onProgress && onProgress(el / R.RANGED_AIM_MS);
-        if (Geo.pos && U.dist(startPos, Geo.pos) > R.RANGED_SELF_MOVE_M) {
-          clearInterval(iv); await finish(false, 'moved'); return;
-        }
-        if (el >= R.RANGED_AIM_MS) {
-          clearInterval(iv);
-          const now = Store.players()[targetId];
-          const dodged = now && now.pos && U.dist(targetStart, now.pos) > R.RANGED_DODGE_M;
-          await finish(!dodged, dodged ? 'dodged' : null);
-        }
-      }, 200);
+        if (opts.onProgress) opts.onProgress(Math.min(1, el / aimMs));
 
-      async function finish(hit, reason) {
-        await Store.ref(`players/${targetId}/incomingShot`).remove();
-        await Store.updateMe({ lastShotMs: Clock.now(), arrows: Math.max(0, (me.arrows || 0) - 1) });
-        if (hit) {
-          const t = Store.players()[targetId];
-          const dmg = R.ownsWeapon(me) ? 30 : 22;
-          const hp = Math.max(0, (t.hp || 0) - dmg);
-          await Store.ref(`players/${targetId}`).update({ hp });
-          await Store.updateMe({ damageDone: (me.damageDone || 0) + dmg });
-          if (hp <= 0) {
-            await Store.ref(`players/${targetId}`).update({ alive: false, deathAtMs: Clock.now(), killedBy: Store.myId, deathCause: 'shot' });
-            await Store.pushFeed({ type: 'death', subjectId: targetId, killerId: Store.myId, scope: 'all', cause: 'shot' });
-          }
-          // strela pada kod žrtve (§6)
-          if (t.pos) await Store.dropItem('arrows', 'uncommon', t.pos.lat, t.pos.lng, 1);
+        // napadač se pomerio → promašaj
+        if (Geo.pos && U.dist(startPos, Geo.pos) > R.AIM_SELF_MOVE_M) {
+          clearInterval(iv); done = true; await clean();
+          res({ ok: true, miss: true, reason: 'moved', distM: U.dist(Geo.pos, targetStart) });
+          return;
         }
-        // svaki hitac ide u feed vidljiv duhovima, sa slikom-dokazom (§7)
-        await Store.pushFeed({ type: 'shot', subjectId: Store.myId, targetId, hit: !!hit, scope: 'ghosts' });
-        res({ hit, reason });
+        if (el >= aimMs) {
+          clearInterval(iv); done = true;
+          await clean();
+          const now = Store.players()[targetId];
+          const nowPos = (now && now.pos) || targetStart;
+          const dodged = U.dist(targetStart, nowPos) > R.AIM_DODGE_M;
+          const distM = Geo.pos ? U.dist(Geo.pos, nowPos) : U.dist(startPos, nowPos);
+          if (dodged) { res({ ok: true, miss: true, reason: 'dodged', distM }); return; }
+          res({ ok: true, miss: false, distM });
+        }
+      }, 100);
+
+      async function clean() {
+        if (!warns) return;
+        try { await Store.ref(`players/${targetId}/incomingAim`).remove(); } catch {}
       }
     });
+
+    return { promise, cancel() { if (!done) cancelled = true; } };
+  }
+
+  /** Uslikaj kadar i potvrdi da u njemu ZAISTA ima osobe (filter 2 iz §3). */
+  async function confirmPerson(canvas) {
+    const now = Clock.now();
+    if (now - lastShotMs < R.PHOTO_COOLDOWN_MS) {
+      return { ok: false, reason: 'cooldown', waitS: Math.ceil((R.PHOTO_COOLDOWN_MS - (now - lastShotMs)) / 1000) };
+    }
+    if (!video || !video.videoWidth) return { ok: false, reason: 'nocamera' };
+
+    const ctx = canvas.getContext('2d');
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    // Pregled je uvećan CSS-om, pa i snimak mora biti isečen na isti deo slike
+    const sw = video.videoWidth / zoom, sh = video.videoHeight / zoom;
+    const sx = (video.videoWidth - sw) / 2, sy = (video.videoHeight - sh) / 2;
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    const shot = canvas.toDataURL('image/jpeg', 0.5);
+
+    if (!detectorReady()) return { ok: true, photo: shot, usedDetector: false };
+    const boxes = detectPersons(canvas);
+    if (boxes && boxes.length === 0) {
+      lastShotMs = now;                     // 15 s da se kamera ne koristi kao radar
+      return { ok: false, reason: 'noperson', photo: shot };
+    }
+    return { ok: true, photo: shot, usedDetector: true, boxes };
   }
 
   return {
     openCamera, stop, setZoom, get zoom() { return zoom; },
     loadDetector, detectorReady, get detectorState() { return detectorState; },
-    detectPersons, estimateDistance, candidatesInCone, shoot,
-    proposeAlliance, respondAlliance, startFight, rangedBlocked, fireRanged,
+    detectPersons, estimateDistance, candidatesInCone,
+    confirmPerson, startAim,
+    proposeAlliance, respondAlliance,
     get lastShotMs() { return lastShotMs; },
   };
 })();
