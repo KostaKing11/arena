@@ -38,9 +38,11 @@ const Items = (() => {
     if (!me || me.alive !== false || !pos || !d.cfg || !d.cfg.center) return [];
     const seed = (Store.room && Store.room.seed) || 's';
     const taken = (Store.sparks().collected) || {};
-    // prsten prati TRENUTNU zonu — sa svakom fazom se seli i širi
+    /* Prsten se seli i širi sa svakom FAZOM, ali unutar faze stoji mirno.
+       Zato ide raspored, ne živa zona: živa zona se tokom skupljanja menja
+       svake sekunde i iskre bi bežale ispred duha. */
     const all = R.generateSparks(seed, d.cfg, Object.keys(Store.players()).length,
-      (d.zone && d.zone.phase) || 0, d.zone);
+      (d.zone && d.zone.phase) || 0, Store.schedule());
     return all.filter((s) => !taken[s.id]).map((s) => ({
       ...s, distM: U.dist(pos, s), inReach: U.dist(pos, s) <= R.SPARK_REACH_M,
     })).sort((a, b) => a.distM - b.distM);

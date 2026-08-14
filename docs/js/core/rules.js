@@ -505,15 +505,34 @@
   const SPARK_ZONE_MARGIN_M = 20;      // nijedna iskra nije bliža od ovoga ivici zone
   const GHOST_OUTER_M = 60;            // dokle duhovski prsten viri van arene
 
-  function generateSparks(seed, cfg, playerCount, zonePhase, zone) {
+  /* Zakovana geometrija zone za datu fazu — ono na šta se zona SLEGLA, ne ono
+     kroz šta trenutno prolazi.
+
+     `zoneAt` tokom skupljanja vraća `radiusM` i `center` kao lerp koji se menja
+     svake sekunde, dok `phase` ostaje isti. Ako se prsten računa iz toga, iskra
+     zadrži id ali promeni mesto — a pošto `U.scatter` prosleđuje minR u
+     `pointInCircle`, promena unutrašnjeg poluprečnika drugačije preslika ceo
+     niz nasumičnih brojeva, pa se iskre ne pomere nego POTPUNO promešaju.
+     Mereno: do 634 m pomeraja pri dometu kupljenja od 10 m.
+
+     Indeks: `zoneAt` vraća phase = i + 1 kad je faza gotova, a phase = i dok se
+     skuplja U nju. Dakle faza N opisuje stanje POSLE zone[N-1]; faza 0 je puna arena. */
+  function zoneAtPhaseSettled(schedule, cfg, phase) {
+    const z = (schedule && schedule.zone) || [];
+    if (!phase || !z[phase - 1]) return { center: cfg.center, radiusM: cfg.diameterM / 2 };
+    const ph = z[phase - 1];
+    return { center: { lat: ph.centerLat, lng: ph.centerLng }, radiusM: ph.radiusM };
+  }
+
+  function generateSparks(seed, cfg, playerCount, zonePhase, schedule) {
     const phase = zonePhase || 0;
     const rng = U.rngFor(seed, 'sparks', phase);
     const n = Math.max(20, Math.round(playerCount * SPARKS_PER_PLAYER));
-    // centar je centar ZONE, ne arene — zona se pomera kroz partiju
-    const center = (zone && zone.center) || cfg.center;
-    const inner = (zone ? zone.radiusM : cfg.diameterM / 2) + SPARK_ZONE_MARGIN_M;
+    // geometrija je čista funkcija FAZE, nikad trenutka — inače iskre beže
+    const z = zoneAtPhaseSettled(schedule, cfg, phase);
+    const inner = z.radiusM + SPARK_ZONE_MARGIN_M;
     const outer = Math.max(inner + 40, cfg.diameterM / 2 + GHOST_OUTER_M);
-    return U.scatter(rng, center, outer, inner, n, 18, [])
+    return U.scatter(rng, z.center, outer, inner, n, 18, [])
       // faza je u id-u: skupljene iskre iz raznih faza se ne smeju sudarati
       .map((p, i) => ({ id: 's' + phase + '_' + i, lat: p.lat, lng: p.lng, phase }));
   }
@@ -912,7 +931,7 @@
     SURVIVAL, survivalTick,
     buildSchedule, zoneAt, firewallAt,
     RARITY_W, CORN_RADIUS_M, EDGE_MARGIN_M, generateItems, generateArrowCaches, startPoints,
-    SPARKS_PER_PLAYER, generateSparks, SPARK_REACH_M, SPARK_ZONE_MARGIN_M, GHOST_OUTER_M,
+    SPARKS_PER_PLAYER, generateSparks, zoneAtPhaseSettled, SPARK_REACH_M, SPARK_ZONE_MARGIN_M, GHOST_OUTER_M,
     HALLUCINATION_MS, HALLUCINATION_POP_M, hallucinations,
     PACKAGE_COSTS, PACKAGE_COOLDOWN_MS, PACKAGE_DROP_M, PACKAGE_TIERS,
     CHEER_FAVOR, CHEER_COOLDOWN_MS, packageCost, canAffordTier,

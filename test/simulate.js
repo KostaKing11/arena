@@ -437,41 +437,95 @@ console.log('\n11. Iskre, halucinacije, mentor (§15, §16, §17)');
 
 console.log("\n12. Duhovi van zone (§16)");
 {
-  // duhovska teritorija je PRSTEN oko trenutne zone: unutra su zivi, napolju mrtvi
-  const zone = (r, c) => ({ radiusM: r, center: c || cfg.center, phase: 1 });
+  /* Duhovska teritorija je PRSTEN oko zone: unutra su zivi, napolju mrtvi.
+     Geometrija prstena je cista funkcija FAZE — ne trenutka — pa iskre stoje
+     mirno i dok se zona skuplja. */
+  const sch = R.buildSchedule('gz', cfg, T0);
+  const gen = (phase) => R.generateSparks('gz', cfg, 10, phase, sch);
+  const zoneR = (phase) => R.zoneAtPhaseSettled(sch, cfg, phase).radiusM;
+  const zoneC = (phase) => R.zoneAtPhaseSettled(sch, cfg, phase).center;
 
-  const a1 = R.generateSparks('gz', cfg, 10, 1, zone(200));
-  const a2 = R.generateSparks('gz', cfg, 10, 1, zone(200));
+  const a1 = gen(1), a2 = gen(1);
   ok('iskre su determinsticke po fazi', JSON.stringify(a1) === JSON.stringify(a2));
 
-  const drugaFaza = R.generateSparks('gz', cfg, 10, 2, zone(200));
+  const drugaFaza = gen(2);
   ok('druga faza daje druge iskre', JSON.stringify(drugaFaza) !== JSON.stringify(a1));
 
-  ok('nijedna iskra nije bliza od 20 m ivici zone',
-    a1.every((s) => U.dist(s, cfg.center) >= 200 + R.SPARK_ZONE_MARGIN_M - 0.5),
-    String(Math.round(Math.min.apply(null, a1.map((s) => U.dist(s, cfg.center) - 200)))));
+  ok('nijedna iskra nije bliza od 20 m ivici zone', [0, 1, 2, 3, 4, 5].every((ph) => {
+    const r = zoneR(ph), c = zoneC(ph);
+    return gen(ph).every((s) => U.dist(s, c) >= r + R.SPARK_ZONE_MARGIN_M - 0.5);
+  }));
 
   ok('margina je 20 m, prsten viri 60 m van arene',
     R.SPARK_ZONE_MARGIN_M === 20 && R.GHOST_OUTER_M === 60);
 
   // kad se zona skupi, unutrasnja ivica prstena se priblizava centru
-  const uska = R.generateSparks('gz', cfg, 10, 3, zone(80));
-  const minSiroka = Math.min.apply(null, a1.map((s) => U.dist(s, cfg.center)));
-  const minUska = Math.min.apply(null, uska.map((s) => U.dist(s, cfg.center)));
+  const minOd = (ph) => Math.min.apply(null, gen(ph).map((s) => U.dist(s, zoneC(ph))));
   ok('kad se zona skupi, prsten iskri je veci',
-    minUska < minSiroka, `${Math.round(minUska)} < ${Math.round(minSiroka)}`);
+    minOd(4) < minOd(1), `${Math.round(minOd(4))} < ${Math.round(minOd(1))}`);
 
   // id nosi fazu, pa se skupljene iskre iz raznih faza ne sudaraju
   const idA = new Set(a1.map((s) => s.id));
-  ok('id-jevi iskri iz razlicitih faza se ne poklapaju',
-    drugaFaza.every((s) => !idA.has(s.id)));
+  ok('id-jevi iskri iz razlicitih faza se ne poklapaju', drugaFaza.every((s) => !idA.has(s.id)));
   ok('id nosi fazu', a1[0].id.startsWith('s1_') && drugaFaza[0].id.startsWith('s2_'));
 
   // prsten prati centar ZONE, ne arene — zona se pomera kroz partiju
-  const pomeren = U.destPoint(cfg.center, 90, 150);
-  const okoPomerene = R.generateSparks('gz', cfg, 10, 1, zone(120, pomeren));
-  ok('prsten prati centar zone, ne arene',
-    okoPomerene.every((s) => U.dist(s, pomeren) >= 120 + R.SPARK_ZONE_MARGIN_M - 0.5));
+  ok('prsten prati centar zone, ne arene', (() => {
+    const ph = sch.zone.findIndex((z) => U.dist({ lat: z.centerLat, lng: z.centerLng }, cfg.center) > 20) + 1;
+    if (!ph) return true;                       // ovaj seed nije pomerio centar
+    const c = zoneC(ph), r = zoneR(ph);
+    return gen(ph).every((s) => U.dist(s, c) >= r + R.SPARK_ZONE_MARGIN_M - 0.5);
+  })());
+
+  ok('faza 0 je puna arena', zoneR(0) === cfg.diameterM / 2);
+  ok('faza N je stanje POSLE zone[N-1]',
+    zoneR(1) === sch.zone[0].radiusM && zoneR(5) === sch.zone[4].radiusM);
+}
+
+console.log("\n12b. Iskre ne beze dok se zona skuplja");
+{
+  /* Regresija: `zoneAt` tokom skupljanja vraca radiusM i center kao lerp koji
+     se menja svake sekunde, dok `phase` ostaje isti. Dok se prsten racunao iz
+     zive zone, ista iskra (isti id) selila se do 634 m — pri dometu kupljenja
+     od 10 m. Ovo je provera KROZ VREME; provera jedne funkcije je ne hvata. */
+  const sch = R.buildSchedule('s1', cfg, T0);
+  const gen = (ph) => R.generateSparks('s1', cfg, 10, ph, sch);
+
+  let maxPomeraj = 0, gde = '';
+  for (const ph of sch.zone) {
+    const naPocetku = R.zoneAt(sch, cfg, ph.startMs);
+    const naKraju = R.zoneAt(sch, cfg, ph.atMs - 500);
+    ok(`faza ostaje ista kroz celo skupljanje (${Math.round((ph.atMs - ph.startMs) / 1000)} s)`,
+      naPocetku.phase === naKraju.phase, `${naPocetku.phase} -> ${naKraju.phase}`);
+
+    const A = gen(naPocetku.phase), B = gen(naKraju.phase);
+    const mapB = new Map(B.map((s) => [s.id, s]));
+    for (const s of A) {
+      const t = mapB.get(s.id);
+      if (!t) { maxPomeraj = Infinity; gde = 'iskra ' + s.id + ' nestala'; continue; }
+      const m = U.dist(s, t);
+      if (m > maxPomeraj) { maxPomeraj = m; gde = s.id; }
+    }
+  }
+  ok('iskra se NE pomera dok se zona skuplja', maxPomeraj === 0,
+    `najveci pomeraj ${Math.round(maxPomeraj)} m (${gde})`);
+
+  // isto i na sredini skupljanja, ne samo na krajevima
+  let sredina = 0;
+  for (const ph of sch.zone) {
+    const t = (ph.startMs + ph.atMs) / 2;
+    const A = gen(R.zoneAt(sch, cfg, ph.startMs).phase);
+    const B = gen(R.zoneAt(sch, cfg, t).phase);
+    const mapB = new Map(B.map((s) => [s.id, s]));
+    for (const s of A) { const q = mapB.get(s.id); if (q) sredina = Math.max(sredina, U.dist(s, q)); }
+  }
+  ok('ni na sredini skupljanja', sredina === 0, `${Math.round(sredina)} m`);
+
+  // FINAL_TWO polovi radijus bez promene faze — iskre to vise ne smeju da osete
+  const z = R.zoneAt(sch, cfg, sch.zone[2].atMs);
+  const kaoFinalTwo = { ...z, radiusM: Math.max(20, z.radiusM * 0.5) };
+  ok('FINAL_TWO ne pomera iskre',
+    JSON.stringify(gen(z.phase)) === JSON.stringify(gen(kaoFinalTwo.phase)));
 }
 
 console.log(fail ? `\n${fail} provera palo\n` : `\nSve provere prosle\n`);
