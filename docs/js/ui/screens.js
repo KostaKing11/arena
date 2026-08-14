@@ -1212,9 +1212,13 @@ const UI = (() => {
     const can = !!target && state !== 'far' && !why && !aimBusy;
     const w = R.weaponOf(d.me);
 
-    btn.disabled = !can;
+    // Dugme se NE gasi dok traje držanje — gašenje usred pritiska ume da
+    // prekine niz pointer događaja, pa nišanjenje pukne bez razloga.
+    if (!aimBusy) btn.disabled = !can;
     const secs = (w.aimMs / 1000).toFixed(w.aimMs % 1000 ? 1 : 0);
-    $('.lbl', btn).innerHTML = `${esc(T('aimHoldBtn'))}<br><b style="font-size:var(--fs-lg)">${secs} s</b>`;
+    const lbl = $('.lbl', btn);
+    lbl.innerHTML = `${esc(T('aimHoldBtn'))}<br><b style="font-size:var(--fs-lg)">${secs} s</b>`;
+    lbl.style.visibility = cd > 0 ? 'hidden' : '';      // ispod odbrojavanja se ne cita
     const cdEl = $('.cd', btn);
     cdEl.hidden = cd <= 0;
     if (cd > 0) cdEl.textContent = Math.ceil(cd) + ' s';
