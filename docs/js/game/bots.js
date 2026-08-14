@@ -42,8 +42,12 @@ const Bots = (() => {
   }
 
   /* Ručke za testiranje: bez njih te botovi nađu, ubiju, i partija se pravi
-     iznova samo da bi se isprobala jedna stvar. */
-  let frozen = false, passive = false;
+     iznova samo da bi se isprobala jedna stvar. Pamte se lokalno — inače se
+     posle svakog osvežavanja stranice botovi odmrznu i test opet propadne. */
+  const FLAG = 'arena.bots';
+  const flags = (() => { try { return JSON.parse(localStorage.getItem(FLAG) || '{}'); } catch { return {}; } })();
+  let frozen = !!flags.frozen, passive = !!flags.passive;
+  const saveFlags = () => { try { localStorage.setItem(FLAG, JSON.stringify({ frozen, passive })); } catch {} };
 
   async function step(d) {
     if (frozen) return;
@@ -224,7 +228,7 @@ const Bots = (() => {
 
   return {
     seed, step, NAMES, bring,
-    get frozen() { return frozen; }, setFrozen(v) { frozen = !!v; },
-    get passive() { return passive; }, setPassive(v) { passive = !!v; },
+    get frozen() { return frozen; }, setFrozen(v) { frozen = !!v; saveFlags(); },
+    get passive() { return passive; }, setPassive(v) { passive = !!v; saveFlags(); },
   };
 })();
