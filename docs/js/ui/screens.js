@@ -1124,6 +1124,9 @@ const UI = (() => {
   function closeAim() {
     clearInterval(aimTick); aimTick = null;
     if (aimHandle) { aimHandle.cancel(); aimHandle = null; }
+    const f = $('#s-aim .aim-flash');
+    if (f) f.remove();                       // da ne dočeka sledeće otvaranje
+    setAimRing(0);
     Encounter.stop();
     Screens.go('game');
   }
@@ -1377,14 +1380,25 @@ const UI = (() => {
     const why = reason === 'dodged' ? T('missDodged') : reason === 'moved' ? T('missMoved') : T('missClose');
     toast(why, 'gold', 'alert');
   }
+  /* Broj štete preko ekrana, 1,5 s (§3).
+
+     Čvor se BRIŠE čim animacija prođe. Ako ostane u DOM-u sa klasom `go`,
+     ekran nišanjenja ga pri sledećem otvaranju vraća iz `display:none` u
+     vidljivo stanje — a tada se CSS animacija pokreće ponovo, pa ti isti
+     „−10" iskače svaki put kad uđeš u kameru. */
   function flash(text, color) {
     const s = $('#s-aim');
-    let n = $('.aim-flash', s);
-    if (!n) { n = el('div', 'aim-flash', '<div class="n"></div>'); s.appendChild(n); }
+    const old = $('.aim-flash', s);
+    if (old) old.remove();
+    const n = el('div', 'aim-flash', '<div class="n"></div>');
     const num = $('.n', n);
     num.textContent = text;
     num.style.color = color;
-    n.classList.remove('go'); void n.offsetWidth; n.classList.add('go');
+    s.appendChild(n);
+    void n.offsetWidth;
+    n.classList.add('go');
+    n.addEventListener('animationend', () => n.remove(), { once: true });
+    setTimeout(() => n.remove(), 2000);      // i ako animationend izostane
   }
 
   /* ═══════════════ nebo (§16) ═══════════════ */
