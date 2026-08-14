@@ -34,17 +34,19 @@
      Opseg je u METRIMA, prava razdaljina iz GPS-a. Nema apstraktne trake 0–5.
      `aimMs` je koliko se drži dugme, `cdMs` cooldown posle udarca, `warns`
      da li žrtva dobija upozorenje čim počneš da nišaniš. */
+  /* Cooldown prati jačinu: slabo oružje puca često, jako retko. Mrežа i
+     duvaljka su duže jer ne rade štetu nego onesposobljavaju. */
   const WEAPONS = {
-    fists:   { id: 'fists',   dmg: 10, minM: 0,  maxM: 3,  aimMs: 1000, cdMs: 15000, warns: false, cls: null },
-    knife:   { id: 'knife',   dmg: 45, minM: 0,  maxM: 5,  aimMs: 1000, cdMs: 20000, warns: false, cls: 'shadow' },
-    club:    { id: 'club',    dmg: 22, minM: 0,  maxM: 5,  aimMs: 1500, cdMs: 20000, warns: false, cls: 'gatherer' },
-    axe:     { id: 'axe',     dmg: 35, minM: 0,  maxM: 8,  aimMs: 2000, cdMs: 25000, warns: false, cls: 'strong' },
-    net:     { id: 'net',     dmg: 10, minM: 0,  maxM: 8,  aimMs: 2000, cdMs: 40000, warns: false, cls: 'trapper', entangle: true },
-    spear:   { id: 'spear',   dmg: 28, minM: 3,  maxM: 12, aimMs: 2000, cdMs: 25000, warns: true,  cls: 'hunter' },
-    trident: { id: 'trident', dmg: 30, minM: 0,  maxM: 15, aimMs: 2000, cdMs: 25000, warns: 'over8', cls: 'fisher' },
-    blowgun: { id: 'blowgun', dmg: 12, minM: 5,  maxM: 20, aimMs: 3000, cdMs: 40000, warns: true,  cls: 'medic', poison: true },
-    sling:   { id: 'sling',   dmg: 15, minM: 8,  maxM: 25, aimMs: 3000, cdMs: 20000, warns: true,  cls: 'runner' },
-    bow:     { id: 'bow',     dmg: 30, minM: 15, maxM: 40, aimMs: 5000, cdMs: 60000, warns: true,  cls: 'archer', ammo: 'arrow' },
+    fists:   { id: 'fists',   dmg: 10, minM: 0,  maxM: 3,  aimMs: 1000, cdMs: 10000, warns: false, cls: null },
+    knife:   { id: 'knife',   dmg: 45, minM: 0,  maxM: 5,  aimMs: 1000, cdMs: 26000, warns: false, cls: 'shadow' },
+    club:    { id: 'club',    dmg: 22, minM: 0,  maxM: 5,  aimMs: 1500, cdMs: 18000, warns: false, cls: 'gatherer' },
+    axe:     { id: 'axe',     dmg: 35, minM: 0,  maxM: 8,  aimMs: 2000, cdMs: 24000, warns: false, cls: 'strong' },
+    net:     { id: 'net',     dmg: 10, minM: 0,  maxM: 8,  aimMs: 2000, cdMs: 35000, warns: false, cls: 'trapper', entangle: true },
+    spear:   { id: 'spear',   dmg: 28, minM: 3,  maxM: 12, aimMs: 2000, cdMs: 20000, warns: true,  cls: 'hunter' },
+    trident: { id: 'trident', dmg: 30, minM: 0,  maxM: 15, aimMs: 2000, cdMs: 22000, warns: 'over8', cls: 'fisher' },
+    blowgun: { id: 'blowgun', dmg: 12, minM: 5,  maxM: 20, aimMs: 3000, cdMs: 30000, warns: true,  cls: 'medic', poison: true },
+    sling:   { id: 'sling',   dmg: 15, minM: 8,  maxM: 25, aimMs: 3000, cdMs: 14000, warns: true,  cls: 'runner' },
+    bow:     { id: 'bow',     dmg: 30, minM: 15, maxM: 40, aimMs: 5000, cdMs: 45000, warns: true,  cls: 'archer', ammo: 'arrow' },
   };
   const OWN_WEAPON_BONUS = 8;
 
@@ -493,7 +495,17 @@
      Kandidati se traže u konusu ±30° (kompas greši 15–20°, uže ne radi).
      `PHOTO_MAX_M` je samo dokle se kandidati uopšte prikazuju na ekranu
      nišanjenja — da li smeš da opališ određuje opseg oružja. */
-  const PHOTO_MAX_M = 60, PHOTO_CONE_DEG = 30, PHOTO_COOLDOWN_MS = 15000;
+  const PHOTO_CONE_DEG = 30, PHOTO_COOLDOWN_MS = 15000;
+  const ALLY_OFFER_M = 10;        // savez se nudi samo izbliza
+
+  /* Koliko daleko uopšte VIDIŠ nekoga na ekranu nišanjenja.
+     Vezano je za tvoje oružje: sa pesnicama nemaš šta da tražiš na 30 m, a sa
+     lukom moraš da vidiš metu pre nego što uđe u domet. Malo preko dometa se
+     ostavlja da postoji stanje „predaleko", i taman toliko da vidiš saveznika
+     kome hoćeš da ponudiš savez. */
+  function visibleRangeM(w) {
+    return Math.max((w || WEAPONS.fists).maxM * 1.25, ALLY_OFFER_M);
+  }
   const AIM_SELF_MOVE_M = 5;      // pomeriš se preko ovoga dok nišaniš → promašaj
   const AIM_DODGE_M = 8;          // žrtva se pomeri preko ovoga → promašaj
 
@@ -677,7 +689,8 @@
     HALLUCINATION_MS, HALLUCINATION_POP_M, hallucinations,
     PACKAGE_COSTS, PACKAGE_COOLDOWN_MS, PACKAGE_DROP_M, PACKAGE_TIERS,
     CHEER_FAVOR, CHEER_COOLDOWN_MS, packageCost, canAffordTier,
-    PHOTO_MAX_M, PHOTO_CONE_DEG, PHOTO_COOLDOWN_MS, AIM_SELF_MOVE_M, AIM_DODGE_M,
+    PHOTO_CONE_DEG, PHOTO_COOLDOWN_MS, AIM_SELF_MOVE_M, AIM_DODGE_M,
+    ALLY_OFFER_M, visibleRangeM,
     MIN_ACC_M, STALE_MOVE_M, STALE_MS, START_GRACE_MS,
     ENTANGLE_MS, POISON_MS, POISON_DMG, POISON_TICK_MS, BETRAYAL_MUL,
     HEAL_HOLD_MS, HEAL_MOVE_M,

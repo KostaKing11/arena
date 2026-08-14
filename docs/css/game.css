@@ -268,29 +268,54 @@
 
 .aim-hint { min-height: 18px; text-align: center; font-size: var(--fs-xs); color: #fff; opacity: .8; }
 
-/* — dugme koje se DRŽI — */
+/* — dugmad: savez levo, okidač u sredini, specijal desno — */
+.aim-actions {
+  display: grid; grid-template-columns: 1fr auto 1fr; gap: var(--s2);
+  align-items: center; justify-items: center;
+}
+.aim-side {
+  width: 100%; min-height: 56px; border-radius: var(--r-md); padding: var(--s2);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.28);
+  color: #fff; font-size: var(--fs-xs); font-weight: 700; text-align: center; line-height: 1.2;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  transition: transform .1s var(--ease), opacity .2s;
+}
+.aim-side[hidden] { display: none; }
+.aim-side:active:not(:disabled) { transform: scale(.96); }
+.aim-side:disabled { opacity: .4; }
+.aim-side.ally { border-color: color-mix(in srgb, var(--good) 70%, transparent); color: var(--good-hi); }
+.aim-side.special { border-color: color-mix(in srgb, var(--gold) 70%, transparent); color: var(--gold-hi); }
+
+/* Okidač je krug, a napredak nišanjenja se crta kao prsten oko njega —
+   tako se golim okom vidi koliko još treba da držiš. */
 .aim-fire {
-  position: relative; height: 76px; border-radius: var(--r-lg);
-  background: var(--danger); color: #fff; font-weight: 800; font-size: var(--fs-lg);
-  display: flex; align-items: center; justify-content: center; gap: var(--s2);
-  overflow: hidden; touch-action: none; user-select: none;
+  position: relative; width: 116px; height: 116px; border-radius: 50%;
+  background: var(--danger); color: #fff; font-weight: 800;
+  display: grid; place-items: center;
+  touch-action: none; user-select: none;
+  box-shadow: 0 6px 20px rgba(0,0,0,.5);
   transition: transform .1s var(--ease), background .2s;
 }
-.aim-fire:disabled { background: var(--ink-3); color: var(--text-3); }
-.aim-fire.holding { transform: scale(.98); }
-/* napredak nišanjenja se puni s leva udesno, vidljivo i bez gledanja u broj */
-.aim-fire .fill {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
-  background: rgba(255,255,255,.32); transform: scaleX(0); transform-origin: left;
-  pointer-events: none;
+.aim-fire:disabled { background: var(--ink-3); color: var(--text-3); box-shadow: none; }
+.aim-fire.holding { transform: scale(.95); }
+.aim-fire .ring { position: absolute; inset: -7px; transform: rotate(-90deg); pointer-events: none; }
+.aim-fire .ring circle { fill: none; stroke-width: 6; }
+.aim-fire .ring .bg { stroke: rgba(255,255,255,.22); }
+.aim-fire .ring .fg {
+  stroke: #fff; stroke-linecap: round;
+  stroke-dasharray: 282.74; stroke-dashoffset: 282.74;
 }
-.aim-fire .lbl { position: relative; z-index: 1; display: flex; align-items: center; gap: var(--s2); }
+.aim-fire .lbl {
+  position: relative; z-index: 1; padding: 0 10px;
+  font-size: var(--fs-xs); line-height: 1.15; text-align: center; letter-spacing: .02em;
+}
 .aim-fire .cd {
-  position: absolute; inset: 0; display: grid; place-items: center;
-  background: rgba(0,0,0,.45); font-variant-numeric: tabular-nums; z-index: 2;
+  position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%;
+  background: rgba(0,0,0,.55); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xl); z-index: 2;
 }
-.aim-extra { display: grid; grid-auto-flow: column; gap: var(--s2); }
-.aim-extra:empty { display: none; }
+.aim-fire .cd[hidden] { display: none; }
 
 /* — pogodak i promašaj — */
 .aim-flash {

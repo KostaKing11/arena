@@ -981,9 +981,10 @@ const UI = (() => {
             <span class="lbl" style="color:var(--danger)">${esc(T('quitGame'))}</span></button>
         </div></div>` : ''}
 
-      ${dev ? `<div>
+      ${dev || App.TEST ? `<div>
         <div class="card-title">${esc(T('devOptions'))}</div>
         <div class="rows">
+          ${row('setTest', 'target', T('testPanel'))}
           ${row('setBots', 'settings', T('testWithBots'))}
           ${row('setDiag', 'compass', T('diagnostics'))}
           ${row('setDevOff', 'x', T('devOff'))}
@@ -1012,6 +1013,7 @@ const UI = (() => {
     const mm = $('#setMentor'); if (mm) mm.onclick = () => mentorLinkSheet(Store.myId);
     const pp = $('#setPause'); if (pp) pp.onclick = () => { Store.hostUpdate('meta', { pausedAtMs: paused ? null : Clock.now() }); renderSettings(); };
     const qq = $('#setQuit'); if (qq) qq.onclick = async () => { if (await confirmBox(T('quitConfirm'), T('quitGame'), true)) { Engine.die('quit'); App.route(); } };
+    const tp = $('#setTest'); if (tp) tp.onclick = () => testSheet();
     const bb = $('#setBots'); if (bb) bb.onclick = () => App.askBotCount();
     const dd = $('#setDiag'); if (dd) dd.onclick = () => { location.href = 'diag.html'; };
     const off = $('#setDevOff'); if (off) off.onclick = () => { localStorage.removeItem('arena.dev'); renderSettings(); UI.initHome(App.TEST); };
@@ -1021,6 +1023,73 @@ const UI = (() => {
       if (++verTaps >= 7) { localStorage.setItem('arena.dev', '1'); verTaps = 0; Haptics.fire('pickup'); toast(T('devOn'), 'good', 'settings'); renderSettings(); UI.initHome(App.TEST); }
       else if (verTaps >= 4) toast(`${7 - verTaps}`, '', 'settings');
     };
+  }
+
+  /* ═══════════════ test panel ═══════════════
+     Bez ovoga se svaka sitnica isprobava tako što napraviš partiju, sačekaš
+     da te bot nađe, pogine ti lik, pa iznova. Vidi se samo u test režimu ili
+     kad su uključene razvojne opcije. */
+  function testSheet() {
+    const s = sheet(T('testPanel'), '<div id="tpBody"></div>');
+    draw();
+    function draw() {
+      const me = Store.me() || {};
+      const bots = Object.entries(Store.players()).filter(([, p]) => p.isBot);
+      const aliveBots = bots.filter(([, p]) => p.alive !== false);
+      $('#tpBody', s).innerHTML = `
+        <div class="card stack">
+          <div class="card-title">${esc(T('tpBots'))} · ${aliveBots.length}/${bots.length}</div>
+          <label class="switch"><span>${esc(T('tpFreeze'))}</span>
+            <input type="checkbox" id="tpFrozen" ${Bots.frozen ? 'checked' : ''}><span class="track"><span class="knob"></span></span></label>
+          <label class="switch"><span>${esc(T('tpPassive'))}</span>
+            <input type="checkbox" id="tpPassive" ${Bots.passive ? 'checked' : ''}><span class="track"><span class="knob"></span></span></label>
+          <div class="row-tight wrap">
+            ${aliveBots.map(([pid, p]) => `<button class="btn sm ghost" data-bring="${pid}">
+              ${icon('run', { size: 14 })}<span>${esc(p.name)}</span></button>`).join('') || `<p class="dim tiny">${esc(T('nobody'))}</p>`}
+          </div>
+          <p class="tiny dim">${esc(T('tpBringHint'))}</p>
+        </div>
+
+        <div class="card stack">
+          <div class="card-title">${esc(T('tpMe'))}</div>
+          <div class="row-tight wrap">
+            <button class="btn sm ghost" id="tpHeal">${icon('heart', { size: 14 })}<span>${esc(T('tpFullHp'))}</span></button>
+            <button class="btn sm ghost" id="tpRevive">${icon('refresh', { size: 14 })}<span>${esc(T('tpRevive'))}</span></button>
+            <button class="btn sm ghost" id="tpSpecial">${icon('spark', { size: 14 })}<span>${esc(T('tpResetSpecial'))}</span></button>
+            <button class="btn sm ghost" id="tpCd">${icon('clock', { size: 14 })}<span>${esc(T('tpClearCd'))}</span></button>
+          </div>
+        </div>
+
+        <div class="card stack">
+          <div class="card-title">${esc(T('tpWeapon'))}</div>
+          <div class="row-tight wrap">
+            ${Object.keys(R.WEAPONS).map((id) => `<button class="btn sm ${me.weapon === id ? 'gold' : 'ghost'}" data-w="${id}">
+              ${icon(WEAPON_ICON[id] || 'hand', { size: 14 })}<span>${esc(weaponName(id))}</span>
+              <span class="dim">${R.WEAPONS[id].minM}–${R.WEAPONS[id].maxM}</span></button>`).join('')}
+          </div>
+        </div>`;
+
+      $('#tpFrozen', s).onchange = (e) => Bots.setFrozen(e.target.checked);
+      $('#tpPassive', s).onchange = (e) => Bots.setPassive(e.target.checked);
+      $$('[data-bring]', s).forEach((b) => b.onclick = async () => {
+        const ok = await Bots.bring(b.dataset.bring, 2);
+        toast(ok ? T('tpBrought') : T('gpsGoOutside'), ok ? 'good' : 'danger', 'run');
+      });
+      $('#tpHeal', s).onclick = async () => { await Store.updateMe({ hp: me.maxHp || 100 }); toast(T('tpFullHp'), 'good', 'heart'); draw(); };
+      $('#tpRevive', s).onclick = async () => {
+        await Store.updateMe({ alive: true, hp: me.maxHp || 100, deathAtMs: null, killedBy: null });
+        toast(T('tpRevive'), 'good', 'refresh'); App.route(); draw();
+      };
+      $('#tpSpecial', s).onclick = async () => { await Store.updateMe({ specialUsedThisGame: null }); toast(T('tpResetSpecial'), 'good', 'spark'); draw(); };
+      $('#tpCd', s).onclick = async () => {
+        await Store.updateMe({ weaponCooldownUntilMs: null, entangledUntilMs: null, poisonUntilMs: null });
+        toast(T('tpClearCd'), 'good', 'clock'); draw();
+      };
+      $$('[data-w]', s).forEach((b) => b.onclick = async () => {
+        await Store.updateMe({ weapon: b.dataset.w, arrows: 30 });
+        toast(weaponName(b.dataset.w), 'good', WEAPON_ICON[b.dataset.w]); draw();
+      });
+    }
   }
 
   /* ═══════════════ NIŠANJENJE (borba v4) ═══════════════
@@ -1129,18 +1198,26 @@ const UI = (() => {
       <span class="tick" style="left:${b}%">${w.maxM} m</span>`;
   }
 
-  /* — dugme koje se drži — */
+  /* — okidač: natpis i stanje, čvor se NE pravi iznova — */
+  const RING_LEN = 2 * Math.PI * 45;
+  function setAimRing(p) {
+    const fg = $('#aimFire .ring .fg');
+    if (fg) fg.style.strokeDashoffset = RING_LEN * (1 - U.clamp(p, 0, 1));
+  }
+
   function updateFire(d, target, state) {
     const btn = $('#aimFire');
     const cd = Attack.cooldownLeft(d);
     const why = target ? Attack.blockedReason(d, target.p) : 'nocone';
     const can = !!target && state !== 'far' && !why && !aimBusy;
+    const w = R.weaponOf(d.me);
 
     btn.disabled = !can;
-    const w = R.weaponOf(d.me);
-    btn.innerHTML = `<i class="fill"></i>`
-      + `<span class="lbl">${icon('target', { size: 22 })}${esc(T('aimHoldBtn'))} · ${(w.aimMs / 1000).toFixed(w.aimMs % 1000 ? 1 : 0)} s</span>`
-      + (cd > 0 ? `<span class="cd">${Math.ceil(cd)} s</span>` : '');
+    const secs = (w.aimMs / 1000).toFixed(w.aimMs % 1000 ? 1 : 0);
+    $('.lbl', btn).innerHTML = `${esc(T('aimHoldBtn'))}<br><b style="font-size:var(--fs-lg)">${secs} s</b>`;
+    const cdEl = $('.cd', btn);
+    cdEl.hidden = cd <= 0;
+    if (cd > 0) cdEl.textContent = Math.ceil(cd) + ' s';
 
     $('#aimHint').textContent = !target ? ''
       : why ? blockedText(why)
@@ -1158,22 +1235,33 @@ const UI = (() => {
     })[why] || T('aimBlocked');
   }
 
-  /** Savez, specijal i lečenje — sve što nije običan udarac. */
+  /** Savez i specijal — bočna dugmad. Savez se nudi samo izbliza (10 m). */
   function drawExtra(d, target) {
     const me = d.me;
-    const out = [];
-    if (target && !target.ally) out.push(`<button class="btn ghost" id="aimAlly">${icon('handshake', { size: 18 })}<span>${esc(T('actAlliance'))}</span></button>`);
-    const sp = R.SPECIALS[me.classId];
-    if (sp && !me.specialUsedThisGame) {
-      const why = Attack.specialBlocked(d, target && target.pid, target && target.distM);
-      out.push(`<button class="btn ${why ? 'ghost' : 'gold'}" id="aimSpecial" ${why ? 'disabled' : ''}>
-        ${icon('spark', { size: 18 })}<span>${esc(specialName(sp.id))}</span></button>`);
-    }
-    $('#aimExtra').innerHTML = out.join('');
+
     const ab = $('#aimAlly');
-    if (ab) ab.onclick = () => Encounter.proposeAlliance(target.pid);
+    const canAlly = !!target && !target.ally;
+    ab.hidden = !canAlly;
+    if (canAlly) {
+      const near = target.distM <= R.ALLY_OFFER_M;
+      ab.disabled = !near;
+      ab.className = 'aim-side ally';
+      ab.innerHTML = `${icon('handshake', { size: 20 })}<span>${esc(T('actAlliance'))}</span>`
+        + (near ? '' : `<span class="dim">${R.ALLY_OFFER_M} m</span>`);
+      ab.onclick = () => Encounter.proposeAlliance(target.pid);
+    }
+
     const sb = $('#aimSpecial');
-    if (sb) sb.onclick = () => fireSpecial(target);
+    const sp = R.SPECIALS[me.classId];
+    const showSp = !!sp && !me.specialUsedThisGame;
+    sb.hidden = !showSp;
+    if (showSp) {
+      const why = Attack.specialBlocked(d, target && target.pid, target && target.distM);
+      sb.disabled = !!why;
+      sb.className = 'aim-side special';
+      sb.innerHTML = `${icon('spark', { size: 20 })}<span>${esc(specialName(sp.id))}</span>`;
+      sb.onclick = () => fireSpecial(target);
+    }
   }
 
   async function fireSpecial(target) {
@@ -1185,7 +1273,7 @@ const UI = (() => {
       // Strelčev precizan hitac se i dalje nišani, samo duže
       let photo = null;
       if (sp.maxM != null && target) {
-        const conf = await Encounter.confirmPerson($('#aimCan'));
+        const conf = await confirmTarget(target);
         if (!conf.ok) { toast(confirmText(conf), 'danger', 'alert'); return; }
         photo = conf.photo;
         if (sp.aimMs) {
@@ -1201,6 +1289,16 @@ const UI = (() => {
     } finally { aimBusy = false; drawAim(); }
   }
 
+  /* Detekcija osobe u kadru je filter protiv gadjanja kroz zid. Bot ne postoji
+     u stvarnom svetu, pa ga kamera nikad nece videti — u testu bi to znacilo da
+     se nijedan napad ne moze isprobati. Zato se filter preskace SAMO za botove
+     i SAMO u test rezimu. */
+  function confirmTarget(target) {
+    const isBot = !!(Store.players()[target.pid] || {}).isBot;
+    if (App.TEST && isBot) return Promise.resolve({ ok: true, photo: null, skipped: true });
+    return Encounter.confirmPerson($('#aimCan'));
+  }
+
   const confirmText = (c) => (c.reason === 'noperson' ? T('photoNoPerson')
     : c.reason === 'cooldown' ? `${T('photoCooldown')} ${c.waitS} s` : T('denied'));
 
@@ -1208,16 +1306,15 @@ const UI = (() => {
   function holdAim(targetId, opts) {
     return new Promise((res) => {
       const btn = $('#aimFire');
-      const fill = $('.fill', btn);
       btn.classList.add('holding');
       Haptics.fire('tap');
       aimHandle = Encounter.startAim(Engine.d, targetId, {
         ...opts,
-        onProgress: (p) => { if (fill) fill.style.transform = `scaleX(${p})`; },
+        onProgress: setAimRing,
       });
       const done = (r) => {
         btn.classList.remove('holding');
-        if (fill) fill.style.transform = 'scaleX(0)';
+        setAimRing(0);
         aimHandle = null;
         res(r);
       };
@@ -1243,7 +1340,7 @@ const UI = (() => {
         // saveznika se ne napada slučajno — prvo pitanje (§8)
         if (target.ally && !(await confirmBox(T('betrayAsk'), T('actBetray'), true))) return;
 
-        const conf = await Encounter.confirmPerson($('#aimCan'));
+        const conf = await confirmTarget(target);
         if (!conf.ok) { toast(confirmText(conf), 'danger', 'alert'); Haptics.fire('alert'); return; }
 
         const held = await holdAim(target.pid, {});
@@ -1501,7 +1598,7 @@ const UI = (() => {
     onboarding, onboardingDone, permState, FACE_KEY,
     renderLobby, resetLobby, showQr, shareLink, arenaMapSheet, renderPrep, nextStep, get prepStep() { return prepStep; },
     set prepStep(v) { prepStep = v; }, renderDeploy, ensureMap, renderGame, inventorySheet,
-    feedSheet, playersSheet, openAim, closeAim, showSky, renderGhost, renderEnd, feedText,
+    feedSheet, playersSheet, openAim, closeAim, testSheet, showSky, renderGhost, renderEnd, feedText,
     renderMentor, renderSettings, devMode,
     get gmap() { return gmap; },
     mentorLinkSheet(pid) {

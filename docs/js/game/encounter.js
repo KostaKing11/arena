@@ -93,13 +93,15 @@ const Encounter = (() => {
     const me = d.me, pos = Geo.pos, heading = Compass.heading;
     if (!me || !pos) return { list: [], noHeading: true };
     const now = Clock.now();
+    // dokle vidiš zavisi od TVOG oružja — sa pesnicama nemaš šta da tražiš na 30 m
+    const maxM = R.visibleRangeM(R.weaponOf(me));
     const out = [];
     for (const [pid, p] of Object.entries(Store.players())) {
       if (pid === Store.myId || p.alive === false || !p.pos) continue;
       if (p.hiddenUntilMs > now) continue;                 // kamuflažni ogrtač
       if (p.classId === 'shadow' && p.allianceId !== me.allianceId) continue;   // Senka je nevidljiva (§5)
       const m = U.dist(pos, p.pos);
-      if (m > R.PHOTO_MAX_M) continue;
+      if (m > maxM) continue;
       const brg = U.bearing(pos, p.pos);
       const diff = heading == null ? 0 : Math.abs(U.angleDiff(heading, brg));
       if (heading != null && diff > R.PHOTO_CONE_DEG) continue;

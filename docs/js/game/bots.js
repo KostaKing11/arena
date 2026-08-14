@@ -41,7 +41,12 @@ const Bots = (() => {
     await Store.hostUpdate('players', upd);
   }
 
+  /* Ručke za testiranje: bez njih te botovi nađu, ubiju, i partija se pravi
+     iznova samo da bi se isprobala jedna stvar. */
+  let frozen = false, passive = false;
+
   async function step(d) {
+    if (frozen) return;
     if (d.now - lastMs < 1500) return;
     const dt = Math.min(6, (d.now - lastMs) / 1000);
     lastMs = d.now;
@@ -156,7 +161,7 @@ const Bots = (() => {
          Bot ne nišani kamerom (nema je), ali poštuje isti opseg oružja,
          cooldown i uplitanje kao igrač. */
       const bw = R.weaponOf(p);
-      if ((p.hp || 100) >= FLEE_HP
+      if (!passive && (p.hp || 100) >= FLEE_HP
           && (p.weaponCooldownUntilMs || 0) <= d.now
           && (p.entangledUntilMs || 0) <= d.now) {
         for (const [qid, q] of Object.entries(P)) {
@@ -202,5 +207,21 @@ const Bots = (() => {
     }
   }
 
-  return { seed, step, NAMES };
+  /** Dovedi bota tik uz mene — da se napad moze isprobati bez trcanja. */
+  async function bring(pid, meters) {
+    const pos = Geo.pos;
+    if (!pos) return false;
+    const p = U.destPoint(pos, Math.random() * 360, meters == null ? 2 : meters);
+    await Store.ref(`players/${pid}`).update({
+      pos: { lat: p.lat, lng: p.lng, accM: 5, atMs: Clock.now() },
+    });
+    S.delete(pid);                       // zaboravi staru putnu tacku
+    return true;
+  }
+
+  return {
+    seed, step, NAMES, bring,
+    get frozen() { return frozen; }, setFrozen(v) { frozen = !!v; },
+    get passive() { return passive; }, setPassive(v) { passive = !!v; },
+  };
 })();

@@ -162,8 +162,20 @@
       <div class="aim-range" id="aimRange"></div>
       <div class="aim-list" id="aimList"></div>
       <div class="aim-hint" id="aimHint"></div>
-      <button class="aim-fire" id="aimFire"></button>
-      <div class="aim-extra" id="aimExtra"></div>
+      <!-- Dugmad su STATIČNA: petlja uživo im menja samo natpis i stanje.
+           Da se prave iznova, držanje bi pucalo usred nišanjenja. -->
+      <div class="aim-actions">
+        <button class="aim-side" id="aimAlly" hidden></button>
+        <button class="aim-fire" id="aimFire">
+          <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="bg" cx="50" cy="50" r="45"></circle>
+            <circle class="fg" cx="50" cy="50" r="45"></circle>
+          </svg>
+          <span class="lbl"></span>
+          <span class="cd" hidden></span>
+        </button>
+        <button class="aim-side" id="aimSpecial" hidden></button>
+      </div>
     </div>
   </section>
 
