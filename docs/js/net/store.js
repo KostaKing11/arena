@@ -268,6 +268,37 @@ const Store = (() => {
     return t.committed;
   }
 
+  /* Glasovi za događaj stoje kao `gmVotes/{type}/{pid}: true`, a u istom čvoru
+     živi i ključ `committed` — brava, ne glas. Zato se svuda filtrira. */
+  const VOTE_LOCK = 'committed';
+  const votersFrom = (obj) => Object.keys(obj || {}).filter((k) => k !== VOTE_LOCK);
+
+  /** Sveži glasovi sa servera — lokalni keš zaostaje odmah posle upisa. */
+  async function readVoters(type) {
+    try {
+      const s = await ref(`gmVotes/${type}`).get();
+      return votersFrom(s.val());
+    } catch { return votersFrom((room && room.gmVotes || {})[type]); }
+  }
+
+  /* Ko prvi postavi bravu, taj kupuje.
+     Bez ovoga dva duha koja istovremeno pređu prag oba prođu proveru (čita se
+     iz lokalnog keša odmah posle upisa) i oba skinu iskre iz iste kase.
+
+     Brava nosi vreme i ističe posle `LOCK_TTL_MS`: ako onome ko ju je uzeo
+     crkne telefon pre nego što upiše događaj, tip događaja bi inače ostao
+     zaključan do kraja partije. */
+  const LOCK_TTL_MS = 15000;
+  async function commitEvent(type) {
+    const now = Clock.now();
+    const t = await ref(`gmVotes/${type}/${VOTE_LOCK}`).transaction((cur) => {
+      if (cur && cur.atMs && now - cur.atMs < LOCK_TTL_MS) return undefined;   // tuđa, još važi
+      return { by: myId, atMs: now };
+    });
+    return t.committed && t.snapshot.val() && t.snapshot.val().by === myId;
+  }
+  function releaseEvent(type) { return ref(`gmVotes/${type}/${VOTE_LOCK}`).remove(); }
+
   /* — mentori — */
   const mentors = () => (room && room.mentors) || {};
   function mentorRef(pid) { return ref(`mentors/${pid}`); }
@@ -284,6 +315,7 @@ const Store = (() => {
     claimItem, releaseItem, dropItem,
     pushHit,
     setAlliance, addSpark, voteEvent, clearVotes, spendSparks, mentorRef,
+    readVoters, commitEvent, releaseEvent, votersFrom,
     SV,
   };
   return API;

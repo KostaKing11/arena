@@ -1651,7 +1651,7 @@ const UI = (() => {
         <div class="card-title">${esc(T('buyEvent'))}</div>
         ${cool > 0 ? `<p class="tiny goldc">${esc(T('gmCooldown'))} · ${U.mmss(cool)}</p>` : ''}
         ${Object.entries(R.SPARK_COSTS).map(([type, cost]) => {
-          const votes = Object.keys((Store.room.gmVotes || {})[type] || {}).length;
+          const votes = Store.votersFrom((Store.room.gmVotes || {})[type]).length;
           const need = ghosts > 2 ? Math.ceil(ghosts / 2) : 1;
           return `<button class="gm-event" data-ev="${type}" ${pool >= cost && cool <= 0 && !inZone ? '' : 'disabled'}>
             ${icon(EVENT_ICON[type] || 'spark', { size: 26 })}

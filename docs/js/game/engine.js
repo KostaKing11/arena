@@ -410,7 +410,9 @@ const Engine = (() => {
        gledao neko treći. Zato stoji ovde, u petlji koju vrti svaki telefon. */
     const live = (Store.room && Store.room.liveEvents) || {};
     for (const ev of Object.values(live)) {
-      if (!ev || ev.buyerId !== Store.myId) continue;
+      // isplata ide SVIMA koji su glasali; `buyerId` je tu radi starih zapisa
+      const mine = (ev.buyerIds || []).includes(Store.myId) || ev.buyerId === Store.myId;
+      if (!ev || !mine) continue;
       if (d.now < ev.atMs || seen.myEvents.has(ev.id)) continue;
       seen.myEvents.add(ev.id);
       if (booted) emit('myEvent', ev);

@@ -454,19 +454,32 @@ const App = (() => {
     const cost = R.SPARK_COSTS[type];
     const P = Store.players();
     const ghosts = Object.entries(P).filter(([, p]) => p.alive === false && !p.isBot).length;
+
+    /* Glasovi se čitaju SA SERVERA, ne iz lokalnog keša: keš zaostaje odmah
+       posle sopstvenog upisa, pa je moj glas znao da fali u brojanju. */
+    let voters = [];
     if (ghosts > 2) {
       await Store.voteEvent(type);
-      const votes = Object.keys((Store.room.gmVotes || {})[type] || {}).length;
-      if (votes < Math.ceil(ghosts / 2)) { toast(T('voteNeeded'), 'gold'); return; }
+      voters = await Store.readVoters(type);
+      if (voters.length < Math.ceil(ghosts / 2)) { toast(T('voteNeeded'), 'gold'); return; }
     }
+
+    /* Brava PRE trošenja: dva duha koja istovremeno pređu prag inače oba prođu
+       proveru i oba skinu iskre iz iste kase. Ko prvi postavi bravu, taj kupuje. */
+    const won = await Store.commitEvent(type);
+    if (!won) { toast(T('voteNeeded'), 'gold'); return; }
+
     const ok = await Store.spendSparks(cost);
-    if (!ok) { toast(T('sparks'), 'danger'); return; }
-    await Store.clearVotes(type);
+    if (!ok) { await Store.releaseEvent(type); toast(T('sparks'), 'danger'); return; }
+
     const cfg = Store.config(), now = Clock.now();
     const meta2 = R.EVENTS[type];
-    // buyerId je jedini trag ko je ovo pustio — bez njega nema isplate za trud
+    /* Isplatu dobijaju SVI koji su glasali, ne samo onaj ko je slučajno bacio
+       poslednji glas — njihove iskre su otišle u istu kasu. `buyerId` ostaje
+       radi starih zapisa. */
+    const buyers = voters.length ? voters : [Store.myId];
     const ev = {
-      id: U.uid('ge'), type, buyerId: Store.myId,
+      id: U.uid('ge'), type, buyerId: Store.myId, buyerIds: buyers,
       atMs: now + 15000, warnMs: 15000, endMs: now + 15000 + meta2.durMs,
     };
     if (type === 'firewall') {
@@ -480,6 +493,8 @@ const App = (() => {
     await Store.ref(`liveEvents/${ev.id}`).set(ev);
     await Store.ref('meta/lastGmEventMs').set(now);
     await Store.pushFeed({ type: 'event', eventType: type, scope: 'all' });
+    // glasovi i brava padaju tek kad je događaj stvarno upisan
+    await Store.clearVotes(type);
     toast(eventName(type), 'gold', EVENT_ICON[type]);
   }
 
