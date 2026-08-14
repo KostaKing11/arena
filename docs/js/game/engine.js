@@ -13,7 +13,7 @@ const Engine = (() => {
 
   let timer = null, lastMs = 0, booted = false;
   const listeners = [];
-  const seen = { deaths: new Set(), feed: new Set(), zonePhase: -1, sky: new Set(), events: new Set() };
+  const seen = { deaths: new Set(), feed: new Set(), zonePhase: -1, sky: new Set(), events: new Set(), myEvents: new Set() };
   let derived = null;
   let lastPosWrite = 0;
 
@@ -404,6 +404,17 @@ const Engine = (() => {
       seen.sky.add('shown' + skyAt);
       emit('sky', { atMs: skyAt });
     }
+
+    /* Kupljeni event se stvarno pokrenuo — javi ONOM ko ga je platio.
+       Ovo NE sme u `tickHost`: kupac najčešće nije domaćin, pa bi isplatu
+       gledao neko treći. Zato stoji ovde, u petlji koju vrti svaki telefon. */
+    const live = (Store.room && Store.room.liveEvents) || {};
+    for (const ev of Object.values(live)) {
+      if (!ev || ev.buyerId !== Store.myId) continue;
+      if (d.now < ev.atMs || seen.myEvents.has(ev.id)) continue;
+      seen.myEvents.add(ev.id);
+      if (booted) emit('myEvent', ev);
+    }
   }
 
   /* ═══════════════ petlja ═══════════════ */
@@ -433,6 +444,6 @@ const Engine = (() => {
   return {
     start, stop, on, derive, die, dropAll,
     get d() { return derived || derive(); },
-    resetSeen() { seen.deaths.clear(); seen.feed.clear(); seen.sky.clear(); seen.events.clear(); seen.zonePhase = -1; booted = false; },
+    resetSeen() { seen.deaths.clear(); seen.feed.clear(); seen.sky.clear(); seen.events.clear(); seen.myEvents.clear(); seen.zonePhase = -1; booted = false; },
   };
 })();

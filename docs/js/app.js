@@ -408,6 +408,7 @@ const App = (() => {
       upd[`${id}/poisonUntilMs`] = null; upd[`${id}/entangledUntilMs`] = null;
       upd[`${id}/attacksLanded`] = 0; upd[`${id}/attacksMissed`] = 0;
       upd[`${id}/effects`] = null; upd[`${id}/capacity`] = R.BASE_SLOTS;
+      upd[`${id}/sparksCollected`] = 0;
     }
     await Store.hostUpdate('players', upd);
     await Store.hostSet('items', null);
@@ -415,6 +416,11 @@ const App = (() => {
     await Store.hostSet('hits', null);
     await Store.hostSet('feed', null);
     await Store.hostSet('schedule', null);
+    /* Bez ovoga bi druga partija krenula sa punom kasom, vec skupljenim
+       iskrama i spiskom "vec kupljenih" eventova iz prve. */
+    await Store.hostSet('liveEvents', null);
+    await Store.hostSet('sparks', null);
+    await Store.hostSet('gmVotes', null);
     await Store.hostUpdate('meta', { state: 'LOBBY', startedAtMs: null, endedAtMs: null, winnerId: null, skyAtMs: null });
     Engine.resetSeen();
   }
@@ -448,7 +454,11 @@ const App = (() => {
     await Store.clearVotes(type);
     const cfg = Store.config(), now = Clock.now();
     const meta2 = R.EVENTS[type];
-    const ev = { id: U.uid('ge'), type, atMs: now + 15000, warnMs: 15000, endMs: now + 15000 + meta2.durMs };
+    // buyerId je jedini trag ko je ovo pustio — bez njega nema isplate za trud
+    const ev = {
+      id: U.uid('ge'), type, buyerId: Store.myId,
+      atMs: now + 15000, warnMs: 15000, endMs: now + 15000 + meta2.durMs,
+    };
     if (type === 'firewall') {
       const head = Math.random() * 360;
       const start = U.destPoint(cfg.center, (head + 180) % 360, cfg.diameterM * 0.575);
@@ -489,6 +499,18 @@ const App = (() => {
     if (kind === 'died') { toast(T('youDied'), 'danger', 'skull'); Haptics.fire('death'); }
     if (kind === 'zoneWarn') toast(T('zoneWarn') + ' 30 s', 'danger', 'alert');
     if (kind === 'eventWarn') toast(eventName(d.type), 'gold', EVENT_ICON[d.type] || 'spark');
+
+    /* Isplata za sve iskre: event koji si TI platio se upravo pokrenuo.
+       Do sada se posle kupovine nije dešavalo ništa vidljivo, pa skupljanje
+       nije imalo poentu. Otvara se puna mapa, centrirana na mesto događaja. */
+    if (kind === 'myEvent') {
+      Haptics.fire('cannon');
+      Sfx.warn();
+      UI.arenaMapSheet(Engine.d, {
+        focus: (d.lat && d.lng) ? { lat: d.lat, lng: d.lng } : null,
+        banner: `${T('yourEvent')} — ${eventName(d.type)}`,
+      });
+    }
     if (kind === 'cannon') {
       const flash = $('#zoneFlash');
       if (flash) { flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go'); }

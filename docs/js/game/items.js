@@ -47,6 +47,9 @@ const Items = (() => {
   }
   async function collectSpark(sid) {
     await Store.addSpark(sid);
+    // lični brojač: bazen je zajednički, ali duh treba da vidi svoj doprinos
+    const me = Store.me() || {};
+    await Store.updateMe({ sparksCollected: (me.sparksCollected || 0) + 1 });
     Haptics.fire('pickup'); Sfx.pickup();
     toast(T('sparkTaken'), 'gold', 'spark');
   }

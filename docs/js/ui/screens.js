@@ -669,15 +669,20 @@ const UI = (() => {
     gb.hidden = !ghostInZone;
     if (ghostInZone) gb.innerHTML = `${icon('alert', { size: 18 })}<span>${esc(T('ghostInZone'))}</span>`;
 
-    // vitalni — prag upozorenja prati prag kazne (§3), ne proizvoljnih 25
-    const maxHp = me.maxHp || 100;
-    const lowAt = R.SURVIVAL.lowThreshold;
-    $('#vitals').innerHTML =
-      vitalBox('hp', 'heart', me.hp || 0, maxHp, (me.hp || 0) < 25) +
-      vitalBox('hunger', 'meat', me.hunger || 0, 100 + (me.maxHungerBonus || 0), (me.hunger || 0) < lowAt) +
-      vitalBox('thirst', 'droplet', me.thirst || 0, 100 + (me.maxThirstBonus || 0), (me.thirst || 0) < lowAt);
-
-    renderEffects(d);
+    if (ghost) {
+      // mrtvom HP, glad i žeđ ne znače ništa — u traci stoji ono što mu jeste posao
+      $('#vitals').innerHTML = ghostVitals(d);
+      $('#fxBar').hidden = true;             // efekti su stvar živih
+    } else {
+      // vitalni — prag upozorenja prati prag kazne (§3), ne proizvoljnih 25
+      const maxHp = me.maxHp || 100;
+      const lowAt = R.SURVIVAL.lowThreshold;
+      $('#vitals').innerHTML =
+        vitalBox('hp', 'heart', me.hp || 0, maxHp, (me.hp || 0) < 25) +
+        vitalBox('hunger', 'meat', me.hunger || 0, 100 + (me.maxHungerBonus || 0), (me.hunger || 0) < lowAt) +
+        vitalBox('thirst', 'droplet', me.thirst || 0, 100 + (me.maxThirstBonus || 0), (me.thirst || 0) < lowAt);
+      renderEffects(d);
+    }
 
     // kompas traka sa oznakama
     renderCompass(d);
@@ -774,6 +779,37 @@ const UI = (() => {
     };
   }
 
+  /* ═══════════════ traka duha ═══════════════
+     Zamenjuje HP/glad/žeđ. Duh treba četiri broja: koliko je SAM doprineo,
+     koliko ima u zajedničkoj kasi, koliko još fali do prvog sledećeg eventa,
+     i koliko je igara ostalo — jer to je jedini razlog zašto još skuplja. */
+  function ghostVitals(d) {
+    const me = d.me || {};
+    const pool = (Store.sparks().pool) || 0;
+    const alive = Object.values(Store.players()).filter((p) => p.alive !== false).length;
+
+    // najjeftiniji event koji još niko nije pustio
+    const bought = new Set(Object.values((Store.room && Store.room.liveEvents) || {}).map((e) => e.type));
+    const left = Object.entries(R.SPARK_COSTS).filter(([t]) => !bought.has(t));
+    const cheapest = left.length ? left.reduce((a, b) => (b[1] < a[1] ? b : a)) : null;
+    const missing = cheapest ? Math.max(0, cheapest[1] - pool) : 0;
+
+    const box = (cls, ic, val, label) => `<div class="vitalbox ${cls}">
+      <span class="vi">${icon(ic, { size: 15 })}</span>
+      <span class="vn num">${esc(String(val))}</span>
+      <span class="gl">${esc(label)}</span></div>`;
+
+    return box('spark', 'spark', me.sparksCollected || 0, T('ghostMine'))
+      + box('pool', 'flask', pool, T('ghostPool'))
+      + (cheapest
+        ? box(missing > 0 ? 'need' : 'ready',
+            EVENT_ICON[cheapest[0]] || 'spark',
+            missing > 0 ? '−' + missing : '✓',
+            missing > 0 ? eventName(cheapest[0]) : T('ghostCanBuy'))
+        : box('ready', 'check', '✓', T('ghostAllBought')))
+      + box('alive', 'users', alive, T('ghostAlive'));
+  }
+
   /* Ko se uopšte vidi na mapi (§5).
      Pravilo je usko namerno: protivnika NE vidiš. Vide se samo saveznici, oni
      koje si sam otkrio (traker, alarm, durbin), i — ako si Strelac — igrači u
@@ -823,10 +859,13 @@ const UI = (() => {
      gornje vraća pogled na tebe, a ovo otvara pregled CELE arene: granica,
      zona koja se skuplja, kornukopija i sve što ti je vidljivo. */
   let amap = null;
-  function arenaMapSheet(d) {
+  function arenaMapSheet(d, opts) {
+    opts = opts || {};
     const cfg = d.cfg || Store.config();
     if (!cfg || !cfg.center) { toast(T('needCenter'), 'gold', 'map'); return; }
-    const s = sheet(T('arenaMap'), `
+    const s = sheet(opts.banner ? T('yourEvent') : T('arenaMap'), `
+      ${opts.banner ? `<div class="event-banner">${icon('spark', { size: 22 })}
+        <span>${esc(opts.banner)}</span></div>` : ''}
       <div class="arena-map" id="arenaMapBox"></div>
       <div class="row-tight wrap" style="margin-top:var(--s3)" id="arenaMapLegend"></div>`,
       { onClose: () => { amap = null; if (gmap) gmap.drawFog(); } });
@@ -841,7 +880,13 @@ const UI = (() => {
     if (Geo.pos) amap.setMe(Geo.pos, Compass.heading);
     amap.drawPlayers(visiblePlayers(d, true));
     amap.drawItems(Items.visible(d), null);
-    setTimeout(() => { if (amap) { amap.refresh(); amap.fitArena(cfg); } }, 80);
+    setTimeout(() => {
+      if (!amap) return;
+      amap.refresh();
+      // kad je otvorena zbog događaja, pogled ide NA događaj, ne na celu arenu
+      if (opts.focus) amap.map.setView([opts.focus.lat, opts.focus.lng], 17, { animate: false });
+      else amap.fitArena(cfg);
+    }, 80);
 
     // u testu je pun pregled arene i pravo mesto da zadaš kuda ideš
     if (App.TEST) {

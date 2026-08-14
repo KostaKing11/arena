@@ -428,3 +428,23 @@
 .ghost-banner[hidden] { display: none; }
 @keyframes ghostPulse { 0%,100% { opacity: 1; } 50% { opacity: .78; } }
 @media (prefers-reduced-motion: reduce) { .ghost-banner { animation: none; } }
+
+/* ── traka duha i isplata za event ──
+   Duh u traci vidi svoj doprinos, kasu, koliko fali i koliko je zivih —
+   HP i glad mu ne znace nista. `gl` je natpis ispod broja. */
+.vitalbox .gl { grid-column: 1 / -1; grid-row: 2; font-size: 10px; color: var(--text-3); letter-spacing: .04em; }
+.vitalbox.spark .vi { color: var(--gold); }
+.vitalbox.pool  .vi { color: var(--gold-hi); }
+.vitalbox.need  .vi { color: var(--text-3); }
+.vitalbox.ready { border-color: var(--good); }
+.vitalbox.ready .vi, .vitalbox.ready .vn { color: var(--good); }
+.vitalbox.alive .vi { color: var(--foe); }
+
+.event-banner {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: var(--s3); margin-bottom: var(--s3); border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--gold) 20%, transparent);
+  border: 1px solid var(--gold); color: var(--gold-hi);
+  font-weight: 800; font-size: var(--fs-md);
+}
+:root[data-theme="day"] .event-banner { color: var(--gold); }
