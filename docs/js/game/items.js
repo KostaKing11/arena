@@ -38,7 +38,9 @@ const Items = (() => {
     if (!me || me.alive !== false || !pos || !d.cfg || !d.cfg.center) return [];
     const seed = (Store.room && Store.room.seed) || 's';
     const taken = (Store.sparks().collected) || {};
-    const all = R.generateSparks(seed, d.cfg, Object.keys(Store.players()).length);
+    // prsten prati TRENUTNU zonu — sa svakom fazom se seli i širi
+    const all = R.generateSparks(seed, d.cfg, Object.keys(Store.players()).length,
+      (d.zone && d.zone.phase) || 0, d.zone);
     return all.filter((s) => !taken[s.id]).map((s) => ({
       ...s, distM: U.dist(pos, s), inReach: U.dist(pos, s) <= R.SPARK_REACH_M,
     })).sort((a, b) => a.distM - b.distM);

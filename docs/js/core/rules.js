@@ -493,13 +493,29 @@
   /* ═══════════════════ 16. ISKRE ═══════════════════
      Vidljive samo duhovima. Raspoređene po celoj areni, determinstički —
      nema potrebe da iko iko drugom javlja gde su.                            */
+  /* ═══════════════════ ISKRE — duhovi žive VAN zone ═══════════════════
+     Ranije su iskre bile rasute po celoj areni, pa su duhovi šetali kroz igru
+     i živi nisu znali ko je uopšte još u partiji. Sada stoje u PRSTENU oko
+     zone: unutra su živi (van zone gube život), napolju su mrtvi.
+
+     Kako se zona skuplja, duhovska teritorija raste — teren koji je igra
+     napustila pripada mrtvima. Na fazi 0 je zona cela arena, pa prsten pada
+     izvan njene granice; to je namerno, jer na startu skoro niko nije mrtav. */
   const SPARKS_PER_PLAYER = 6;
-  function generateSparks(seed, cfg, playerCount) {
-    const rng = U.rngFor(seed, 'sparks');
+  const SPARK_ZONE_MARGIN_M = 20;      // nijedna iskra nije bliža od ovoga ivici zone
+  const GHOST_OUTER_M = 60;            // dokle duhovski prsten viri van arene
+
+  function generateSparks(seed, cfg, playerCount, zonePhase, zone) {
+    const phase = zonePhase || 0;
+    const rng = U.rngFor(seed, 'sparks', phase);
     const n = Math.max(20, Math.round(playerCount * SPARKS_PER_PLAYER));
-    const outerR = Math.max(30, cfg.diameterM / 2 - 10);
-    return U.scatter(rng, cfg.center, outerR, 15, n, 18, [])
-      .map((p, i) => ({ id: 's' + i, lat: p.lat, lng: p.lng }));
+    // centar je centar ZONE, ne arene — zona se pomera kroz partiju
+    const center = (zone && zone.center) || cfg.center;
+    const inner = (zone ? zone.radiusM : cfg.diameterM / 2) + SPARK_ZONE_MARGIN_M;
+    const outer = Math.max(inner + 40, cfg.diameterM / 2 + GHOST_OUTER_M);
+    return U.scatter(rng, center, outer, inner, n, 18, [])
+      // faza je u id-u: skupljene iskre iz raznih faza se ne smeju sudarati
+      .map((p, i) => ({ id: 's' + phase + '_' + i, lat: p.lat, lng: p.lng, phase }));
   }
   const SPARK_REACH_M = 10;
 
@@ -896,7 +912,7 @@
     SURVIVAL, survivalTick,
     buildSchedule, zoneAt, firewallAt,
     RARITY_W, CORN_RADIUS_M, EDGE_MARGIN_M, generateItems, generateArrowCaches, startPoints,
-    SPARKS_PER_PLAYER, generateSparks, SPARK_REACH_M,
+    SPARKS_PER_PLAYER, generateSparks, SPARK_REACH_M, SPARK_ZONE_MARGIN_M, GHOST_OUTER_M,
     HALLUCINATION_MS, HALLUCINATION_POP_M, hallucinations,
     PACKAGE_COSTS, PACKAGE_COOLDOWN_MS, PACKAGE_DROP_M, PACKAGE_TIERS,
     CHEER_FAVOR, CHEER_COOLDOWN_MS, packageCost, canAffordTier,

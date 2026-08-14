@@ -74,6 +74,13 @@ const Engine = (() => {
       out.distToZone = Math.max(0, d - out.zone.radiusM);
       out.outsideZone = d > out.zone.radiusM;
     }
+    /* Duh ne gubi život ni u zoni ni van nje — mrtav je. Ali njegovo mesto je
+       VAN zone: unutra samo zbunjuje žive, a iskri tamo ionako nema.
+       Bez GPS očitavanja ne tvrdimo ništa — inače bi duh koji je tek upalio
+       telefon dobio prekor da je u zoni. */
+    const isGhost = !!(me && me.alive === false);
+    out.ghostOutside = !!(isGhost && pos && out.zone && out.outsideZone);
+    out.ghostInZone = !!(isGhost && pos && out.zone && !out.outsideZone);
     if (pos && out.wasps) out.inWasps = U.dist(pos, { lat: out.wasps.lat, lng: out.wasps.lng }) <= out.wasps.radiusM;
     if (pos && out.firewall) out.inFire = U.distToLine(pos, out.firewall.a, out.firewall.b) <= out.firewall.widthM / 2;
 

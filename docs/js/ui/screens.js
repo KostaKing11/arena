@@ -632,15 +632,21 @@ const UI = (() => {
     gmap.setVision((d.vision && d.vision.itemsM) || 15);
     gmap.setFull(me.alive === false || d.state === 'FINAL_TWO');
     if (pos) gmap.setMe(pos, Compass.heading);
-    // Karta zone: najavni prsten se pali 5 min ranije nego inače
-    if (d.zone) gmap.drawZone({ ...d.zone, peek: (me.zonePeekUntilMs || 0) > d.now }, d.cfg);
+    const ghost = me.alive === false;
+    const ghostInZone = !!d.ghostInZone;
+    // Karta zone: najavni prsten se pali 5 min ranije nego inače.
+    // Duhu se krug obrće — njegov teren je VAN zone.
+    if (d.zone) gmap.drawZone({ ...d.zone, peek: (me.zonePeekUntilMs || 0) > d.now }, d.cfg, { ghost });
     gmap.drawFire(d.firewall);
     gmap.drawWasps(d.wasps);
     gmap.drawSmoke(d.smoke);
-    // duhovi umesto plena vide iskre (§16)
-    const ghost = me.alive === false;
+    /* Duhovi umesto plena vide iskre (§16). Iskre stoje samo u prstenu van
+       zone, pa se dok je duh unutra ne crta ništa — nema šta ni da se crta. */
+    // izračunaj jednom po otkucaju — i mapa i kompas duha gledaju isti spisak
+    const ghostSparks = ghost ? Items.sparks(d) : null;
+    d._sparks = ghostSparks;
     const drawn = ghost
-      ? Items.sparks(d).slice(0, 40).map((s) => ({ ...s, type: 'spark', rarity: 'legendary' }))
+      ? (ghostInZone ? [] : ghostSparks.slice(0, 40).map((s) => ({ ...s, type: 'spark', rarity: 'legendary' })))
       : Items.visible(d);
     gmap.drawItems(drawn, (it) => (ghost ? (it.inReach && Items.collectSpark(it.id)) : App.tryPickup(it)));
     gmap.drawTraps(Items.visibleTraps(d));
@@ -657,7 +663,11 @@ const UI = (() => {
         : `${icon('target', { size: 15 })}<span>${esc(T('zonePhase'))}${z.phase ? ' ' + z.phase + '/5' : ''}${z.next ? ' · ' + U.mmss(nextIn) : ''}</span>`;
     } else zc.innerHTML = `${icon('clock', { size: 15 })}<span>${U.mmss(Math.max(0, (d.endsAtMs - d.now) / 1000))}</span>`;
 
-    $('#dangerVig').classList.toggle('on', !!d.outsideZone || !!d.inFire || !!d.inWasps);
+    // duh se ne kažnjava životom, ali mora da zna da mu mesto nije unutra
+    $('#dangerVig').classList.toggle('on', (!ghost && !!d.outsideZone) || !!d.inFire || !!d.inWasps);
+    const gb = $('#ghostBanner');
+    gb.hidden = !ghostInZone;
+    if (ghostInZone) gb.innerHTML = `${icon('alert', { size: 18 })}<span>${esc(T('ghostInZone'))}</span>`;
 
     // vitalni — prag upozorenja prati prag kazne (§3), ne proizvoljnih 25
     const maxHp = me.maxHp || 100;
@@ -933,7 +943,15 @@ const UI = (() => {
       if (Math.abs(off) > half) return;
       out.push(`<span class="mk" style="left:${compassW / 2 + off * compassPpd}px;color:${color}">${icon(name, { size: 14 })}</span>`);
     };
-    if (pos && d.zone && d.outsideZone) mark(U.bearing(pos, d.zone.center), 'var(--danger)', 'target');
+    const isGhost = !!(d.me && d.me.alive === false);
+    // živog zona vuče unutra; duh se ne kažnjava pa mu taj marker samo smeta
+    if (pos && d.zone && d.outsideZone && !isGhost) mark(U.bearing(pos, d.zone.center), 'var(--danger)', 'target');
+    /* Duhu strelica ka najbližoj iskri — bez nje, dok je unutar zone, nema
+       nijedan trag kuda treba da ide. */
+    if (pos && isGhost) {
+      const near = (d._sparks || Items.sparks(d))[0];
+      if (near) mark(U.bearing(pos, near), 'var(--gold)', 'spark');
+    }
     if (pos && d.me && d.state === 'PREP' && d.me.startPos) mark(U.bearing(pos, d.me.startPos), 'var(--gold)', 'pin');
     /* Kompas tributa: strelica ka najbližem igraču, BEZ razdaljine, i osvežava
        se tek na 30 s. Namerno je grub — daje ti pravac, ne rešenje. */
@@ -1589,7 +1607,15 @@ const UI = (() => {
     const cool = Math.max(0, (lastEv + R.GM_COOLDOWN_MS - d.now) / 1000);
     $('#sparkPool').innerHTML = `${icon('spark', { size: 24 })}<span>${pool}</span>`;
 
+    /* Duhov teren je VAN zone. Dok je unutra ne može ništa da kupi — inače bi
+       se isplatilo stajati usred žive igre i odatle bacati eventove. */
+    const inZone = !!d.ghostInZone;
+
     $('#ghostBody').innerHTML = `
+      ${inZone ? `<div class="card danger stack">
+        <div class="row"><span class="dangerc">${icon('alert', { size: 22 })}</span>
+          <p class="grow" style="margin:0;font-weight:700">${esc(T('ghostInZone'))}</p></div>
+      </div>` : ''}
       <div class="card"><p style="margin:0">${esc(T('ghostBody'))}</p></div>
       <div class="card stack">
         <div class="card-title">${esc(T('buyEvent'))}</div>
@@ -1597,7 +1623,7 @@ const UI = (() => {
         ${Object.entries(R.SPARK_COSTS).map(([type, cost]) => {
           const votes = Object.keys((Store.room.gmVotes || {})[type] || {}).length;
           const need = ghosts > 2 ? Math.ceil(ghosts / 2) : 1;
-          return `<button class="gm-event" data-ev="${type}" ${pool >= cost && cool <= 0 ? '' : 'disabled'}>
+          return `<button class="gm-event" data-ev="${type}" ${pool >= cost && cool <= 0 && !inZone ? '' : 'disabled'}>
             ${icon(EVENT_ICON[type] || 'spark', { size: 26 })}
             <div class="grow" style="text-align:left"><div style="font-weight:700">${esc(eventName(type))}</div>
             ${ghosts > 2 ? `<div class="tiny dim">${votes}/${need} ${esc(T('voteNeeded'))}</div>` : ''}</div>

@@ -98,14 +98,23 @@ function makeMap(elId, opts) {
   }
 
   /* — zona: crta se glatko, bez skokova (§14) — */
-  function drawZone(z, cfg) {
+  /* `opts.ghost` obrće značenje kruga: duhu je teren VAN zone, pa se senči
+     UNUTRAŠNJOST — odmah se vidi gde ne sme, bez ijednog reda teksta. */
+  function drawZone(z, cfg, opts) {
     if (!z || !cfg || !cfg.center) return;
+    const ghost = !!(opts && opts.ghost);
     const c = [z.center.lat, z.center.lng];
     if (!L_.zone) {
       L_.zone = L.circle(c, { radius: z.radiusM, color: '#E8B64C', weight: 3, fillColor: '#FF6A1A', fillOpacity: 0.05, interactive: false }).addTo(map);
       L_.corn = L.circleMarker([cfg.center.lat, cfg.center.lng], { radius: 7, color: '#E8B64C', weight: 3, fillColor: '#FF6A1A', fillOpacity: 1, interactive: false }).addTo(map);
     } else { L_.zone.setLatLng(c); L_.zone.setRadius(z.radiusM); }
-    L_.zone.setStyle({ color: z.shrinking ? '#E03131' : '#E8B64C', dashArray: z.shrinking ? '8 8' : null });
+    L_.zone.setStyle(ghost
+      ? { color: '#8B5CF6', weight: 2, dashArray: '6 8', fillColor: '#8B5CF6', fillOpacity: 0.22 }
+      : { color: z.shrinking ? '#E03131' : '#E8B64C', dashArray: z.shrinking ? '8 8' : null, fillColor: '#FF6A1A', fillOpacity: 0.05 });
+    if (ghost) {                             // duhu ne treba najavni prsten žive igre
+      if (L_.zoneNext) { map.removeLayer(L_.zoneNext); L_.zoneNext = null; }
+      return;
+    }
     /* Najavni prsten sledeće faze. Normalno se pali tek uz upozorenje, ali
        Karta zone (`z.peek`) ga pokazuje 5 min ranije — u igri gde je hodanje
        skupo, ta prednost u kretanju vredi više od pune flaše vode. */

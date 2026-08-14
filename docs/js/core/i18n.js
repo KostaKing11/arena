@@ -199,6 +199,7 @@ const I18N = {
     /* — mentor (§17) — */
     mentorWelcome: 'Ti si mentor', mentorTaken: 'Ovaj igrač već ima mentora',
     mentorLink: 'Link za mentora', copyMentorLink: 'Kopiraj mentorski link',
+    ghostInZone: 'U zoni si — vrati se napolje, ovde zbunjujes zive igrace',
     yourMentorTitle: 'Tvoj mentor', inviteMentor: 'Pozovi mentora',
     changeMentor: 'Promeni', changeMentorAsk: 'Sigurno? Sadašnji mentor gubi mesto i link postaje slobodan.',
     mentorQrBody: 'Neka ti neko ko ne igra skenira ovaj kod. On ti gleda stanje, borbe i moze da ti salje pakete.',
@@ -435,6 +436,7 @@ const I18N = {
 
     mentorWelcome: 'You are the mentor', mentorTaken: 'This player already has a mentor',
     mentorLink: 'Mentor link', copyMentorLink: 'Copy mentor link',
+    ghostInZone: 'You are inside the zone — go back out, in here you confuse the living',
     yourMentorTitle: 'Your mentor', inviteMentor: 'Invite a mentor',
     changeMentor: 'Change', changeMentorAsk: 'Are you sure? The current mentor loses their place and the link opens up.',
     mentorQrBody: 'Have someone who is not playing scan this code. They watch your state and fights, and can send you packages.',
