@@ -3,7 +3,7 @@
    keš prvo za CDN biblioteke. Baza, prijava i pločice mape se NE keširaju.
    Kad menjaš kod, podigni VERSION. */
 
-const VERSION = 'arena-v11';
+const VERSION = 'arena-v12';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -50,7 +50,11 @@ self.addEventListener('fetch', (e) => {
   if (NEVER.some((h) => url.hostname.includes(h))) return;
 
   if (url.origin === self.location.origin) {
-    e.respondWith(fetch(req).then((res) => {
+    /* `no-store` zaobilazi HTTP kes pregledaca. Bez toga "mreza prvo" i dalje
+       vraca fajl star do 10 minuta, koliko GitHub Pages salje u `max-age` —
+       pa aplikacija posle objave ume da ostane na staroj verziji. Nasi fajlovi
+       su sitni, a igranje sa starim kodom kvari partiju svima. */
+    e.respondWith(fetch(req, { cache: 'no-store' }).then((res) => {
       if (res && res.ok) { const copy = res.clone(); caches.open(SHELL).then((c) => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req).then((hit) => {
