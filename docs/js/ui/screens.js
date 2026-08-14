@@ -1124,9 +1124,6 @@ const UI = (() => {
   /* ═══════════════ podešavanja ═══════════════ */
   let verTaps = 0;
   function renderSettings() {
-    const inGame = Store.room && Store.state() !== 'LOBBY' && Store.state() !== 'END';
-    const host = Store.isHost();
-    const paused = !!Store.meta().pausedAtMs;
     const dev = devMode();
     const p = permState();
     const permsOk = p.location && p.camera;
@@ -1172,15 +1169,6 @@ const UI = (() => {
         </div>
       </div>
 
-      ${inGame ? `<div>
-        <div class="card-title">${esc(T('game'))}</div>
-        <div class="rows">
-          ${row('setMentor', 'users', T('mentorLink'))}
-          ${host ? row('setPause', paused ? 'play' : 'pause', paused ? T('resumeGame') : T('pauseGame')) : ''}
-          <button class="rowitem" id="setQuit">${icon('alert', { size: 20 })}
-            <span class="lbl" style="color:var(--danger)">${esc(T('quitGame'))}</span></button>
-        </div></div>` : ''}
-
       ${dev || App.TEST ? `<div>
         <div class="card-title">${esc(T('devOptions'))}</div>
         <div class="rows">
@@ -1210,9 +1198,6 @@ const UI = (() => {
     $('#setSfx').onchange = (e) => { Sfx.setEnabled(e.target.checked); Sfx.unlock(); };
     $('#setAvatar').onclick = () => avatarBuilder();
     $('#setPerms').onclick = () => App.checkPerms();
-    const mm = $('#setMentor'); if (mm) mm.onclick = () => mentorLinkSheet(Store.myId);
-    const pp = $('#setPause'); if (pp) pp.onclick = () => { Store.hostUpdate('meta', { pausedAtMs: paused ? null : Clock.now() }); renderSettings(); };
-    const qq = $('#setQuit'); if (qq) qq.onclick = async () => { if (await confirmBox(T('quitConfirm'), T('quitGame'), true)) { Engine.die('quit'); App.route(); } };
     const tp = $('#setTest'); if (tp) tp.onclick = () => testSheet();
     const bb = $('#setBots'); if (bb) bb.onclick = () => App.askBotCount();
     const dd = $('#setDiag'); if (dd) dd.onclick = () => { location.href = 'diag.html'; };
@@ -1696,6 +1681,41 @@ const UI = (() => {
     $('#ghostMap').onclick = () => Screens.go('game');
   }
 
+  /* ═══════════════ meni u toku partije ═══════════════
+     Isto dugme je radilo dva posla: u lobiju prava podešavanja, a nasred
+     partije — dok stojiš na ulici — pun ekran sa temom, jezikom i avatarom.
+     U igri treba samo izlaz u nuždi, tri stavke, bez skrolovanja.
+     Pun ekran ostaje jedan red niže, da se ništa ne izgubi. */
+  function gameMenuSheet() {
+    const host = Store.isHost();
+    const paused = !!Store.meta().pausedAtMs;
+    const s = sheet(T('menu'), `
+      <div class="rows">
+        ${host ? `<button class="rowitem" id="gmPause">${icon(paused ? 'play' : 'pause', { size: 20 })}
+          <span class="lbl">${esc(paused ? T('resumeGame') : T('pauseGame'))}</span></button>` : ''}
+        <button class="rowitem" id="gmMentor">${icon('users', { size: 20 })}
+          <span class="lbl">${esc(T('inviteMentor'))}</span></button>
+        <button class="rowitem" id="gmQuit">${icon('alert', { size: 20 })}
+          <span class="lbl" style="color:var(--danger)">${esc(T('quitGame'))}</span></button>
+      </div>
+      <button class="rowitem" id="gmMore" style="margin-top:var(--s3)">
+        ${icon('settings', { size: 18 })}
+        <span class="lbl tiny dim">${esc(T('otherSettings'))}</span>
+        ${icon('chevronRight', { size: 16 })}</button>`);
+
+    const pb = $('#gmPause', s);
+    if (pb) pb.onclick = async () => {
+      await Store.hostUpdate('meta', { pausedAtMs: paused ? null : Clock.now() });
+      s.close();
+    };
+    $('#gmMentor', s).onclick = () => { s.close(); mentorInviteSheet(); };
+    $('#gmQuit', s).onclick = async () => {
+      s.close();
+      if (await confirmBox(T('quitConfirm'), T('quitGame'), true)) { Engine.die('quit'); App.route(); }
+    };
+    $('#gmMore', s).onclick = () => { s.close(); App.openFullSettings(); };
+  }
+
   /* ═══════════════ GLEDANJE JEDNOG IGRAČA (duh) ═══════════════
      „Prati" je bio čekboks: upiše se `following` i ne desi se ništa. Ovo je
      pravo gledanje — mapa koja ide za njim, njegovo stanje, spisak njegovih
@@ -1963,19 +1983,8 @@ const UI = (() => {
     renderLobby, resetLobby, showQr, shareLink, arenaMapSheet, renderPrep, nextStep, get prepStep() { return prepStep; },
     set prepStep(v) { prepStep = v; }, renderDeploy, ensureMap, renderGame, inventorySheet,
     feedSheet, playersSheet, openAim, closeAim, testSheet, showSky, renderGhost, renderEnd, feedText,
-    renderWatch, openWatch, closeWatch,
+    renderWatch, openWatch, closeWatch, gameMenuSheet,
     renderMentor, renderSettings, devMode,
     get gmap() { return gmap; },
-    mentorLinkSheet(pid) {
-      const url = Mentor.mentorLinkFor(Store.code, pid);
-      const s = sheet(T('mentorLink'), `
-        <p class="dim">${esc(T('mentorOf'))}: <b>${esc((Store.players()[pid] || {}).name || '')}</b></p>
-        <div class="card" style="word-break:break-all;font-size:var(--fs-sm)">${esc(url)}</div>
-        <button class="btn primary lg full" id="mlCopy" style="margin-top:var(--s3)">${esc(T('copyMentorLink'))}</button>`);
-      $('#mlCopy', s).onclick = async () => {
-        try { await navigator.clipboard.writeText(url); toast(T('copied'), 'good', 'check'); } catch { }
-        if (navigator.share) { try { await navigator.share({ title: 'ARENA', url }); } catch { } }
-      };
-    },
   };
 })();

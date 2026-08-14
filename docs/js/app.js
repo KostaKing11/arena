@@ -165,7 +165,15 @@ const App = (() => {
   }
 
   let settingsFrom = 'home';
+  /* U lobiju i na kraju partije ovo su prava podešavanja. U toku igre je to
+     izlaz u nuždi, pa ide kratak sheet sa tri stavke — pun ekran je u njemu
+     jedan red niže. */
   function openSettings() {
+    const s = Store.state();
+    if (Store.room && s !== 'LOBBY' && s !== 'END') { UI.gameMenuSheet(); return; }
+    openFullSettings();
+  }
+  function openFullSettings() {
     settingsFrom = Screens.cur === 'settings' ? settingsFrom : Screens.cur;
     Screens.go('settings');
     UI.renderSettings();
@@ -602,7 +610,7 @@ const App = (() => {
 
   return {
     boot, route, requestPerm, startGame, playAgain, tryPickup, buyEvent, leaveRoom, goHome,
-    quickTest, askBotCount, openSettings, checkPerms, goFullscreen,
+    quickTest, askBotCount, openSettings, openFullSettings, checkPerms, goFullscreen,
     get TEST() { return TEST; }, get MODE() { return MODE; },
   };
 })();
