@@ -1128,24 +1128,27 @@ const UI = (() => {
     if (lv) lv.onclick = async () => { s.close(); await Store.updateMe({ allianceId: null }); };
   }
 
-  /** Kome nudiš savez — spisak onih koji su ti nadohvat ruke. */
+  /** Kome nudiš savez — svi živi, sortirani po tome ko ti je najbliži.
+      Spisak namerno pokazuje i one predaleko: prazan ekran sa jednom rečju
+      „Niko" ne kaže da li nikoga nema ili si samo daleko od svih. */
   function allyPickSheet() {
     const me = Store.me() || {};
     const pos = Geo.pos;
-    const near = Object.entries(Store.players())
-      .filter(([pid, p]) => pid !== Store.myId && p.alive !== false && p.pos
+    const list = Object.entries(Store.players())
+      .filter(([pid, p]) => pid !== Store.myId && p.alive !== false
         && !(p.allianceId && p.allianceId === me.allianceId))
-      .map(([pid, p]) => ({ pid, p, m: pos ? U.dist(pos, p.pos) : Infinity }))
+      .map(([pid, p]) => ({ pid, p, m: (pos && p.pos) ? U.dist(pos, p.pos) : Infinity }))
       .sort((a, b) => a.m - b.m);
 
-    const s = sheet(T('allyPick'), near.length ? `<div class="list">${near.map(({ pid, p, m }) => {
+    const s = sheet(T('allyPick'), list.length ? `<div class="list">${list.map(({ pid, p, m }) => {
       const ok = m <= R.ALLY_OFFER_M;
+      const why = ok ? T('addAlly') : isFinite(m) ? T('allyTooFar') : T('allyNoPos');
       return `<button class="list-item tapable" data-ally="${pid}" ${ok ? '' : 'disabled'}>
         <span class="avatar foe" style="display:block">${avatarSvg(p.avatar, 34)}</span>
         <div class="grow" style="text-align:left"><div class="name">${esc(p.name)}</div>
-          <div class="tiny ${ok ? 'goodc' : 'mute'}">${ok ? esc(T('addAlly')) : esc(T('allyTooFar'))}</div></div>
-        <span class="chip">${fmtDist(m)}</span></button>`;
-    }).join('')}</div>` : `<p class="dim center" style="margin:0">${esc(T('nobody'))}</p>`);
+          <div class="tiny ${ok ? 'goodc' : 'mute'}">${esc(why)}</div></div>
+        <span class="chip">${isFinite(m) ? fmtDist(m) : '—'}</span></button>`;
+    }).join('')}</div>` : `<p class="dim center" style="margin:0">${esc(T('allyAllGone'))}</p>`);
 
     $$('[data-ally]', s).forEach((b) => b.onclick = async () => {
       s.close();

@@ -165,6 +165,7 @@ const I18N = {
     allies: 'Saveznici', addAlly: 'Dodaj saveznika', allyNoneYet: 'Nemaš saveznike.',
     allyPick: 'Kome nudiš savez?', allySent: 'Ponuda poslata', allyLeave: 'Napusti savez',
     allyTooFar: 'Predaleko je', allyHelp: 'Savez se nudi izbliza — moraš mu prići.',
+    allyNoPos: 'Ne zna se gde je', allyAllGone: 'Nema više nikoga ko nije s tobom.',
     cooldown: 'Odmor', send: 'Pošalji', dayTime: 'Dan', nightTime: 'Noć',
     // naslov ekrana i dva čitača ekrana — ranije je pisalo bukvalno "settings"
     settings: 'Podešavanja', center: 'Centriraj',
@@ -428,6 +429,7 @@ const I18N = {
     allies: 'Allies', addAlly: 'Add an ally', allyNoneYet: 'You have no allies.',
     allyPick: 'Who do you offer an alliance to?', allySent: 'Offer sent', allyLeave: 'Leave the alliance',
     allyTooFar: 'Too far away', allyHelp: 'An alliance is offered up close — you have to walk over.',
+    allyNoPos: 'Position unknown', allyAllGone: 'Nobody left who is not already with you.',
     cooldown: 'Cooldown', send: 'Send', dayTime: 'Day', nightTime: 'Night',
     settings: 'Settings', center: 'Recenter',
     sparks: 'Sparks', sparkPool: 'Shared pool', buyEvent: 'Buy event',
