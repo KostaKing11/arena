@@ -163,19 +163,28 @@
   top: calc(var(--safe-t) + var(--s2));
   display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none;
 }
+/* Objava je bila sivi pravougaonik sa ikonicom u istoj boji kao tekst.
+   Sada ikonica stoji u svom polju, a boja stanja ide u traku levo — pročita
+   se krajičkom oka, dok trčiš, bez zaustavljanja. */
 .toast {
   max-width: 420px; width: 100%;
-  display: flex; align-items: center; gap: var(--s2);
-  padding: var(--s2) var(--s3); border-radius: var(--r-md);
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s3); border-radius: var(--r-md);
   background: var(--ink-3); border: 1px solid var(--line);
-  box-shadow: var(--sh-2); font-size: var(--fs-sm); font-weight: 600;
-  animation: toastIn .2s var(--ease-out) both;
+  border-left: 3px solid var(--line);
+  box-shadow: var(--sh-2); font-size: var(--fs-sm); font-weight: 600; line-height: 1.35;
+  animation: toastIn .22s var(--ease-out) both;
 }
-@keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } }
+@keyframes toastIn { from { opacity: 0; transform: translateY(-10px) scale(.97); } }
 .toast .ic { flex: none; }
-.toast.danger { border-color: var(--danger); color: var(--danger-hi); }
-.toast.good { border-color: var(--good); color: var(--good-hi); }
-.toast.gold { border-color: var(--gold); color: var(--gold-hi); }
+.toast > span { flex: 1; }
+.toast .tico {
+  flex: none; display: grid; place-items: center; width: 30px; height: 30px;
+  border-radius: 50%; background: color-mix(in srgb, currentColor 16%, transparent);
+}
+.toast.danger { border-color: var(--danger); border-left-color: var(--danger); color: var(--danger-hi); }
+.toast.good { border-color: var(--good); border-left-color: var(--good); color: var(--good-hi); }
+.toast.gold { border-color: var(--gold); border-left-color: var(--gold); color: var(--gold-hi); }
 :root[data-theme="day"] .toast.danger { color: var(--danger); }
 :root[data-theme="day"] .toast.good { color: var(--good); }
 :root[data-theme="day"] .toast.gold { color: var(--gold); }

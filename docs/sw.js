@@ -3,7 +3,7 @@
    keš prvo za CDN biblioteke. Baza, prijava i pločice mape se NE keširaju.
    Kad menjaš kod, podigni VERSION. */
 
-const VERSION = 'arena-v23';
+const VERSION = 'arena-v24';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 

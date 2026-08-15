@@ -253,6 +253,16 @@ const Store = (() => {
   const alliances = () => (room && room.alliances) || {};
   function setAlliance(pid, allianceId) { return ref(`players/${pid}/allianceId`).set(allianceId); }
 
+  /* — dogovor duhova —
+     Bez ovoga su duhovi klikali događaje nasumično, svako za sebe, i kasa se
+     trošila na ono što je prvi stigao da pritisne. */
+  const ghostChat = () => (room && room.ghostChat) || {};
+  function pushGhostChat(text) {
+    const t = String(text || '').trim().slice(0, 200);
+    if (!t) return Promise.resolve();
+    return ref('ghostChat').push({ atMs: Clock.now(), by: myId, text: t });
+  }
+
   /* — iskre i tvorci igara — */
   const sparks = () => (room && room.sparks) || { pool: 0 };
   function addSpark(sid) {
@@ -309,7 +319,7 @@ const Store = (() => {
     get ready() { return ready; }, get code() { return code; }, get myId() { return myId; },
     get room() { return room; }, get db() { return db; },
     meta, config, schedule, players, me, isHost, state, items, traps, feed,
-    alive, playerCount, alliances, sparks, mentors, hits,
+    alive, playerCount, alliances, sparks, mentors, hits, ghostChat, pushGhostChat,
     updateMe, setMe, hostUpdate, hostSet, pushFeed, ref,
     saveFace, loadFace, wipeFaces,
     claimItem, releaseItem, dropItem,

@@ -115,6 +115,8 @@
 
     <div class="hud-top">
       <div class="zonechip glass" id="zoneChip"></div>
+      <!-- svoju klasu vidiš dvaput u životu: na deljenju i kad je zaboraviš -->
+      <button class="classchip glass" id="classChip" hidden></button>
       <div class="sp"></div>
       <button class="iconbtn glass" id="btnRecenter" data-i-aria="center"></button>
       <button class="iconbtn glass" id="btnMenu" data-i-aria="menu"></button>
@@ -170,7 +172,7 @@
       <!-- Dugmad su STATIČNA: petlja uživo im menja samo natpis i stanje.
            Da se prave iznova, držanje bi pucalo usred nišanjenja. -->
       <div class="aim-actions">
-        <button class="aim-side off" id="aimAlly"></button>
+        <span class="aim-side off" aria-hidden="true"></span>
         <button class="aim-fire" id="aimFire">
           <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
             <circle class="bg" cx="50" cy="50" r="45"></circle>
@@ -184,26 +186,20 @@
     </div>
   </section>
 
-  <!-- ═══ nebo ═══ -->
-  <section class="screen" id="s-sky">
-    <div class="sky-stars" id="skyStars"></div>
-    <div class="scroll" style="display:grid;place-items:center">
-      <div class="center stack-lg">
-        <h2 class="display" data-i="skyTitle"></h2>
-        <p class="dim" data-i="skyBody"></p>
-        <div class="sky-faces" id="skyFaces"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══ duh ═══ -->
+  <!-- ═══ duh: dogovor, događaji, igrači ═══ -->
   <section class="screen" id="s-ghost">
     <div class="topbar">
       <button class="iconbtn plain" id="btnGhostBack" data-i-aria="back"></button>
       <div class="grow ttl" data-i="ghostTitle"></div>
       <div class="spark-pool" id="sparkPool"></div>
     </div>
+    <div class="tabs" id="ghostTabs"></div>
     <div class="scroll"><div class="hold stack-lg" id="ghostBody"></div></div>
+    <!-- pisanje stoji van skrola: tastatura ne sme da ga odgura -->
+    <div class="chat-bar" id="ghostChatBar" hidden>
+      <input class="input grow" id="ghostChatInput" maxlength="200" autocomplete="off">
+      <button class="iconbtn gold" id="ghostChatSend" data-i-aria="send"></button>
+    </div>
   </section>
 
   <!-- ═══ gledanje jednog igrača (duh) ═══ -->

@@ -654,7 +654,9 @@ const UI = (() => {
       : Items.visible(d);
     gmap.drawItems(drawn, (it) => (ghost ? (it.inReach && Items.collectSpark(it.id)) : App.tryPickup(it)));
     gmap.drawTraps(Items.visibleTraps(d));
-    gmap.drawPlayers(visiblePlayers(d));
+    /* Duh vidi sve i sme da pipne: tap po tački otvara ko je i kako stoji.
+       Živom je tačka na mapi samo tačka — tapkanje po njoj ne radi ništa. */
+    gmap.drawPlayers(visiblePlayers(d), ghost ? playerPeek : null);
 
     // gornja traka: samo kontekst
     const z = d.zone;
@@ -667,6 +669,20 @@ const UI = (() => {
         : `${icon('target', { size: 15 })}<span>${esc(T('zonePhase'))}${z.phase ? ' ' + z.phase + '/5' : ''}${z.next ? ' · ' + U.mmss(nextIn) : ''}</span>`;
     } else zc.innerHTML = `${icon('clock', { size: 15 })}<span>${U.mmss(Math.max(0, (d.endsAtMs - d.now) / 1000))}</span>`;
 
+    /* Klasa se dodeli jednom, na startu, i posle je nigde nema — a od nje
+       zavisi šta uopšte možeš. Stoji uz zonu i otvara podsetnik šta ume.
+       Uz nju i doba dana: noć pada sama, na svakih 5 minuta. */
+    const cc = $('#classChip');
+    if (!ghost && me.classId) {
+      cc.hidden = false;
+      const dp = d.day || { night: false, leftMs: 0 };
+      cc.innerHTML = icon(CLASS_ICON[me.classId] || 'user', { size: 15 })
+        + `<span>${esc(clsName(me.classId))}</span>`
+        + `<i class="dn ${dp.night ? 'night' : 'day'}">${icon(dp.night ? 'moon' : 'sun', { size: 13 })}
+           <b>${U.mmss(Math.max(0, dp.leftMs / 1000))}</b></i>`;
+      cc.onclick = () => classSheet(me.classId);
+    } else cc.hidden = true;
+
     // duh se ne kažnjava životom, ali mora da zna da mu mesto nije unutra
     $('#dangerVig').classList.toggle('on', (!ghost && !!d.outsideZone) || !!d.inFire || !!d.inWasps);
     const gb = $('#ghostBanner');
@@ -674,10 +690,13 @@ const UI = (() => {
     if (ghostInZone) gb.innerHTML = `${icon('alert', { size: 18 })}<span>${esc(T('ghostInZone'))}</span>`;
 
     if (ghost) {
-      // mrtvom HP, glad i žeđ ne znače ništa — u traci stoji ono što mu jeste posao
-      $('#vitals').innerHTML = ghostVitals(d);
+      /* Mrtvom ni HP ni brojke o kasi ne stoje na ekranu igre: mapa je ono
+         zbog čega je tu, a iskre i događaji imaju svoje mesto u donjoj traci. */
+      $('#vitals').innerHTML = '';
+      $('#vitals').hidden = true;
       $('#fxBar').hidden = true;             // efekti su stvar živih
     } else {
+      $('#vitals').hidden = false;
       // vitalni — prag upozorenja prati prag kazne (§3), ne proizvoljnih 25
       const maxHp = me.maxHp || 100;
       const lowAt = R.SURVIVAL.lowThreshold;
@@ -695,12 +714,14 @@ const UI = (() => {
     const act = $('#actionBtn');
     const near = Items.nearest(d);
     if (ghost) {
+      // jedina akcija duha na terenu je iskra pod nogama; sve ostalo je u traci
       const sp = drawn.find((s) => s.inReach);
-      act.hidden = false; act.disabled = false; act.className = 'action-btn gold';
-      act.innerHTML = sp
-        ? `${icon('spark', { size: 24 })}<span>${esc(T('collectSpark'))}</span>`
-        : `${icon('ghost', { size: 24 })}<span>${esc(T('ghostTitle'))}</span>`;
-      act.onclick = () => (sp ? Items.collectSpark(sp.id) : Screens.go('ghost'));
+      act.hidden = !sp;
+      if (sp) {
+        act.disabled = false; act.className = 'action-btn gold';
+        act.innerHTML = `${icon('spark', { size: 24 })}<span>${esc(T('collectSpark'))}</span>`;
+        act.onclick = () => Items.collectSpark(sp.id);
+      }
     } else if (near && Items.pickupAllowed(d)) {
       act.hidden = false; act.disabled = false; act.className = 'action-btn';
       act.innerHTML = `${icon(ITEM_ICON[near.type] || 'box', { size: 24 })}<span>${esc(itemName(near.type))}</span>`;
@@ -715,12 +736,26 @@ const UI = (() => {
       n.innerHTML = `${icon(ic, { size: 20 })}<span class="t">${esc(label)}</span>`
         + (badge ? `<span class="badge">${badge}</span>` : '');
     };
-    const invN = Items.inv(me).length;
-    dockBtn('#btnInv', 'backpack', T('inventory'), invN || 0);
-    dockBtn('#btnFeed', 'scroll', T('feed'));
-    dockBtn('#btnPlayers', 'users', T('tributes'), d.aliveCount);
-    dockBtn('#btnGhost', ghost ? 'spark' : 'map', ghost ? T('sparks') : T('map'));
-    $('#btnCamera').innerHTML = icon('camera', { size: 26 });
+    /* Traka ima ista mesta, ali dva zanimanja. Živ: torba, objave, kamera,
+       saveznici, mapa. Mrtav: iskre, objave, duhovi, igrači, mapa — kamera mu
+       ne treba jer ne napada, a mapa mu je jedini pogled na igru. */
+    const aliveN = Object.values(Store.players()).filter((p) => p.alive !== false).length;
+    if (ghost) {
+      dockBtn('#btnInv', 'spark', T('sparks'), me.sparksCollected || 0);
+      dockBtn('#btnFeed', 'scroll', T('feed'));
+      dockBtn('#btnPlayers', 'users', T('players'), aliveN);
+      dockBtn('#btnGhost', 'map', T('map'));
+      $('#btnCamera').innerHTML = icon('ghost', { size: 26 });
+      $('#btnCamera').classList.add('ghosty');
+    } else {
+      const invN = Items.inv(me).length;
+      dockBtn('#btnInv', 'backpack', T('inventory'), invN || 0);
+      dockBtn('#btnFeed', 'scroll', T('feed'));
+      dockBtn('#btnPlayers', 'handshake', T('allies'), allyCount(d) || 0);
+      dockBtn('#btnGhost', 'map', T('map'));
+      $('#btnCamera').innerHTML = icon('camera', { size: 26 });
+      $('#btnCamera').classList.remove('ghosty');
+    }
     $('#btnMenu').innerHTML = icon('settings', { size: 20 });
     $('#btnRecenter').innerHTML = icon('crosshair', { size: 20 });
 
@@ -783,43 +818,20 @@ const UI = (() => {
     };
   }
 
-  /* ═══════════════ traka duha ═══════════════
-     Zamenjuje HP/glad/žeđ. Duh treba četiri broja: koliko je SAM doprineo,
-     koliko ima u zajedničkoj kasi, koliko još fali do prvog sledećeg eventa,
-     i koliko je igara ostalo — jer to je jedini razlog zašto još skuplja. */
-  function ghostVitals(d) {
-    const me = d.me || {};
-    const pool = (Store.sparks().pool) || 0;
-    const alive = Object.values(Store.players()).filter((p) => p.alive !== false).length;
-
-    // najjeftiniji event koji još niko nije pustio
-    const bought = new Set(Object.values((Store.room && Store.room.liveEvents) || {}).map((e) => e.type));
-    const left = Object.entries(R.SPARK_COSTS).filter(([t]) => !bought.has(t));
-    const cheapest = left.length ? left.reduce((a, b) => (b[1] < a[1] ? b : a)) : null;
-    const missing = cheapest ? Math.max(0, cheapest[1] - pool) : 0;
-
-    const box = (cls, ic, val, label) => `<div class="vitalbox ${cls}">
-      <span class="vi">${icon(ic, { size: 15 })}</span>
-      <span class="vn num">${esc(String(val))}</span>
-      <span class="gl">${esc(label)}</span></div>`;
-
-    return box('spark', 'spark', me.sparksCollected || 0, T('ghostMine'))
-      + box('pool', 'flask', pool, T('ghostPool'))
-      + (cheapest
-        ? box(missing > 0 ? 'need' : 'ready',
-            EVENT_ICON[cheapest[0]] || 'spark',
-            missing > 0 ? '−' + missing : '✓',
-            missing > 0 ? eventName(cheapest[0]) : T('ghostCanBuy'))
-        : box('ready', 'check', '✓', T('ghostAllBought')))
-      + box('alive', 'users', alive, T('ghostAlive'));
-  }
-
   /* Ko se uopšte vidi na mapi (§5).
      Pravilo je usko namerno: protivnika NE vidiš. Vide se samo saveznici, oni
      koje si sam otkrio (traker, alarm, durbin), i — ako si Strelac — igrači u
      tvom dometu vida. Snagator je „vidljiv svima" samo na PUNOJ mapi, ne i na
      minimapi; ranije je iskakao i na minimapi, pa je izgledalo kao da mapa
      odaje protivnike svima. */
+  /** Koliko još živih deli savez sa mnom — broj na dugmetu „Saveznici". */
+  function allyCount(d) {
+    const aid = (d.me || {}).allianceId;
+    if (!aid) return 0;
+    return Object.entries(Store.players())
+      .filter(([pid, p]) => pid !== Store.myId && p.alive !== false && p.allianceId === aid).length;
+  }
+
   function visiblePlayers(d, fullMap) {
     const me = d.me, pos = Geo.pos;
     const out = [];
@@ -882,7 +894,9 @@ const UI = (() => {
     amap.drawFire(d.firewall);
     amap.drawWasps(d.wasps);
     if (Geo.pos) amap.setMe(Geo.pos, Compass.heading);
-    amap.drawPlayers(visiblePlayers(d, true));
+    // duh vidi sve i sme da pipne tačku; živ vidi samo ono što mu igra dozvoli
+    const ghostView = !!(d.me && d.me.alive === false);
+    amap.drawPlayers(visiblePlayers(d, true), ghostView ? (pid) => arenaPeek(amap, pid) : null);
     amap.drawItems(Items.visible(d), null);
     setTimeout(() => {
       if (!amap) return;
@@ -1039,18 +1053,27 @@ const UI = (() => {
       <div class="weapon-slot">
         <span class="goldc">${icon(WEAPON_ICON[me.weapon] || 'hand', { size: 32 })}</span>
         <div class="grow"><div class="big" style="font-weight:800">${esc(weaponName(me.weapon))}${own ? ' +8' : ''}</div>
-          <div class="tiny dim">${w.dmg + (own ? 8 : 0)} ${esc(T('statDamage')).toLowerCase()} · ${esc(T('distance'))} ${w.min}–${w.max}</div></div>
+          <div class="tiny dim">${w.dmg + (own ? 8 : 0)} ${esc(T('statDamage')).toLowerCase()}
+            · ${esc(T('distance'))} ${w.minM}–${w.maxM} m
+            · ${esc(T('cooldown'))} ${Math.round(R.cooldownFor(me) / 1000)} s</div></div>
         ${w.ammo ? `<div class="chip gold">${icon('arrows', { size: 14 })}${me.arrows || 0}</div>` : ''}
       </div>
       <div class="inv-grid" style="margin-top:var(--s4)">${cells.join('')}</div>`);
     $$('.inv-slot.has', s).forEach((b) => b.onclick = () => {
       const i = +b.dataset.i;
       const it = list[i], def = R.ITEMS[it.itemType];
+      // oružje u torbi: domet i cooldown pre nego što ga uzmeš u ruke
+      const dw = def.weapon && R.WEAPONS[def.weapon];
       const m = modal(`
         <div class="center stack">
           <div class="rar-${def.rarity}" style="color:var(--rc)">${icon(ITEM_ICON[it.itemType] || 'box', { size: 46 })}</div>
           <h3>${esc(itemName(it.itemType))}</h3>
           <div class="chip rar-${def.rarity}" style="color:var(--rc);border-color:var(--rc)">${esc(rarityName(def.rarity))}</div>
+          <p class="dim tiny" style="margin:0">${esc(itemDesc(it.itemType))}</p>
+          ${dw ? `<div class="row-tight wrap center">
+            <span class="chip">${dw.dmg} ${esc(T('statDamage')).toLowerCase()}</span>
+            <span class="chip">${dw.minM}–${dw.maxM} m</span>
+            <span class="chip">${Math.round(dw.cdMs / 1000)} s</span></div>` : ''}
           <button class="btn primary lg full" id="iUse" style="margin-top:var(--s4)">${esc(def.trap ? T('setTrap') : T('useItem'))}</button>
           <button class="btn ghost full" id="iDrop">${esc(T('dropItem'))}</button>
         </div>`);
@@ -1059,23 +1082,75 @@ const UI = (() => {
     });
   }
 
-  /* ═══════════════ spisak igrača ═══════════════ */
-  function playersSheet() {
+  /* ═══════════════ podsetnik na klasu ═══════════════ */
+  function classSheet(classId) {
+    const c = R.CLASSES[classId] || {};
+    const sp = R.SPECIALS[classId];         // specijali su ključevani KLASOM
+    sheet(T('yourClass'), `
+      <div class="class-card">
+        <div>${icon(CLASS_ICON[classId] || 'user', { size: 56 })}</div>
+        <h2>${esc(clsName(classId))}</h2>
+        <p class="dim" style="margin:var(--s2) 0 0">${esc(clsDesc(classId))}</p>
+      </div>
+      <div class="row-tight wrap" style="margin-top:var(--s3)">
+        ${c.weapon ? `<span class="chip gold">${icon(WEAPON_ICON[c.weapon] || 'hand', { size: 14 })}${esc(weaponName(c.weapon))}</span>` : ''}
+        ${sp ? `<span class="chip gold">${icon('spark', { size: 14 })}${esc(specialName(sp.id))}</span>` : ''}
+      </div>`);
+  }
+
+  /* ═══════════════ saveznici ═══════════════
+     Savez se ranije nudio sa ekrana za nišanjenje, pa je izgledao kao vrsta
+     napada — a fotografisanje JESTE napad. Sada ima svoje mesto: vidiš s kim
+     si, dodaješ nekoga sa spiska, a on samo potvrdi. Prići mu i dalje moraš. */
+  function alliesSheet(d) {
     const me = Store.me() || {};
     const P = Store.players();
-    const rows = Object.entries(P).sort((a, b) => (a[1].alive === false) - (b[1].alive === false))
-      .map(([pid, p]) => {
-        const ally = p.allianceId && p.allianceId === me.allianceId;
-        const kind = pid === Store.myId ? 'me' : ally ? 'ally' : 'foe';
-        return `<div class="list-item ${p.alive === false ? 'dead' : ''}">
-          <span class="avatar ${p.alive === false ? '' : kind}" style="display:block">${avatarSvg(p.avatar, 34)}</span>
-          <div class="grow"><div class="name">${esc(p.name)}${pid === Store.myId ? ' · ' + esc(T('you')) : ''}</div>
-            <div class="tiny mute">${p.alive === false ? esc(T('youDied')) + (p.place ? ' · ' + p.place + '.' : '')
-              : (p.classId && pid === Store.myId ? esc(clsName(p.classId)) : esc(T('unknown')))}</div></div>
-          ${p.alive === false ? icon('skull', { size: 16 }) : `<span class="chip ${kind === 'ally' ? 'good' : ''}">${p.kills || 0} ${icon('skull', { size: 11 })}</span>`}
-        </div>`;
-      }).join('');
-    sheet(`${T('tributes')} · ${Store.alive().length}/${Object.keys(P).length}`, `<div class="list">${rows}</div>`);
+    const pos = Geo.pos;
+    const mine = Object.entries(P).filter(([pid, p]) =>
+      pid !== Store.myId && p.alive !== false && p.allianceId && p.allianceId === me.allianceId);
+
+    const s = sheet(`${T('allies')} · ${mine.length + 1}/${R.maxAllianceSize(Store.playerCount())}`, `
+      ${mine.length ? `<div class="list">${mine.map(([pid, p]) => `
+        <div class="list-item">
+          <span class="avatar ally" style="display:block">${avatarSvg(p.avatar, 34)}</span>
+          <div class="grow"><div class="name">${esc(p.name)}</div>
+            <div class="tiny mute">${icon('heart', { size: 11 })} ${Math.round(p.hp || 0)}
+              ${pos && p.pos ? ' · ' + fmtDist(U.dist(pos, p.pos)) : ''}</div></div>
+        </div>`).join('')}</div>`
+        : `<p class="dim center" style="margin:0">${esc(T('allyNoneYet'))}</p>`}
+      <button class="btn primary lg full" id="alAdd" style="margin-top:var(--s4)">
+        ${icon('handshake', { size: 20 })}<span>${esc(T('addAlly'))}</span></button>
+      ${mine.length ? `<button class="btn ghost full" id="alLeave">${esc(T('allyLeave'))}</button>` : ''}
+      <p class="tiny dim center" style="margin-top:var(--s2)">${esc(T('allyHelp'))}</p>`);
+
+    $('#alAdd', s).onclick = () => { s.close(); allyPickSheet(); };
+    const lv = $('#alLeave', s);
+    if (lv) lv.onclick = async () => { s.close(); await Store.updateMe({ allianceId: null }); };
+  }
+
+  /** Kome nudiš savez — spisak onih koji su ti nadohvat ruke. */
+  function allyPickSheet() {
+    const me = Store.me() || {};
+    const pos = Geo.pos;
+    const near = Object.entries(Store.players())
+      .filter(([pid, p]) => pid !== Store.myId && p.alive !== false && p.pos
+        && !(p.allianceId && p.allianceId === me.allianceId))
+      .map(([pid, p]) => ({ pid, p, m: pos ? U.dist(pos, p.pos) : Infinity }))
+      .sort((a, b) => a.m - b.m);
+
+    const s = sheet(T('allyPick'), near.length ? `<div class="list">${near.map(({ pid, p, m }) => {
+      const ok = m <= R.ALLY_OFFER_M;
+      return `<button class="list-item tapable" data-ally="${pid}" ${ok ? '' : 'disabled'}>
+        <span class="avatar foe" style="display:block">${avatarSvg(p.avatar, 34)}</span>
+        <div class="grow" style="text-align:left"><div class="name">${esc(p.name)}</div>
+          <div class="tiny ${ok ? 'goodc' : 'mute'}">${ok ? esc(T('addAlly')) : esc(T('allyTooFar'))}</div></div>
+        <span class="chip">${fmtDist(m)}</span></button>`;
+    }).join('')}</div>` : `<p class="dim center" style="margin:0">${esc(T('nobody'))}</p>`);
+
+    $$('[data-ally]', s).forEach((b) => b.onclick = async () => {
+      s.close();
+      await Encounter.proposeAlliance(b.dataset.ally);
+    });
   }
 
   /* ═══════════════ objave ═══════════════ */
@@ -1084,9 +1159,7 @@ const UI = (() => {
     const P = Store.players();
     const nm = (id) => (P[id] ? P[id].name : T('unknown'));
     switch (f.type) {
-      case 'death':
-        if (f.killerId) return T('fDeathBy', nm(f.subjectId), nm(f.killerId));
-        return T({ zone: 'fDeathZone', hunger: 'fDeathHunger', thirst: 'fDeathThirst', fire: 'fDeathFire', trap: 'fDeathTrap' }[f.cause] || 'fDeathZone', nm(f.subjectId));
+      case 'death': return T('fGone', nm(f.subjectId));
       case 'prep': return T('fPrep');
       case 'start': return T('fStart');
       case 'finalTwo': return T('fFinalTwo');
@@ -1436,18 +1509,9 @@ const UI = (() => {
   function drawExtra(d, target) {
     const me = d.me;
 
-    const ab = $('#aimAlly');
-    const canAlly = !!target && !target.ally;
-    ab.classList.toggle('off', !canAlly);
-    if (canAlly) {
-      const near = target.distM <= R.ALLY_OFFER_M;
-      ab.disabled = !near;
-      ab.className = 'aim-side ally';
-      ab.innerHTML = `${icon('handshake', { size: 20 })}<span>${esc(T('actAlliance'))}</span>`
-        + (near ? '' : `<span class="dim">${R.ALLY_OFFER_M} m</span>`);
-      ab.onclick = () => Encounter.proposeAlliance(target.pid);
-    }
-
+    /* Savez više ne stoji na ovom ekranu. Kamera je napad i ništa drugo —
+       dok je savez bio dugme pored okidača, dizanje telefona je značilo dve
+       suprotne stvari. Nudi se iz trake „Saveznici". */
     const sb = $('#aimSpecial');
     const sp = R.SPECIALS[me.classId];
     const showSp = !!sp && !me.specialUsedThisGame;
@@ -1598,91 +1662,257 @@ const UI = (() => {
     setTimeout(() => n.remove(), 2000);      // i ako animationend izostane
   }
 
-  /* ═══════════════ nebo (§16) ═══════════════ */
-  let skyShown = 0;
-  async function showSky(atMs) {
-    if (skyShown === atMs) return;
-    skyShown = atMs;
-    const P = Store.players();
-    const since = atMs - 15 * 60000;
-    const fallen = Object.entries(P).filter(([, p]) => p.alive === false && p.deathAtMs > since);
-    const stars = $('#skyStars');
-    stars.innerHTML = '';
-    for (let i = 0; i < 60; i++) {
-      const s = el('i');
-      s.style.left = Math.random() * 100 + '%'; s.style.top = Math.random() * 100 + '%';
-      s.style.animationDelay = -Math.random() * 3 + 's';
-      stars.appendChild(s);
-    }
-    $('#skyFaces').innerHTML = fallen.length
-      ? fallen.map(() => '').join('')
-      : `<p class="dim">${esc(T('nobody'))}</p>`;
-    Screens.go('sky');
-    Sfx.anthem(); Haptics.fire('cannon');
-    for (let i = 0; i < fallen.length; i++) {
-      const [pid, p] = fallen[i];
-      const face = await Store.loadFace(pid);
-      const node = el('div', 'sky-face');
-      node.style.animationDelay = i * 0.4 + 's';
-      node.innerHTML = (face ? `<img src="${face}" alt="">` : `<div class="avatar" style="width:132px;height:132px">${avatarSvg(p.avatar, 132)}</div>`) +
-        `<div class="nm">${esc(p.name)}</div>`;
-      $('#skyFaces').appendChild(node);
-    }
-    setTimeout(() => { if (Screens.cur === 'sky') App.route(); }, 20000);
+  /* ═══════════════ DUHOVI (§16) ═══════════════
+     Nekad „Tvorac igara": jedna duga kolona u kojoj su se dugmad za događaje
+     klikala nasumično, bez ijedne reči između duhova. Sada su to tri kartice:
+
+       Dogovor  — ćaskanje mrtvih, da se pre trošenja kase dogovore šta hoće
+       Događaji — dobro i loše razdvojeno, sa cenom i preostalim brojem
+       Igrači   — koga gledaš
+
+     Ekran se GRADI jednom po kartici, a otkucaj menja samo brojeve. Da se
+     prepisuje ceo `innerHTML`, tastatura bi ispadala usred kucanja poruke. */
+  let ghostTab = 'events', ghostKey = null, chatWired = false;
+
+  const ghostList = () => Object.entries(Store.players())
+    .filter(([, p]) => p.alive === false && !p.isBot);
+
+  /** Koliko je događaja duhovima ostalo za celu partiju. */
+  function eventBudget() {
+    const cfg = Store.config();
+    const live = (Store.room && Store.room.liveEvents) || {};
+    const used = Object.values(live);
+    return {
+      total: R.ghostEventBudget(cfg.durationMin),
+      used: used.length,
+      usedTypes: new Set(used.map((e) => e.type)),
+    };
   }
 
-  /* ═══════════════ duhovi = Tvorci igara (§16) ═══════════════ */
+  /** Ulaz među duhove na tačno određenu karticu. */
+  function openGhost(tab) {
+    if (tab && tab !== ghostTab) { ghostTab = tab; ghostKey = null; }
+    Screens.go('ghost');
+    renderGhost(Engine.d);
+  }
+
   function renderGhost(d) {
     const pool = (Store.sparks().pool) || 0;
-    const P = Store.players();
-    const aliveList = Object.entries(P).filter(([, p]) => p.alive !== false);
-    const ghosts = Object.entries(P).filter(([, p]) => p.alive === false && !p.isBot).length;
-    const lastEv = Store.meta().lastGmEventMs || 0;
-    const cool = Math.max(0, (lastEv + R.GM_COOLDOWN_MS - d.now) / 1000);
     $('#sparkPool').innerHTML = `${icon('spark', { size: 24 })}<span>${pool}</span>`;
 
-    /* Duhov teren je VAN zone. Dok je unutra ne može ništa da kupi — inače bi
-       se isplatilo stajati usred žive igre i odatle bacati eventove. */
+    /* — kartice se prave jednom — */
+    const tabs = $('#ghostTabs');
+    if (!tabs.dataset.built) {
+      tabs.dataset.built = '1';
+      tabs.innerHTML = [['chat', 'chat', 'ghostTabChat'], ['events', 'spark', 'ghostTabEvents'],
+        ['players', 'users', 'ghostTabPlayers']]
+        .map(([id, ic, key]) => `<button data-tab="${id}">${icon(ic, { size: 18 })}
+          <span>${esc(T(key))}</span></button>`).join('');
+      $$('#ghostTabs button').forEach((b) => b.onclick = () => {
+        if (ghostTab === b.dataset.tab) return;
+        ghostTab = b.dataset.tab; ghostKey = null;
+        renderGhost(Engine.d);
+      });
+    }
+    $$('#ghostTabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === ghostTab));
+
+    // pisanje poruka postoji samo na kartici dogovora
+    $('#ghostChatBar').hidden = ghostTab !== 'chat';
+
+    if (ghostTab === 'chat') return ghostChatTab(d);
+    if (ghostTab === 'players') return ghostPlayersTab(d);
+    return ghostEventsTab(d, pool);
+  }
+
+  /* ── kartica: dogovor ─────────────────────────────────────────────────── */
+  function ghostChatTab(d) {
+    const msgs = Object.entries(Store.ghostChat()).map(([id, m]) => ({ id, ...m }))
+      .sort((a, b) => a.atMs - b.atMs).slice(-80);
+    const key = 'chat|' + msgs.length + '|' + (msgs.length ? msgs[msgs.length - 1].id : '');
+    if (key === ghostKey) return;
+    const fresh = ghostKey === null;
+    ghostKey = key;
+
+    const P = Store.players();
+    const t0 = Store.meta().startedAtMs || 0;
+    $('#ghostBody').innerHTML = msgs.length
+      ? `<div class="chat">${msgs.map((m) => {
+          const mine = m.by === Store.myId;
+          const who = P[m.by] ? P[m.by].name : T('unknown');
+          return `<div class="msg ${mine ? 'mine' : ''}">
+            ${mine ? '' : `<span class="who">${esc(who)}</span>`}
+            <span class="tx">${esc(m.text)}</span>
+            <span class="at">${t0 ? U.mmss(Math.max(0, (m.atMs - t0) / 1000)) : ''}</span>
+          </div>`;
+        }).join('')}</div>`
+      : `<div class="card center stack">
+          <span class="dim">${icon('chat', { size: 40 })}</span>
+          <p class="dim" style="margin:0">${esc(T('ghostChatEmpty'))}</p></div>`;
+
+    const sc = $('#s-ghost .scroll');
+    if (sc) sc.scrollTop = sc.scrollHeight;         // nova poruka je uvek dole
+
+    if (!chatWired) {
+      chatWired = true;
+      const inp = $('#ghostChatInput');
+      inp.placeholder = T('ghostChatPh');
+      $('#ghostChatSend').innerHTML = icon('send', { size: 20 });
+      const send = async () => {
+        const t = inp.value.trim();
+        if (!t) return;
+        inp.value = '';
+        await Store.pushGhostChat(t);
+        ghostKey = null; renderGhost(Engine.d);
+      };
+      $('#ghostChatSend').onclick = send;
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+    }
+    if (fresh) setTimeout(() => { const s2 = $('#s-ghost .scroll'); if (s2) s2.scrollTop = s2.scrollHeight; }, 30);
+  }
+
+  /* ── kartica: događaji ────────────────────────────────────────────────── */
+  function ghostEventsTab(d, pool) {
+    const ghosts = ghostList().length;
+    const need = ghosts > 2 ? Math.ceil(ghosts / 2) : 1;
+    const bud = eventBudget();
     const inZone = !!d.ghostInZone;
+    const lastEv = Store.meta().lastGmEventMs || 0;
+    const cool = Math.max(0, (lastEv + R.GM_COOLDOWN_MS - d.now) / 1000);
 
-    $('#ghostBody').innerHTML = `
-      ${inZone ? `<div class="card danger stack">
-        <div class="row"><span class="dangerc">${icon('alert', { size: 22 })}</span>
-          <p class="grow" style="margin:0;font-weight:700">${esc(T('ghostInZone'))}</p></div>
-      </div>` : ''}
-      <div class="card"><p style="margin:0">${esc(T('ghostBody'))}</p></div>
-      <div class="card stack">
-        <div class="card-title">${esc(T('buyEvent'))}</div>
-        ${cool > 0 ? `<p class="tiny goldc">${esc(T('gmCooldown'))} · ${U.mmss(cool)}</p>` : ''}
-        ${Object.entries(R.SPARK_COSTS).map(([type, cost]) => {
-          const votes = Store.votersFrom((Store.room.gmVotes || {})[type]).length;
-          const need = ghosts > 2 ? Math.ceil(ghosts / 2) : 1;
-          return `<button class="gm-event" data-ev="${type}" ${pool >= cost && cool <= 0 && !inZone ? '' : 'disabled'}>
-            ${icon(EVENT_ICON[type] || 'spark', { size: 26 })}
-            <div class="grow" style="text-align:left"><div style="font-weight:700">${esc(eventName(type))}</div>
-            ${ghosts > 2 ? `<div class="tiny dim">${votes}/${need} ${esc(T('voteNeeded'))}</div>` : ''}</div>
-            <span class="cost">${icon('spark', { size: 16 })}${cost}</span></button>`;
-        }).join('')}
-      </div>
-      <div class="card stack">
-        <div class="card-title">${esc(T('allPlayers'))}</div>
-        ${aliveList.map(([pid, p]) => {
-          const followed = (d.me && d.me.following) === pid;
-          return `<div class="list-item">
-          <div class="avatar ${followed ? 'ring' : ''}" style="width:40px;height:40px">${avatarSvg(p.avatar, 40)}</div>
-          <div class="grow"><div class="name">${esc(p.name)}</div>
-            <div class="tiny dim">${esc(clsName(p.classId))} · ${esc(weaponName(p.weapon))}
-              · ${icon('heart', { size: 11 })} ${Math.round(p.hp)}
-              · ${Math.round(p.hunger || 0)} / ${Math.round(p.thirst || 0)}</div></div>
-          <button class="btn sm ${followed ? 'gold' : 'ghost'}" data-follow="${pid}">
+    const key = ['events', ghostTab, [...bud.usedTypes].sort().join(','), inZone].join('|');
+    if (key !== ghostKey) {
+      ghostKey = key;
+      const group = (tone) => Object.entries(R.EVENTS)
+        .filter(([, e]) => e.tone === tone)
+        .map(([type, e]) => {
+          const spent = bud.usedTypes.has(type);
+          return `<button class="gm-event ${tone}${spent ? ' spent' : ''}" data-ev="${type}">
+            <span class="ei">${icon(EVENT_ICON[type] || 'spark', { size: 26 })}</span>
+            <span class="grow">
+              <span class="nm">${esc(eventName(type))}</span>
+              <span class="ds">${esc(spent ? T('evSpent') : T('evd_' + type))}</span>
+              <span class="vt" data-vote="${type}"></span>
+            </span>
+            <span class="cost">${icon('spark', { size: 15 })}${e.spark}</span></button>`;
+        }).join('');
+
+      $('#ghostBody').innerHTML = `
+        ${inZone ? `<div class="card danger row">
+          <span class="dangerc">${icon('alert', { size: 22 })}</span>
+          <p class="grow" style="margin:0;font-weight:700">${esc(T('ghostInZone'))}</p></div>` : ''}
+        <div class="ghost-sum">
+          <div><b class="num goldc">${pool}</b><span>${esc(T('ghostPool'))}</span></div>
+          <div><b class="num" id="gsLeft"></b><span>${esc(T('ghostEventsLeft'))}</span></div>
+          <div><b class="num" id="gsMine"></b><span>${esc(T('ghostMine'))}</span></div>
+        </div>
+        <p class="tiny dim" style="margin:0">${esc(T('ghostBody'))}</p>
+        <div class="stack"><div class="card-title good">${esc(T('evGood'))}</div>${group('good')}</div>
+        <div class="stack"><div class="card-title danger">${esc(T('evBad'))}</div>${group('bad')}</div>
+        <p class="tiny dim center" id="gsCool"></p>`;
+
+      $$('#ghostBody .gm-event').forEach((b) => b.onclick = () => App.buyEvent(b.dataset.ev));
+    }
+
+    /* — otkucaj: samo brojevi i dostupnost — */
+    const left = Math.max(0, bud.total - bud.used);
+    const ls = $('#gsLeft'); if (ls) ls.textContent = `${left}/${bud.total}`;
+    const ms = $('#gsMine'); if (ms) ms.textContent = (d.me || {}).sparksCollected || 0;
+    const cl = $('#gsCool');
+    if (cl) cl.textContent = cool > 0 ? `${T('gmCooldown')} · ${U.mmss(cool)}` : '';
+
+    const votes = (Store.room && Store.room.gmVotes) || {};
+    $$('#ghostBody .gm-event').forEach((b) => {
+      const type = b.dataset.ev, cost = R.SPARK_COSTS[type];
+      const spent = bud.usedTypes.has(type);
+      const can = !spent && left > 0 && pool >= cost && cool <= 0 && !inZone;
+      b.disabled = !can;
+      b.classList.toggle('ready', can);
+      const v = $(`[data-vote="${type}"]`, b);
+      if (v) {
+        const n = Store.votersFrom(votes[type]).length;
+        v.textContent = ghosts > 2 && !spent ? `${n}/${need} ${T('voteNeeded')}` : '';
+      }
+    });
+  }
+
+  /* ── kartica: igrači ──────────────────────────────────────────────────── */
+  function ghostPlayersTab(d) {
+    const rows = Object.entries(Store.players())
+      .filter(([, p]) => p.alive !== false)
+      .sort((a, b) => (b[1].kills || 0) - (a[1].kills || 0));
+    const key = 'players|' + rows.map(([id]) => id).join(',');
+    if (key !== ghostKey) {
+      ghostKey = key;
+      $('#ghostBody').innerHTML = rows.length ? rows.map(([pid, p]) => `
+        <div class="card grow-row" data-row="${pid}">
+          <div class="avatar" style="width:44px;height:44px">${avatarSvg(p.avatar, 44)}</div>
+          <div class="grow">
+            <div class="name">${esc(p.name)}</div>
+            <div class="tiny dim">${esc(clsName(p.classId))} · ${esc(weaponName(p.weapon))}</div>
+            <div class="minibars" data-bars="${pid}"></div>
+          </div>
+          <button class="btn sm ghost" data-follow="${pid}">
             ${icon('eye', { size: 16 })}<span>${esc(T('watchBtn'))}</span></button>
-        </div>`; }).join('')}
-      </div>
-      <button class="btn ghost full" id="ghostMap">${icon('map', { size: 22 })}<span>${esc(T('map'))}</span></button>`;
+        </div>`).join('')
+        : `<div class="card center dim">${esc(T('nobody'))}</div>`;
+      $$('#ghostBody [data-follow]').forEach((b) => b.onclick = () => openWatch(b.dataset.follow));
+    }
 
-    $$('#ghostBody .gm-event').forEach((b) => b.onclick = () => App.buyEvent(b.dataset.ev));
-    $$('#ghostBody [data-follow]').forEach((b) => b.onclick = () => openWatch(b.dataset.follow));
-    $('#ghostMap').onclick = () => Screens.go('game');
+    const P = Store.players();
+    $$('#ghostBody [data-bars]').forEach((n) => {
+      const p = P[n.dataset.bars]; if (!p) return;
+      const bar = (cls, val, max) => `<i class="${cls}" style="--v:${Math.max(0, Math.min(1, val / max)) * 100}%"></i>`;
+      n.innerHTML = bar('hp', p.hp || 0, p.maxHp || 100)
+        + bar('hu', p.hunger || 0, 100) + bar('th', p.thirst || 0, 100)
+        + `<b>${Math.round(p.hp || 0)}</b>`;
+    });
+  }
+
+  /* Oblačić iznad igrača na duhovskoj mapi: ko je, kako stoji, i „više".
+     Bez ovoga je puna mapa duhu bila skup crvenih tačaka bez imena. */
+  function playerPeek(pid) { peekOn(gmap, pid); }
+  function arenaPeek(m, pid) { peekOn(m, pid); }
+
+  function peekOn(m, pid) {
+    const p = Store.players()[pid];
+    if (!p || !p.pos || !m) return;
+    const node = m.popupAt(p.pos.lat, p.pos.lng, `
+      <div class="peek">
+        <div class="row">
+          <div class="avatar" style="width:34px;height:34px">${avatarSvg(p.avatar, 34)}</div>
+          <div class="grow"><b>${esc(p.name)}</b>
+            <div class="tiny dim">${esc(clsName(p.classId))} · ${esc(weaponName(p.weapon))}</div></div>
+        </div>
+        <div class="row-tight wrap">
+          <span class="chip">${icon('heart', { size: 12 })}${Math.round(p.hp || 0)}</span>
+          <span class="chip">${icon('meat', { size: 12 })}${Math.round(p.hunger || 0)}</span>
+          <span class="chip">${icon('droplet', { size: 12 })}${Math.round(p.thirst || 0)}</span>
+          <span class="chip">${icon('skull', { size: 12 })}${p.kills || 0}</span>
+        </div>
+        <button class="btn sm gold full" id="peekMore">${esc(T('seeMore'))}</button>
+      </div>`);
+    if (!node) return;
+    const b = node.querySelector('#peekMore');
+    if (b) b.onclick = () => { m.closePopup(); openWatch(pid); };
+  }
+
+  /* Iskre: koliko si SAM doprineo i koliko ima u zajedničkoj kasi.
+     Tuđi pojedinačni računi duha ne zanimaju — kasa je jedna. */
+  function sparksSheet(d) {
+    const pool = (Store.sparks().pool) || 0;
+    const mine = (d.me || {}).sparksCollected || 0;
+    const bud = eventBudget();
+    sheet(T('sparks'), `
+      <div class="ghost-sum big-sum">
+        <div><b class="num goldc">${mine}</b><span>${esc(T('ghostMine'))}</span></div>
+        <div><b class="num goldc">${pool}</b><span>${esc(T('ghostPool'))}</span></div>
+      </div>
+      <p class="dim tiny" style="margin-top:var(--s3)">${esc(T('sparksHelp'))}</p>
+      <div class="card row" style="margin-top:var(--s3)">
+        <span class="goldc">${icon('spark', { size: 22 })}</span>
+        <span class="grow">${esc(T('ghostEventsLeft'))}</span>
+        <b class="num">${Math.max(0, bud.total - bud.used)}/${bud.total}</b>
+      </div>`);
   }
 
   /* ═══════════════ meni u toku partije ═══════════════
@@ -1724,7 +1954,7 @@ const UI = (() => {
      „Prati" je bio čekboks: upiše se `following` i ne desi se ništa. Ovo je
      pravo gledanje — mapa koja ide za njim, njegovo stanje, spisak njegovih
      udaraca, i kadar koji je snimio kad nekog pogodi. */
-  let wmap = null, watchFollow = true, watchSeenHit = null, watchShotTimer = 0;
+  let wmap = null, watchSeenHit = null, watchShotTimer = 0;
   /* Koga gledam držim i ovde, ne samo u bazi: `updateMe` je asinhron, a
      `Engine.d` je snimak od pre upisa — pa je ekran gledanja na prvom crtanju
      video staro `following: null` i istog trena se zatvarao. */
@@ -1754,18 +1984,18 @@ const UI = (() => {
     $('#btnWatchBack').innerHTML = icon('chevronLeft', { size: 22 });
     $('#btnWatchBack').onclick = () => closeWatch();
 
-    /* — mapa ide za njim, ne za mnom — */
+    /* — mapa ide za njim, ne za mnom, i prst je ne dira —
+       ranije se mogla odvući u stranu, pa si gledao prazan asfalt dok se
+       negde drugde dešavala borba zbog koje si i ušao. */
     if (!wmap) {
-      wmap = makeMap('watchMap', { zoom: 17, noFog: true });
+      wmap = makeMap('watchMap', { zoom: 17, noFog: true, locked: true });
       wmap.setFull(true);
       wmap.setFollow(false);               // ne juri MOJU poziciju
-      watchFollow = true;
-      wmap.map.on('dragstart', () => { watchFollow = false; });
       setTimeout(() => wmap && wmap.refresh(), 60);
     }
     if (p.pos) {
       wmap.drawPlayers([{ id: pid, lat: p.pos.lat, lng: p.pos.lng, kind: 'foe' }]);
-      if (watchFollow) wmap.map.setView([p.pos.lat, p.pos.lng], wmap.map.getZoom(), { animate: true, duration: 0.4 });
+      wmap.map.setView([p.pos.lat, p.pos.lng], wmap.map.getZoom(), { animate: true, duration: 0.4 });
     }
     if (d.zone) wmap.drawZone(d.zone, d.cfg);
     wmap.drawFire(d.firewall);
@@ -1992,7 +2222,8 @@ const UI = (() => {
     onboarding, onboardingDone, permState, FACE_KEY,
     renderLobby, resetLobby, showQr, shareLink, arenaMapSheet, renderPrep, nextStep, get prepStep() { return prepStep; },
     set prepStep(v) { prepStep = v; }, renderDeploy, ensureMap, renderGame, inventorySheet,
-    feedSheet, playersSheet, openAim, closeAim, testSheet, showSky, renderGhost, renderEnd, feedText,
+    feedSheet, alliesSheet, classSheet, sparksSheet, openAim, closeAim, testSheet,
+    renderGhost, openGhost, renderEnd, feedText,
     renderWatch, openWatch, closeWatch, gameMenuSheet,
     renderMentor, renderSettings, devMode,
     get gmap() { return gmap; },

@@ -13,7 +13,7 @@ const Engine = (() => {
 
   let timer = null, lastMs = 0, booted = false;
   const listeners = [];
-  const seen = { deaths: new Set(), feed: new Set(), zonePhase: -1, sky: new Set(), events: new Set(), myEvents: new Set() };
+  const seen = { deaths: new Set(), feed: new Set(), zonePhase: -1, events: new Set(), myEvents: new Set() };
   let derived = null;
   let lastPosWrite = 0;
 
@@ -43,10 +43,14 @@ const Engine = (() => {
       // FINAL_TWO: zona se skuplja duplo brže do poslednjih 40 m (§18)
       if (state === 'FINAL_TWO' && z.radiusM > 20) out.zone = { ...z, radiusM: Math.max(20, z.radiusM * 0.5) };
 
+      /* Dan i noć nisu događaj nego ritam: 5 min svetla, 5 min mraka, uvek
+         počevši danom. Zato se izvode iz sata, a ne iz rasporeda. */
+      out.day = R.dayPhase(started, now);
+      out.night = out.day.night;
+
       for (const ev of (sch.events || [])) {
         if (now < ev.atMs - (ev.warnMs || 0) || now > ev.endMs + 2000) continue;
         if (now >= ev.atMs) {
-          if (ev.type === 'night') out.night = true;
           if (ev.type === 'drought') out.drought = true;
           if (ev.type === 'wasps') out.wasps = ev;
           if (ev.type === 'firewall') out.firewall = R.firewallAt(ev, cfg, now);
@@ -61,7 +65,6 @@ const Engine = (() => {
       for (const k of Object.keys(live)) {
         const ev = live[k];
         if (now < ev.atMs || now > ev.endMs) continue;
-        if (ev.type === 'night') out.night = true;
         if (ev.type === 'drought') out.drought = true;
         if (ev.type === 'wasps') out.wasps = ev;
         if (ev.type === 'firewall') out.firewall = R.firewallAt(ev, cfg, now);
@@ -254,7 +257,6 @@ const Engine = (() => {
 
     if (meta.state === 'LIVE' || meta.state === 'FINAL_TWO') {
       await maintainItems(d);
-      await maintainSky(d);
       await maintainDrops(d);
     }
   }
@@ -367,18 +369,6 @@ const Engine = (() => {
     }
   }
 
-  /* — nebo na svakih 15 min (§16) — */
-  async function maintainSky(d) {
-    const sch = Store.schedule();
-    if (!sch || !sch.sky) return;
-    for (const s of sch.sky) {
-      if (d.now >= s.atMs && d.now < s.atMs + 22000 && !seen.sky.has(s.atMs)) {
-        seen.sky.add(s.atMs);
-        await Store.hostUpdate('meta', { skyAtMs: s.atMs });
-      }
-    }
-  }
-
   /* ═══════════════ posmatranje promena za obaveštenja ═══════════════ */
   function watchWorld(d) {
     // top na svaku smrt
@@ -398,13 +388,6 @@ const Engine = (() => {
         emit('zoneWarn', d.zone.next);
       }
     }
-    // nebo
-    const skyAt = Store.meta().skyAtMs;
-    if (skyAt && Clock.now() < skyAt + 22000 && !seen.sky.has('shown' + skyAt)) {
-      seen.sky.add('shown' + skyAt);
-      emit('sky', { atMs: skyAt });
-    }
-
     /* Kupljeni event se stvarno pokrenuo — javi ONOM ko ga je platio.
        Ovo NE sme u `tickHost`: kupac najčešće nije domaćin, pa bi isplatu
        gledao neko treći. Zato stoji ovde, u petlji koju vrti svaki telefon. */
@@ -446,6 +429,6 @@ const Engine = (() => {
   return {
     start, stop, on, derive, die, dropAll,
     get d() { return derived || derive(); },
-    resetSeen() { seen.deaths.clear(); seen.feed.clear(); seen.sky.clear(); seen.events.clear(); seen.myEvents.clear(); seen.zonePhase = -1; booted = false; },
+    resetSeen() { seen.deaths.clear(); seen.feed.clear(); seen.events.clear(); seen.myEvents.clear(); seen.zonePhase = -1; booted = false; },
   };
 })();

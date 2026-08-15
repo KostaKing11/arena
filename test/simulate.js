@@ -329,7 +329,7 @@ console.log('\n9. Savezi i lobi (§2, §10)');
   ok('max savez 2/3/4/5', [6, 12, 20, 40].map(R.maxAllianceSize).join(',') === '2,3,4,5');
   ok('min 3 max 48 igraca', R.MIN_PLAYERS === 3 && R.MAX_PLAYERS === 48);
   ok('preporuke po broju igraca',
-    R.recommendFor(5).diameterM === 350 && R.recommendFor(10).durationMin === 45 &&
+    R.recommendFor(5).diameterM === 350 && R.recommendFor(10).durationMin === 40 &&
     R.recommendFor(40).diameterM === 1200);
 }
 
@@ -408,7 +408,7 @@ console.log('\n11. Iskre, halucinacije, mentor (§15, §16, §17)');
 {
   const s1 = R.generateSparks('sp', cfg, 10), s2 = R.generateSparks('sp', cfg, 10);
   ok('iskre su determinsticke', JSON.stringify(s1) === JSON.stringify(s2));
-  ok('iskre po 6 na igraca', s1.length === 60, String(s1.length));
+  ok('iskre po 3 na igraca', s1.length === 30, String(s1.length));
   ok('iskra se kupi na 10 m', R.SPARK_REACH_M === 10);
 
   const h1 = R.hallucinations('p1', cfg.center, 7), h2 = R.hallucinations('p1', cfg.center, 7);
@@ -526,6 +526,81 @@ console.log("\n12b. Iskre ne beze dok se zona skuplja");
   const kaoFinalTwo = { ...z, radiusM: Math.max(20, z.radiusM * 0.5) };
   ok('FINAL_TWO ne pomera iskre',
     JSON.stringify(gen(z.phase)) === JSON.stringify(gen(kaoFinalTwo.phase)));
+}
+
+
+console.log('\n13. Dan i noc idu sami, po satu');
+{
+  /* Noc je bila dogadjaj koji duhovi kupuju, pa je partija mogla da prodje
+     cela po danu — ili da noc padne dvaput za deset minuta. Sada je ritam. */
+  ok('noci vise nema medju dogadjajima', !R.EVENTS.night && !R.SPARK_COSTS.night);
+  ok('pun dan je 10 min: 5 svetlih + 5 mracnih',
+    R.DAY_MS === 300000 && R.NIGHT_MS === 300000 && R.DAY_CYCLE_MS === 600000);
+  ok('trajanje ide u koracima od 10 min', R.DURATION_STEP_MIN === 10);
+  ok('sve preporuke su deljive sa 10',
+    R.RECOMMENDED.every((r) => r.durationMin % R.DURATION_STEP_MIN === 0));
+
+  // partija pocinje danom, pa se smenjuju u minut
+  const min = (n) => T0 + n * 60000;
+  ok('prvih 5 min je dan', [0, 1, 4.9].every((m) => !R.isNight(T0, min(m))));
+  ok('od 5. do 10. min je noc', [5, 7, 9.9].every((m) => R.isNight(T0, min(m))));
+  ok('u 10. minutu opet svice', !R.isNight(T0, min(10)));
+  ok('drugi dan se ponasa kao prvi',
+    [10, 14.9].every((m) => !R.isNight(T0, min(m)))
+    && [15, 19.9].every((m) => R.isNight(T0, min(m))));
+
+  // ni jedan tren dana ne sme da ostane bez odgovora
+  let smena = 0, bio = R.isNight(T0, T0);
+  for (let s = 0; s <= 3600; s += 5) {
+    const n = R.isNight(T0, T0 + s * 1000);
+    if (n !== bio) { smena++; bio = n; }
+  }
+  // sat vremena = 6 punih dana, a svaki nosi po dve smene (smrkne i svane)
+  ok('za sat vremena tacno 12 smena dana i noci', smena === 12, String(smena));
+
+  const dp = R.dayPhase(T0, min(7));
+  ok('odbrojava do svanuca', dp.night && Math.round(dp.leftMs / 60000) === 3, `${Math.round(dp.leftMs / 60000)} min`);
+  ok('dan se broji od 1', R.dayPhase(T0, min(2)).dayNo === 1 && R.dayPhase(T0, min(12)).dayNo === 2);
+  ok('pre pocetka partije nije noc', !R.isNight(0, Date.now()) && !R.isNight(T0, T0 - 1000));
+
+  // noc i dalje smanjuje vid, samo je izvor drugi
+  const vidDanju = R.visionFor({ classId: 'runner' }, { night: false });
+  const vidNocu = R.visionFor({ classId: 'runner' }, { night: true });
+  ok('nocu se vidi manje', vidNocu.itemsM < vidDanju.itemsM && vidNocu.itemsM === R.NIGHT_VISION_M);
+  ok('baklja vraca vid i nocu',
+    R.visionFor({ classId: 'runner' }, { night: true, hasLight: true }).itemsM > R.NIGHT_VISION_M);
+}
+
+console.log('\n14. Duhovi ne mogu da zatrpaju partiju dogadjajima');
+{
+  /* Bez ovoga je pola sata igre umelo da primi pet talasa zaredom, i to tri
+     puta isti zid vatre. Dve granice: budzet po trajanju i jedan po tipu. */
+  ok('pola sata nosi 1-2 dogadjaja', [1, 2].includes(R.ghostEventBudget(30)), String(R.ghostEventBudget(30)));
+  ok('sat vremena nosi 3-4', [3, 4].includes(R.ghostEventBudget(60)), String(R.ghostEventBudget(60)));
+  ok('duza partija nosi vise', R.ghostEventBudget(90) > R.ghostEventBudget(60));
+  ok('uvek bar jedan', R.ghostEventBudget(10) >= 1 && R.ghostEventBudget(undefined) >= 1);
+  ok('budzet nikad ne pada sa trajanjem', (() => {
+    let prev = 0;
+    for (let m = 10; m <= 120; m += 10) { const b = R.ghostEventBudget(m); if (b < prev) return false; prev = b; }
+    return true;
+  })());
+
+  // svaki dogadjaj je ili pomoc ili nevolja — sivih nema, jer se biraju po tome
+  ok('svaki dogadjaj ima stranu',
+    Object.values(R.EVENTS).every((e) => e.tone === 'good' || e.tone === 'bad'));
+  ok('gozba i sanduk pomazu',
+    R.EVENTS.feast.tone === 'good' && R.EVENTS.supplyBox.tone === 'good');
+  ok('vatra, ose i susa odmazu',
+    ['firewall', 'wasps', 'drought'].every((t) => R.EVENTS[t].tone === 'bad'));
+  ok('ima obe strane', Object.values(R.EVENTS).some((e) => e.tone === 'good')
+    && Object.values(R.EVENTS).some((e) => e.tone === 'bad'));
+
+  // raspored vise ne pravi noc, i ne pravi nebo
+  const sch = R.buildSchedule('ev', { ...cfg, eventsEnabled: true }, T0);
+  ok('raspored ne zakazuje noc', (sch.events || []).every((e) => e.type !== 'night'));
+  ok('nebo sa poginulima je izbaceno', sch.sky === undefined);
+  ok('svaki zakazani dogadjaj postoji u pravilima',
+    (sch.events || []).every((e) => !!R.EVENTS[e.type]));
 }
 
 console.log(fail ? `\n${fail} provera palo\n` : `\nSve provere prosle\n`);

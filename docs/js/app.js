@@ -132,19 +132,22 @@ const App = (() => {
     $('#btnQuickTest').onclick = () => askBotCount();
     $('#codeInput').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); });
 
-    $('#btnInv').onclick = () => UI.inventorySheet();
+    /* Ista dugmad, dva zanimanja: živ ima torbu i saveznike, mrtav iskre i
+       spisak igrača u duhovskom ekranu. */
+    const dead = () => { const m = Store.me(); return !!(m && m.alive === false); };
+    $('#btnInv').onclick = () => (dead() ? UI.sparksSheet(Engine.d) : UI.inventorySheet());
     $('#btnFeed').onclick = () => UI.feedSheet();
-    $('#btnPlayers').onclick = () => UI.playersSheet();
-    // Gornje dugme vraća pogled na tebe, donje otvara pregled cele arene —
-    // ranije su oba radila isto, pa je jedno bilo bez svrhe.
-    $('#btnGhost').onclick = () => {
-      const me = Store.me();
-      if (me && me.alive === false) { Screens.go('ghost'); UI.renderGhost(Engine.d); return; }
-      UI.arenaMapSheet(Engine.d);
+    $('#btnPlayers').onclick = () => {
+      if (dead()) { UI.openGhost('players'); return; }
+      UI.alliesSheet(Engine.d);
     };
+    /* Gornje dugme vraća pogled na tebe, donje otvara pregled cele arene.
+       Mapa je tu i živom i mrtvom — samo mrtvi na njoj vide sve. */
+    $('#btnGhost').onclick = () => UI.arenaMapSheet(Engine.d);
     $('#btnMenu').onclick = () => openSettings();
     $('#btnRecenter').onclick = () => { if (UI.gmap) { UI.gmap.recenter(); Haptics.fire('tap'); } };
-    $('#btnCamera').onclick = () => UI.openAim();
+    // mrtav ne napada: na mestu kamere mu stoji ulaz među duhove
+    $('#btnCamera').onclick = () => (dead() ? UI.openGhost('events') : UI.openAim());
 
     ['pointerdown', 'keydown'].forEach((e) => document.addEventListener(e, () => { Sfx.unlock(); goFullscreen(); }, { once: true }));
     // Zumiranje prstima gasi doživljaj i pomera HUD — igra je fiksnog razmera.
@@ -322,7 +325,7 @@ const App = (() => {
 
     // nisanjenje je ekran koji se otvara namerno i sam se zatvara
     if (Screens.cur === 'aim' || Screens.cur === 'ghost' || Screens.cur === 'watch'
-        || Screens.cur === 'sky' || Screens.cur === 'mentor') return;
+        || Screens.cur === 'mentor') return;
     Screens.go('game');
   }
 
@@ -431,7 +434,7 @@ const App = (() => {
     await Store.hostSet('liveEvents', null);
     await Store.hostSet('sparks', null);
     await Store.hostSet('gmVotes', null);
-    await Store.hostUpdate('meta', { state: 'LOBBY', startedAtMs: null, endedAtMs: null, winnerId: null, skyAtMs: null });
+    await Store.hostUpdate('meta', { state: 'LOBBY', startedAtMs: null, endedAtMs: null, winnerId: null });
     Engine.resetSeen();
   }
 
@@ -449,11 +452,19 @@ const App = (() => {
     } finally { picking = false; }
   }
 
-  /* ───────────────── tvorci igara ───────────────── */
+  /* ───────────────── događaji duhova ───────────────── */
   async function buyEvent(type) {
     const cost = R.SPARK_COSTS[type];
     const P = Store.players();
     const ghosts = Object.entries(P).filter(([, p]) => p.alive === false && !p.isBot).length;
+
+    /* Dve granice, obe tvrde. Bez njih je pola sata igre umelo da primi pet
+       talasa zaredom, i to tri puta isti zid vatre. */
+    const live = Object.values((Store.room && Store.room.liveEvents) || {});
+    if (live.some((e) => e.type === type)) { toast(T('evSpent'), 'gold'); return; }
+    if (live.length >= R.ghostEventBudget(Store.config().durationMin)) {
+      toast(T('ghostNoEventsLeft'), 'gold', 'alert'); return;
+    }
 
     /* Glasovi se čitaju SA SERVERA, ne iz lokalnog keša: keš zaostaje odmah
        posle sopstvenog upisa, pa je moj glas znao da fali u brojanju. */
@@ -521,7 +532,6 @@ const App = (() => {
         if (Encounter.detectorState === 'idle') Encounter.loadDetector();
       }
     }
-    if (kind === 'sky') UI.showSky(d.atMs);
     if (kind === 'died') { toast(T('youDied'), 'danger', 'skull'); Haptics.fire('death'); }
     if (kind === 'zoneWarn') toast(T('zoneWarn') + ' 30 s', 'danger', 'alert');
     if (kind === 'eventWarn') toast(eventName(d.type), 'gold', EVENT_ICON[d.type] || 'spark');

@@ -1,5 +1,5 @@
 /* UI kit: DOM sitnice, obaveštenja, fioke, tema. */
-const APP_VERSION = '0.9.4';
+const APP_VERSION = '0.10.0';
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const el = (tag, cls, html) => {
@@ -31,7 +31,9 @@ function toast(msg, kind, iconName) {
   const box = $('#toasts') || document.body.appendChild(el('div', 'toasts')).id === 'toasts';
   const host = $('#toasts');
   const t = el('div', 'toast ' + (kind || ''));
-  t.innerHTML = (iconName ? icon(iconName, { size: 22 }) : '') + `<div class="grow">${esc(msg)}</div>`;
+  // ikonica u krugu svoje boje: objava se prepozna pre nego što se pročita
+  t.innerHTML = (iconName ? `<span class="tico">${icon(iconName, { size: 18 })}</span>` : '')
+    + `<span>${esc(msg)}</span>`;
   host.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(8px)'; }, 3200);
   setTimeout(() => t.remove(), 3600);

@@ -63,6 +63,17 @@ function makeMap(elId, opts) {
     el.addEventListener('touchend', () => map.dragging.disable(), { passive: true });
   }
 
+  /* Mapa koja gleda tuđim očima: pogled vodi onaj koga gledaš, ne prst.
+     Ranije se moglo odvući u stranu i onda si gledao prazan asfalt. */
+  if (opts.locked) {
+    map.dragging.disable();
+    map.touchZoom.disable();
+    map.doubleClickZoom.disable();
+    map.scrollWheelZoom.disable();
+    if (map.boxZoom) map.boxZoom.disable();
+    if (map.keyboard) map.keyboard.disable();
+  }
+
   /* Magla rata je atmosfera, a NE pravilo — šta se stvarno vidi određuju podaci
      (Items.visible). Zato je otvor mnogo širi od dometa vida: ranije je pri
      vidu od 15 m rupa bila ~46 px na ekranu od 740, pa je mapa izgledala
@@ -198,16 +209,24 @@ function makeMap(elId, opts) {
     for (const [id, m] of L_.items) if (!seen.has(id)) { map.removeLayer(m); L_.items.delete(id); }
   }
 
-  /* Ti si zelen, protivnici crveni, saveznici plavi — bez razmišljanja. */
-  function drawPlayers(list) {
+  /* Ti si zelen, protivnici crveni, saveznici plavi — bez razmišljanja.
+     `onTap` daju samo mape na kojima tačka nešto znači (duhovska): živom
+     igraču bi tapkanje po protivniku bilo lažno obećanje. */
+  let playerTap = null;
+  function drawPlayers(list, onTap) {
+    if (onTap !== undefined) playerTap = onTap;
+    const tappable = !!playerTap;
     const seen = new Set();
     for (const p of list) {
       seen.add(p.id);
-      const cls = `mk-p ${p.kind}`;
+      const cls = `mk-p ${p.kind}${tappable ? ' tapable' : ''}`;
       let m = L_.players.get(p.id);
-      if (!m) { m = L.marker([p.lat, p.lng], { icon: div(cls), interactive: false }).addTo(map); L_.players.set(p.id, m); }
-      else { m.setLatLng([p.lat, p.lng]); if (m._cls !== cls) m.setIcon(div(cls)); }
-      m._cls = cls;
+      if (!m) {
+        m = L.marker([p.lat, p.lng], { icon: div(cls), interactive: tappable }).addTo(map);
+        m.on('click', () => playerTap && playerTap(m._pid));
+        L_.players.set(p.id, m);
+      } else { m.setLatLng([p.lat, p.lng]); if (m._cls !== cls) m.setIcon(div(cls)); }
+      m._cls = cls; m._pid = p.id;
     }
     for (const [id, m] of L_.players) if (!seen.has(id)) { map.removeLayer(m); L_.players.delete(id); }
   }
@@ -222,8 +241,18 @@ function makeMap(elId, opts) {
     for (const [id, m] of L_.traps) if (!seen.has(id)) { map.removeLayer(m); L_.traps.delete(id); }
   }
 
+  /* Oblačić iznad tačke na mapi. Vraća DOM čvor sadržaja, pa onaj ko ga je
+     otvorio može da zakači dugmad — Leaflet ga pravi tek pri otvaranju. */
+  function popupAt(lat, lng, html) {
+    const p = L.popup({ className: 'map-peek', closeButton: false, offset: [0, -10], autoPan: true })
+      .setLatLng([lat, lng]).setContent(html).openOn(map);
+    return p.getElement() ? p.getElement().querySelector('.leaflet-popup-content') : null;
+  }
+  const closePopup = () => map.closePopup();
+
   return {
     map, setMe, recenter, drawZone, drawFire, drawWasps, drawSmoke, drawItems, drawPlayers, drawTraps, setStart, drawFog,
+    popupAt, closePopup,
     setVision(v) { if (v === visionM) return; visionM = v; autoZoom(); drawFog(); },
     setFull(v) { if (v === fullMap) return; fullMap = v; drawFog(); },
     /** Pun pregled arene ne sme da juri igrača — inače se vraća na zum oko tebe. */

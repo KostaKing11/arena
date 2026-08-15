@@ -52,7 +52,10 @@ const ICONS = {
   blowgun: 'M3.5 18.5 20.5 5.5 M18.5 4l2 1.5-1.5 2 M6 16l1.5 1.5 M11 13.5l1.5-2.5',
   arrows: 'M4 20 20 4 M20 4h-5M20 4v5 M4 20h4M4 20v-4',
 
-  /* — predmeti i inventar — */
+  /* — predmeti i inventar —
+     Svaki predmet mora da se prepozna kao silueta na 16 px na mapi. Ranije je
+     pola liste delilo tri ikonice: bobice, pečurke, biljke, protivotrov i
+     termos su svi bili „bočica", pa se na mapi nije videlo šta se kupi. */
   backpack: 'M6 8a6 6 0 0 1 12 0v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8Z M9 8V6a3 3 0 0 1 6 0v2 M9 13h6',
   box: 'M4 8 12 4l8 4v8l-8 4-8-4V8Z M4 8l8 4 8-4 M12 12v8',
   flask: 'M9 3v6L4.5 18a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L15 9V3 M8 3h8 M7.5 15h9',
@@ -62,6 +65,37 @@ const ICONS = {
   trap: 'M12 4v6 M4 20l8-10 8 10 M4 20h16 M8.5 15h7',
   gift: 'M4 11h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9Z M3 7h18v4H3z M12 7v14 M12 7S9 3 7 4.5 9 7 12 7Zm0 0s3-4 5-2.5S15 7 12 7Z',
   spark: 'M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6Z',
+  /* hrana: bobice na grančici, pečurka sa klobukom, konzerva sa etiketom */
+  berries: 'M12 3v5 M9.5 5.5 12 8l2.5-2.5 M8 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z M16 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z M12 21a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z',
+  mushroom: 'M4 11a8 8 0 0 1 16 0H4Z M10 11v6a2 2 0 0 0 4 0v-6 M8.5 8.2a1 1 0 1 0 0-.1 M15 9.2a1 1 0 1 0 0-.1',
+  can: 'M6 6.5c0-1.4 2.7-2.5 6-2.5s6 1.1 6 2.5v11c0 1.4-2.7 2.5-6 2.5s-6-1.1-6-2.5v-11Z M6 6.5c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5 M9 12h6',
+  /* piće: čuturica sa čepom, prljava voda ima talas i mrlju, izvorska kap+sjaj */
+  bottle: 'M10 2.5h4v3l1.6 2.4A4 4 0 0 1 16 10v9a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-9c0-.8.2-1.5.6-2.1L10 5.5v-3Z M8 13h8',
+  dirtyDrop: 'M12 3c3.5 4.2 6 7.1 6 10a6 6 0 0 1-12 0c0-2.9 2.5-5.8 6-10Z M8 14c1.3-1 2.7-1 4 0s2.7 1 4 0 M11 17.5a.8.8 0 1 0 0-.1',
+  sparkDrop: 'M12 3c3.5 4.2 6 7.1 6 10a6 6 0 0 1-12 0c0-2.9 2.5-5.8 6-10Z M10.5 13.5 12 10l1.5 3.5L17 15l-3.5 1.5L12 20l-1.5-3.5L7 15l3.5-1.5Z',
+  thermos: 'M8 2.5h8v3H8z M8.5 5.5h7l.5 13a2.5 2.5 0 0 1-2.5 3h-3a2.5 2.5 0 0 1-2.5-3l.5-13Z M9 10.5h6 M9 14.5h6',
+  /* lečenje: list, protivotrov je bočica sa lobanjom, mast je tegla */
+  leaf: 'M20 4C11 4 4 8.5 4 15.5c0 2 .6 3.4 1.3 4.5C8 15 12 11.5 17.5 9.5 13 12 8.5 15.5 6.5 21 12 21 20 17 20 4Z',
+  antidote: 'M9.5 2.5h5v3l3 5.5V19a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-8l3-5.5v-3Z M12 11a2.5 2.5 0 0 0-2.5 2.5c0 .9.5 1.4.9 1.7v1.3h3.2v-1.3c.4-.3.9-.8.9-1.7A2.5 2.5 0 0 0 12 11Z',
+  salve: 'M6 9h12v9a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V9Z M5 6h14v3H5z M9 3h6v3H9z M12 12.5v4 M10 14.5h4',
+  /* alat, borba, izviđanje */
+  bag: 'M5 8h14l-1 12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 8Z M9 8V6a3 3 0 0 1 6 0v2',
+  bell2: 'M12 3a5 5 0 0 0-5 5c0 4-2 5-2 7h14c0-2-2-3-2-7a5 5 0 0 0-5-5Z M10 18a2 2 0 0 0 4 0 M4 5 6 3.5 M20 5 18 3.5',
+  radar: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z M12 17a5 5 0 1 0 0-10 M12 12l5-4 M12 13.2a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4Z',
+  flash: 'M13 2 4.5 13.5H11L10 22l8.5-11.5H12L13 2Z',
+  tripod: 'M12 3.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z M12 8.5v4 M12 12.5 6 21 M12 12.5 18 21 M12 12.5v8.5',
+  smoke: 'M5 16a3.5 3.5 0 0 1 .6-7A5 5 0 0 1 15 8.5a3.2 3.2 0 0 1 4 3.2A3.3 3.3 0 0 1 15.5 16H5Z M6 19.5h5 M13.5 19.5h5',
+  syringe: 'M14 3l7 7 M17.5 6.5 6 18l-3 3 M11.5 8.5l4 4 M8.5 11.5l4 4 M4.5 15.5l4 4',
+  flare: 'M12 21a5 5 0 0 0 5-5c0-3-5-9-5-9s-5 6-5 9a5 5 0 0 0 5 5Z M12 2.5v2 M5.5 5 7 6.5 M18.5 5 17 6.5',
+  mapFold: 'M9 4 3 6.5v14L9 18l6 2.5 6-2.5v-14L15 6.5 9 4Z M9 4v14 M15 6.5v14 M11 11h2v2h-2z',
+  decoy: 'M12 4a4 4 0 0 1 4 4c0 2.5-4 4-4 4s-4-1.5-4-4a4 4 0 0 1 4-4Z M7 21c0-3 2.2-5 5-5s5 2 5 5 M3.5 3.5l17 17',
+  cloak: 'M12 3 6 6v5c0 5 3 8 6 10 3-2 6-5 6-10V6l-6-3Z M12 3v18 M8 8.5c1.5 1 2.5 2.5 2.5 4.5 M16 8.5c-1.5 1-2.5 2.5-2.5 4.5',
+  quiver: 'M7 8h7l1.5 12a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 20L7 8Z M9 8V6h3v2 M17 2.5 20 5.5 M18.5 4 14 8.5 M20.5 2l.5 3-3-.5Z',
+  /* interfejs duhova */
+  chat: 'M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H9l-5 4V5.5Z M8 8h8 M8 11.5h5',
+  send: 'M3.5 11.5 20.5 4l-7 16.5-2.4-7.6-7.6-1.4Z M11.1 12.9 20.5 4',
+  thumbUp: 'M7 10.5 11 3a2.2 2.2 0 0 1 2.2 2.6L12.5 9H19a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 17.8 19H7 M7 10.5V19 M3 10.5h4V19H3z',
+  thumbDown: 'M7 13.5 11 21a2.2 2.2 0 0 0 2.2-2.6L12.5 15H19a2 2 0 0 0 2-2.3l-1.2-6A2 2 0 0 0 17.8 5H7 M7 13.5V5 M3 5h4v8.5H3z',
 
   /* — mapa i okruženje — */
   map: 'M9 4 3 6.5v14L9 18l6 2.5 6-2.5v-14L15 6.5 9 4Z M9 4v14 M15 6.5v14',
@@ -106,7 +140,10 @@ const ICONS = {
   refresh: 'M20 12a8 8 0 1 1-2.3-5.7 M20 4v4h-4',
 };
 
-const ICON_FILLED = new Set(['spark', 'flame', 'heart', 'droplet', 'play', 'navigation']);
+const ICON_FILLED = new Set([
+  'spark', 'flame', 'heart', 'droplet', 'play', 'navigation',
+  'berries', 'leaf', 'flash', 'flare', 'dirtyDrop', 'sparkDrop',
+]);
 
 /** Vrati SVG kao string. `name` iz ICONS, `opts.size` px, `opts.cls` dodatne klase. */
 function icon(name, opts) {
@@ -123,19 +160,23 @@ function icon(name, opts) {
 
 /* Koja ikonica ide uz koji predmet / oružje. */
 const ITEM_ICON = {
-  berries: 'flask', mushrooms: 'flask', ration: 'meat', feastMeal: 'meat',
-  supplyBelt: 'backpack', dirtyWater: 'droplet', waterBottle: 'droplet',
-  springWater: 'droplet', thermos: 'flask', herbs: 'flask', bandage: 'bandage',
-  antidote: 'flask', salve: 'bandage',
+  // hrana
+  berries: 'berries', mushrooms: 'mushroom', ration: 'can', feastMeal: 'meat',
+  supplyBelt: 'bag',
+  // piće
+  dirtyWater: 'dirtyDrop', waterBottle: 'bottle', springWater: 'sparkDrop', thermos: 'thermos',
+  // lečenje
+  herbs: 'leaf', bandage: 'bandage', antidote: 'antidote', salve: 'salve',
   backpack: 'backpack',
-  trapBasic: 'trap', trapAlarm: 'trap', trapTracker: 'trap', trapNet: 'net',
+  // zamke — svaka radi drugu stvar, pa i izgleda drugačije
+  trapBasic: 'trap', trapAlarm: 'bell2', trapTracker: 'radar', trapNet: 'net',
   // kamera i borba
-  flashFoil: 'sun', tripod: 'crosshair', smokeBomb: 'cloud',
-  adrenaline: 'flame', shield: 'shield',
+  flashFoil: 'flash', tripod: 'tripod', smokeBomb: 'smoke',
+  adrenaline: 'syringe', shield: 'shield',
   // izviđanje i alat
-  torch: 'torch', compassItem: 'compass', flare: 'spark', binoculars: 'binoculars',
-  zoneMap: 'map', decoyBait: 'eyeOff',
-  camoCloak: 'eyeOff', quiver: 'arrows', arrows: 'arrows',
+  torch: 'torch', compassItem: 'compass', flare: 'flare', binoculars: 'binoculars',
+  zoneMap: 'mapFold', decoyBait: 'decoy',
+  camoCloak: 'cloak', quiver: 'quiver', arrows: 'arrows',
   wClub: 'club', wSling: 'sling', wNet: 'net', wSpear: 'spear', wAxe: 'axe',
   wBlowgun: 'blowgun', wBow: 'bow', wKnife: 'knife', wTrident: 'trident',
   spark: 'spark',
@@ -149,5 +190,5 @@ const CLASS_ICON = {
   trapper: 'net', runner: 'run', hunter: 'spear', fisher: 'trident',
 };
 const EVENT_ICON = {
-  firewall: 'flame', wasps: 'wasp', feast: 'gift', drought: 'sun', night: 'moon', supplyBox: 'box',
+  firewall: 'flame', wasps: 'wasp', feast: 'gift', drought: 'sun', supplyBox: 'box',
 };

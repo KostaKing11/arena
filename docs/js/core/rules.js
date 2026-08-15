@@ -184,9 +184,10 @@
   const isRenewable = (id) => ITEMS[id] && (ITEMS[id].type === 'food' || ITEMS[id].type === 'drink');
 
   /* ═══════════════════ 2. PREPORUKE ZA LOBI ═══════════════════ */
+  // Trajanje uvek u koracima od 10 min — pun dan (5 svetlih + 5 mračnih).
   const RECOMMENDED = [
     { max: 6,  diameterM: 350,  durationMin: 30 },
-    { max: 12, diameterM: 500,  durationMin: 45 },
+    { max: 12, diameterM: 500,  durationMin: 40 },
     { max: 20, diameterM: 700,  durationMin: 60 },
     { max: 32, diameterM: 900,  durationMin: 60 },
     { max: 48, diameterM: 1200, durationMin: 90 },
@@ -232,17 +233,53 @@
   ];
   const ZONE_WARN_MS = 30000;
 
-  /* ═══════════════════ 15. EVENTOVI ═══════════════════ */
+  /* ═══════════════════ 15. EVENTOVI ═══════════════════
+     `tone` deli listu na dve strane: duhovi biraju da li žele da POMOGNU ili
+     da ODMOGNU, i to mora da se vidi pre nego što potroše kasu. Ranije je sve
+     stajalo u jednoj sivoj koloni, pa se gozba klikala kao i zid vatre.
+
+     Noći više nema u ovoj listi — dan i noć se smenjuju sami, po satu (dole). */
   const EVENTS = {
-    firewall: { warnMs: 60000, durMs: 180000, widthM: 25, spark: 8 },
-    wasps:    { warnMs: 20000, durMs: 300000, radiusM: 60, dmgPer10s: 3, spark: 5 },
-    feast:    { warnMs: 120000, durMs: 0, items: 6, spark: 6 },
-    drought:  { warnMs: 20000, durMs: 300000, thirstMul: 2, spark: 3 },
-    night:    { warnMs: 20000, durMs: 360000, visionM: 8, spark: 3 },
-    supplyBox:{ warnMs: 15000, durMs: 0, spark: 4 },
+    firewall: { warnMs: 60000, durMs: 180000, widthM: 25, spark: 8, tone: 'bad' },
+    wasps:    { warnMs: 20000, durMs: 300000, radiusM: 60, dmgPer10s: 3, spark: 5, tone: 'bad' },
+    drought:  { warnMs: 20000, durMs: 300000, thirstMul: 2, spark: 3, tone: 'bad' },
+    feast:    { warnMs: 120000, durMs: 0, items: 6, spark: 6, tone: 'good' },
+    supplyBox:{ warnMs: 15000, durMs: 0, spark: 4, tone: 'good' },
   };
   const SPARK_COSTS = Object.fromEntries(Object.entries(EVENTS).map(([k, v]) => [k, v.spark]));
   const GM_COOLDOWN_MS = 240000;
+
+  /* Koliko događaja duhovi smeju da puste za celu partiju.
+     Bez ovoga je pola sata igre umelo da primi pet talasa zaredom. Uz to važi
+     i tvrdo pravilo: svaki tip najviše JEDNOM — jedan zid vatre, jedne ose,
+     jedna gozba. Ostatak izbora ostaje duhovima. */
+  const ghostEventBudget = (durationMin) => Math.max(1, Math.round((durationMin || 30) / 20));
+
+  /* ═══════════════════ DAN I NOĆ ═══════════════════
+     Noć je bila događaj koji duhovi kupuju, pa je partija mogla da prođe cela
+     po danu — ili da noć padne dvaput za deset minuta. Sada je to ritam, ne
+     iznenađenje: pun dan traje 10 minuta, pet svetlih i pet mračnih, i počinje
+     danom. Zato trajanje partije uvek ide u koracima od 10 minuta.            */
+  const DAY_MS = 300000, NIGHT_MS = 300000;
+  const DAY_CYCLE_MS = DAY_MS + NIGHT_MS;
+  const NIGHT_VISION_M = 8;
+  const DURATION_STEP_MIN = 10;
+
+  /** Da li je noć u trenutku `nowMs`, za partiju koja je počela `startedAtMs`. */
+  function isNight(startedAtMs, nowMs) {
+    if (!startedAtMs || !nowMs || nowMs < startedAtMs) return false;
+    return (nowMs - startedAtMs) % DAY_CYCLE_MS >= DAY_MS;
+  }
+  /** Koliko još traje tekući deo dana i koji je po redu — za traku i najavu. */
+  function dayPhase(startedAtMs, nowMs) {
+    const night = isNight(startedAtMs, nowMs);
+    const into = !startedAtMs ? 0 : (nowMs - startedAtMs) % DAY_CYCLE_MS;
+    return {
+      night,
+      dayNo: !startedAtMs ? 1 : Math.floor((nowMs - startedAtMs) / DAY_CYCLE_MS) + 1,
+      leftMs: night ? DAY_CYCLE_MS - into : DAY_MS - into,
+    };
+  }
 
   /* ═══════════════════ 11. GLAD, ŽEĐ, HP (v5) ═══════════════════
      Ranije su glad i žeđ radile identično, pa su hrana i piće bili zamenljivi
@@ -363,7 +400,7 @@
     /* — eventovi — */
     const events = [];
     if (cfg.eventsEnabled) {
-      const types = ['wasps', 'feast', 'drought', 'night', 'firewall'];
+      const types = ['wasps', 'feast', 'drought', 'firewall'];
       const order = U.shuffle(rng, types);
       const n = Math.max(2, Math.min(order.length, Math.round(cfg.durationMin / 15)));
       for (let k = 0; k < n; k++) {
@@ -389,11 +426,9 @@
       events.sort((a, b) => a.atMs - b.atMs);
     }
 
-    /* — nebo na svakih 15 min (§16) — */
-    const sky = [];
-    for (let t = 15 * 60000; t < durMs; t += 15 * 60000) sky.push({ atMs: startedAtMs + t });
-
-    return { zone, events, sky };
+    /* Nebo sa licima poginulih je izbačeno: ekran je preuzimao telefon usred
+       igre i ostajao da visi. Smrt se sada javlja samo objavom. */
+    return { zone, events };
   }
 
   /** Stanje zone u trenutku `now` — sa postepenim skupljanjem (§14). */
@@ -501,7 +536,9 @@
      Kako se zona skuplja, duhovska teritorija raste — teren koji je igra
      napustila pripada mrtvima. Na fazi 0 je zona cela arena, pa prsten pada
      izvan njene granice; to je namerno, jer na startu skoro niko nije mrtav. */
-  const SPARKS_PER_PLAYER = 6;
+  /* Iskri je bilo šest po igraču, pa je prsten izgledao kao posuto zlato i
+     skupljanje nije bilo izbor nego posao. Tri su dovoljne. */
+  const SPARKS_PER_PLAYER = 3;
   const SPARK_ZONE_MARGIN_M = 20;      // nijedna iskra nije bliža od ovoga ivici zone
   const GHOST_OUTER_M = 60;            // dokle duhovski prsten viri van arene
 
@@ -527,7 +564,7 @@
   function generateSparks(seed, cfg, playerCount, zonePhase, schedule) {
     const phase = zonePhase || 0;
     const rng = U.rngFor(seed, 'sparks', phase);
-    const n = Math.max(20, Math.round(playerCount * SPARKS_PER_PLAYER));
+    const n = Math.max(12, Math.round(playerCount * SPARKS_PER_PLAYER));
     // geometrija je čista funkcija FAZE, nikad trenutka — inače iskre beže
     const z = zoneAtPhaseSettled(schedule, cfg, phase);
     const inner = z.radiusM + SPARK_ZONE_MARGIN_M;
@@ -890,7 +927,7 @@
   function visionFor(p, ctx) {
     const cls = CLASSES[p.classId] || {};
     let items = cls.itemVisionM || 15;
-    if (ctx && ctx.night && !(ctx.hasLight)) items = Math.min(items, EVENTS.night.visionM);
+    if (ctx && ctx.night && !(ctx.hasLight)) items = Math.min(items, NIGHT_VISION_M);
     if (ctx && ctx.hasLight) items += ITEMS.torch.lightBonusM;
     /* Žedan si → slepiš. Ovo je jedina kazna koja se vidi bez otvaranja menija.
 
@@ -927,7 +964,8 @@
     TRAP_RADIUS_M, TRAP_DWELL_MS,
     RECOMMENDED, recommendFor, MIN_PLAYERS, MAX_PLAYERS, maxAllianceSize,
     dealClasses, classCensus,
-    ZONE_PHASES, ZONE_WARN_MS, EVENTS, SPARK_COSTS, GM_COOLDOWN_MS,
+    ZONE_PHASES, ZONE_WARN_MS, EVENTS, SPARK_COSTS, GM_COOLDOWN_MS, ghostEventBudget,
+    DAY_MS, NIGHT_MS, DAY_CYCLE_MS, NIGHT_VISION_M, DURATION_STEP_MIN, isNight, dayPhase,
     SURVIVAL, survivalTick,
     buildSchedule, zoneAt, firewallAt,
     RARITY_W, CORN_RADIUS_M, EDGE_MARGIN_M, generateItems, generateArrowCaches, startPoints,

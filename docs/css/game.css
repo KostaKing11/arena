@@ -23,6 +23,17 @@
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
 .zonechip { display: flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: var(--fs-sm); font-weight: 600; }
+/* Klasa + doba dana, uz zonu. Skuplja se na uskim ekranima: ime klase pada,
+   ikonica i sat ostaju — od njih se i živi. */
+.classchip { display: flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: var(--fs-sm); font-weight: 600; max-width: 46vw; }
+.classchip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.classchip .dn { display: inline-flex; align-items: center; gap: 3px; font-style: normal; padding-left: 7px; margin-left: 1px; border-left: 1px solid var(--line-2); }
+.classchip .dn.night { color: #8FA8DA; }
+.classchip .dn.day { color: var(--gold-hi); }
+:root[data-theme="day"] .classchip .dn.day { color: var(--gold); }
+.classchip .dn b { font-variant-numeric: tabular-nums; font-weight: 700; }
+@media (max-width: 360px) { .classchip > span { display: none; } }
+
 .zonechip.warn { border-color: var(--gold); color: var(--gold-hi); }
 .zonechip.danger { border-color: var(--danger); color: var(--danger-hi); }
 :root[data-theme="day"] .zonechip.warn { color: var(--gold); }
@@ -365,37 +376,105 @@
 .zone-flash.go { animation: zf 1.2s ease-out; }
 @keyframes zf { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
 
-/* ── nebo ── */
-#s-sky { background: linear-gradient(180deg, #05040A, #0C0916 60%, #05040A); z-index: 80; }
-.sky-stars { position: absolute; inset: 0; overflow: hidden; }
-.sky-stars i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff; opacity: .4; }
-.sky-faces { display: flex; flex-direction: column; align-items: center; gap: var(--s4); }
-.sky-face { display: grid; place-items: center; gap: 6px; animation: faceIn 1s var(--ease-out) both; }
-@keyframes faceIn { from { opacity: 0; transform: scale(.9); } }
-.sky-face img { width: 108px; height: 108px; border-radius: 50%; object-fit: cover; border: 1px solid var(--gold); }
-.sky-face .nm { font-family: var(--ff-display); font-size: var(--fs-lg); color: var(--gold-hi); }
-
 /* ── duhovi ── */
 .spark-pool { display: flex; align-items: center; gap: 5px; font-size: var(--fs-lg); font-weight: 800; color: var(--gold-hi); }
 :root[data-theme="day"] .spark-pool { color: var(--gold); }
-.gm-event { display: flex; align-items: center; gap: var(--s3); min-height: 56px; padding: var(--s2) var(--s3); width: 100%; text-align: left; background: none; }
-.gm-event:disabled { opacity: .35; }
-.gm-event .cost { margin-left: auto; display: flex; align-items: center; gap: 3px; font-weight: 700; color: var(--gold); }
+
+/* Kartice duhovskog ekrana. Stoje ispod trake, iznad skrola. */
+.tabs { display: flex; gap: 2px; padding: 0 var(--s4) var(--s2); border-bottom: 1px solid var(--line-2); }
+.tabs button {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: var(--s2) 0; background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--text-3); font-size: var(--fs-sm); font-weight: 600;
+}
+.tabs button.on { color: var(--gold-hi); border-bottom-color: var(--gold); }
+:root[data-theme="day"] .tabs button.on { color: var(--gold); }
+
+/* Događaj: cena i opis se vide i kad je zaključan — pre je sve bilo sivo. */
+.gm-event {
+  display: flex; align-items: center; gap: var(--s3); min-height: 62px;
+  padding: var(--s2) var(--s3); width: 100%; text-align: left;
+  background: var(--ink-2); border: 1px solid var(--line-2); border-radius: var(--r-md);
+}
+.gm-event + .gm-event { margin-top: var(--s2); }
+.gm-event .ei { flex: none; }
+.gm-event.good .ei { color: var(--good); }
+.gm-event.bad .ei { color: var(--danger); }
+.gm-event .grow { display: block; }
+.gm-event .nm { display: block; font-weight: 700; }
+.gm-event .ds { display: block; font-size: var(--fs-xs); color: var(--text-3); line-height: 1.35; }
+.gm-event .vt:not(:empty) { display: block; margin-top: 2px; font-size: 11px; color: var(--gold); }
+.gm-event .cost { margin-left: auto; display: flex; align-items: center; gap: 3px; font-weight: 800; color: var(--gold); }
+.gm-event.ready { border-color: var(--gold); }
+.gm-event:disabled { opacity: .72; }          /* čita se, ali se ne klikće */
+.gm-event.spent { opacity: .45; }
+.gm-event.spent .cost { text-decoration: line-through; }
+
+/* Tri broja iznad liste: kasa, koliko je događaja ostalo, koliko si sam dao. */
+.ghost-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); text-align: center; }
+.ghost-sum.big-sum { grid-template-columns: repeat(2, 1fr); }
+.ghost-sum > div { padding: var(--s3) var(--s2); background: var(--ink-2); border: 1px solid var(--line-2); border-radius: var(--r-md); }
+.ghost-sum b { display: block; font-size: var(--fs-xl); font-weight: 800; line-height: 1.1; }
+.ghost-sum span { font-size: var(--fs-xs); color: var(--text-3); }
+
+/* Dogovor mrtvih. */
+.chat { display: flex; flex-direction: column; gap: var(--s2); }
+.chat .msg {
+  align-self: flex-start; max-width: 82%; padding: var(--s2) var(--s3);
+  background: var(--ink-2); border: 1px solid var(--line-2);
+  border-radius: var(--r-md); border-bottom-left-radius: 4px;
+}
+.chat .msg.mine { align-self: flex-end; border-bottom-left-radius: var(--r-md); border-bottom-right-radius: 4px; border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+.chat .who { display: block; font-size: 11px; font-weight: 700; color: var(--gold); }
+.chat .tx { display: block; font-size: var(--fs-sm); word-break: break-word; }
+.chat .at { display: block; text-align: right; font-size: 10px; color: var(--text-3); }
+.chat-bar { display: flex; gap: var(--s2); padding: var(--s2) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom)); border-top: 1px solid var(--line-2); background: var(--ink-1); }
+
+/* Red igrača sa tri tanke trake — vidi se stanje bez čitanja brojeva. */
+.grow-row { display: flex; align-items: center; gap: var(--s3); }
+.minibars { display: flex; align-items: center; gap: 4px; margin-top: 5px; }
+.minibars i { display: block; width: 34px; height: 4px; border-radius: 2px; background: var(--line-2); position: relative; }
+.minibars i::after { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--v); border-radius: 2px; }
+.minibars i.hp::after { background: var(--danger); }
+.minibars i.hu::after { background: var(--ember); }
+.minibars i.th::after { background: var(--info, #4C9AE8); }
+.minibars b { font-size: 11px; color: var(--text-3); }
+
+/* Oblačić iznad igrača na mapi. */
+.map-peek .leaflet-popup-content-wrapper { background: var(--ink-1); color: var(--text-1); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--sh-2, 0 6px 24px rgba(0,0,0,.45)); }
+.map-peek .leaflet-popup-tip { background: var(--ink-1); border: 1px solid var(--line); }
+.map-peek .leaflet-popup-content { margin: var(--s3); min-width: 190px; }
+.peek { display: flex; flex-direction: column; gap: var(--s2); }
+.mk-p.tapable { cursor: pointer; }
 
 /* ── kandidati ── */
 .cand { display: flex; align-items: center; gap: var(--s3); min-height: 64px; padding: var(--s2) var(--s3); border-radius: var(--r-md); background: var(--ink-2); border: 1px solid var(--line-2); width: 100%; text-align: left; }
 .cand.best { border-color: var(--gold); }
 .cand .meta { font-size: var(--fs-xs); color: var(--text-2); }
 
-/* ── feed ── */
-.feed-item { display: flex; gap: var(--s3); padding: var(--s3) 0; }
-.feed-item + .feed-item { border-top: 1px solid var(--line-2); }
-.feed-item .fic { flex: none; color: var(--text-3); margin-top: 1px; }
+/* ── objave ──
+   Bio je niz sivih redova razdvojenih linijom. Sada svaka objava ima svoje
+   polje, boju po vrsti i vreme desno — spisak se čita kao hronika partije. */
+.feed-item {
+  display: flex; align-items: flex-start; gap: var(--s3);
+  padding: var(--s3); border-radius: var(--r-md);
+  background: var(--ink-2); border: 1px solid var(--line-2);
+  border-left: 3px solid var(--line-2);
+}
+.feed-item + .feed-item { margin-top: var(--s2); }
+.feed-item .fic {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px;
+  border-radius: 50%; color: var(--text-3);
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+.feed-item.death { border-left-color: var(--danger); }
 .feed-item.death .fic { color: var(--danger); }
+.feed-item.zone { border-left-color: var(--gold); }
 .feed-item.zone .fic { color: var(--gold); }
+.feed-item.event { border-left-color: var(--ember); }
 .feed-item.event .fic { color: var(--ember); }
-.feed-item .ft { flex: 1; font-size: var(--fs-sm); }
-.feed-item .fw { font-size: 11px; color: var(--text-3); }
+.feed-item .ft { flex: 1; font-size: var(--fs-sm); line-height: 1.4; padding-top: 5px; }
+.feed-item .fw { font-size: 11px; color: var(--text-3); padding-top: 7px; font-variant-numeric: tabular-nums; }
 
 /* ── kraj ── */
 .winner-card { text-align: center; padding: var(--s5) var(--s4); }
