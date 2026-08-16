@@ -13,7 +13,7 @@
 .hud-top {
   position: absolute; top: 0; left: 0; right: 0; z-index: 500;
   display: flex; align-items: center; gap: var(--s2);
-  padding: calc(var(--s2) + var(--safe-t)) var(--s3) 0;
+  padding: calc(var(--s2) + var(--safe-t)) var(--s2) 0;
   pointer-events: none;
 }
 .hud-top > * { pointer-events: auto; }
@@ -28,7 +28,7 @@
 .zonechip span { white-space: nowrap; }
 /* Klasa + doba dana, uz zonu. Skuplja se na uskim ekranima: ime klase pada,
    ikonica i sat ostaju — od njih se i živi. */
-.classchip { display: flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: var(--fs-sm); font-weight: 600; max-width: 46vw; white-space: nowrap; min-width: 0; }
+.classchip { display: flex; align-items: center; gap: 6px; padding: 7px 9px; font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; min-width: 0; flex: 0 1 auto; }
 .classchip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .classchip .dn { display: inline-flex; align-items: center; gap: 3px; font-style: normal; padding-left: 7px; margin-left: 1px; border-left: 1px solid var(--line-2); }
 .classchip .dn.night { color: #8FA8DA; }
@@ -41,7 +41,7 @@
 .zonechip.danger { border-color: var(--danger); color: var(--danger-hi); }
 :root[data-theme="day"] .zonechip.warn { color: var(--gold); }
 :root[data-theme="day"] .zonechip.danger { color: var(--danger); }
-.hud-top .iconbtn { width: 38px; height: 38px; }
+.hud-top .iconbtn { width: 38px; height: 38px; flex: none; }
 
 /* ── kompas: prava traka sa crticama i stranama sveta ── */
 /* Kompas je u donjoj koloni, iznad efekata i vitalnih. Gore je delio red sa

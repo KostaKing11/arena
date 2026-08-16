@@ -678,9 +678,12 @@ const UI = (() => {
     if (z) {
       const nextIn = z.next ? Math.max(0, (z.next.startMs - d.now) / 1000) : 0;
       zc.className = 'zonechip glass' + (d.outsideZone ? ' danger' : z.warn || z.shrinking ? ' warn' : '');
+      /* Reč „Zona" je ispala: ikonica mete već kaže šta je, a svaki suvišan
+         znak u ovom redu odgrize od imena klase — pisalo je „Stre…". */
+      const zt = (z.phase ? `${z.phase}/5` : '') + (z.next ? (z.phase ? ' · ' : '') + U.mmss(nextIn) : '');
       zc.innerHTML = d.outsideZone
         ? `${icon('alert', { size: 15 })}<span>${esc(T('outsideZone'))} · ${fmtDist(d.distToZone)}</span>`
-        : `${icon('target', { size: 15 })}<span>${esc(T('zonePhase'))}${z.phase ? ' ' + z.phase + '/5' : ''}${z.next ? ' · ' + U.mmss(nextIn) : ''}</span>`;
+        : `${icon('target', { size: 15 })}<span>${esc(zt || T('zonePhase'))}</span>`;
     } else zc.innerHTML = `${icon('clock', { size: 15 })}<span>${U.mmss(Math.max(0, (d.endsAtMs - d.now) / 1000))}</span>`;
 
     /* Klasa se dodeli jednom, na startu, i posle je nigde nema — a od nje
