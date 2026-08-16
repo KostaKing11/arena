@@ -893,5 +893,35 @@ console.log('\n18. Arena se umesa kad partija utihne');
   ok('nepoznat tip ne pravi dogadjaj', R.buildLiveEvent('nema', cfg2, T0, Math.random) === null);
 }
 
+
+console.log('\n19. GPS greska ne sme da onemoguci borbu');
+{
+  /* Regresija sa terena: covek stane drugom pred nos i pise "niko nije u tom
+     pravcu". GPS u gradu gresi 10-20 m po telefonu, pa dva coveka koja stoje
+     zajedno telefoni procitaju kao 25 m razmaka — a pesnice vide 10 m. */
+  const E = R.effectiveDistM;
+
+  ok('bez greske razdaljina ostaje ista', E(12, 0, 0) === 12);
+  ok('greska se odbija od razdaljine', E(25, 8, 7) === 10, String(E(25, 8, 7)));
+  ok('nikad ispod nule', E(3, 15, 15) === 0);
+  ok('popust je ogranicen', E(90, 40, 40) === 90 - R.SLACK_CAP_M, String(E(90, 40, 40)));
+  ok('ko je stvarno daleko ostaje daleko', E(80, 10, 10) === 60);
+
+  // dvoje jedan pored drugog, svaki sa +-12 m: pesnice moraju da rade
+  const rukom = R.WEAPONS.fists;
+  const blizu = E(22, 12, 12);
+  ok('pesnice rade kad se stoji jedan uz drugog',
+    blizu <= rukom.maxM && R.rangeState(rukom, blizu) === 'in', `${blizu} m`);
+  ok('ali ne i preko pola arene',
+    R.rangeState(rukom, E(70, 12, 12)) === 'far', String(E(70, 12, 12)));
+
+  // luk i dalje mora da bude oruzje za daljinu, ne za blizinu
+  const luk = R.WEAPONS.bow;
+  ok('luk izbliza i dalje promasuje', R.rangeState(luk, E(10, 5, 5)) === 'close');
+
+  ok('Senka se vidi kad joj stanes pred nos, ne sa 30 m',
+    R.SHADOW_SEEN_M > 0 && R.SHADOW_SEEN_M <= 10, String(R.SHADOW_SEEN_M));
+}
+
 console.log(fail ? `\n${fail} provera palo\n` : `\nSve provere prosle\n`);
 process.exit(fail ? 1 : 0);

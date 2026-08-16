@@ -810,6 +810,29 @@
   const AIM_DODGE_M = 8;          // žrtva se pomeri preko ovoga → promašaj
 
   /* Anti-varanje (§10 borbe v4) — sada za SVAKI napad, ne samo za luk. */
+  /* NAJMANJA MOGUĆA razdaljina s obzirom na grešku GPS-a.
+
+     Ovo je najvažniji broj u celoj borbi. GPS u gradu greši 10–20 m po
+     telefonu. Dva čoveka koja stoje jedan pored drugog telefoni lako pročitaju
+     kao 25 m razmaka — a pesnice imaju domet 3 m i vide 10 m. Rezultat na
+     terenu: staneš čoveku pred nos i piše „niko nije u tom pravcu".
+
+     Zato se ne računa sirova razlika koordinata nego najmanja razdaljina koja
+     je moguća uz prijavljenu grešku. Popust je ograničen (SLACK_CAP_M) da se
+     domet ne pretvori u „gađaj koga hoćeš": ko je stvarno daleko, ostaje daleko. */
+  /* 25 m pokriva dva telefona sa +-12 m, sto je obican gradski slucaj. Zloupotrebu
+     ogranicava MIN_ACC_M: kome je tacnost losija od 20 m, napad je ionako zabranjen. */
+  const SLACK_CAP_M = 25;
+  function effectiveDistM(rawM, accA, accB) {
+    const slack = Math.min(SLACK_CAP_M, (accA || 0) + (accB || 0));
+    return Math.max(0, rawM - slack);
+  }
+
+  /* Senka je nevidljiva na mapi — ali ne i kad joj staneš pred nos. Da ostane
+     neslikatljiva iz bilo koje razdaljine, bila bi jedini igrač kog je fizički
+     nemoguće napasti; a ti je gledaš očima. */
+  const SHADOW_SEEN_M = 8;
+
   const MIN_ACC_M = 20;           // GPS tačnost napadača i žrtve
   const STALE_MOVE_M = 20, STALE_MS = 300000;   // ko sedi kod kuće ne napada
   const START_GRACE_MS = 30000;   // prvih 30 s od starta nema napada
@@ -1138,7 +1161,7 @@
     PACKAGE_COSTS, PACKAGE_COOLDOWN_MS, PACKAGE_DROP_M, PACKAGE_TIERS,
     CHEER_FAVOR, CHEER_COOLDOWN_MS, packageCost, canAffordTier,
     PHOTO_CONE_DEG, PHOTO_COOLDOWN_MS, AIM_SELF_MOVE_M, AIM_DODGE_M,
-    ALLY_OFFER_M, visibleRangeM,
+    ALLY_OFFER_M, visibleRangeM, effectiveDistM, SLACK_CAP_M, SHADOW_SEEN_M,
     MIN_ACC_M, STALE_MOVE_M, STALE_MS, START_GRACE_MS,
     ENTANGLE_MS, POISON_MS, POISON_DMG, POISON_TICK_MS, BETRAYAL_MUL,
     HEAL_HOLD_MS, HEAL_MOVE_M,

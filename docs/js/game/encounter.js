@@ -105,14 +105,19 @@ const Encounter = (() => {
       if (pid === Store.myId || p.alive === false || !p.pos) continue;
       if (p.hiddenUntilMs > now) continue;                 // kamuflažni ogrtač
       if (R.inSmoke(smoke, p.pos)) continue;               // meta je u dimu
-      if (p.classId === 'shadow' && p.allianceId !== me.allianceId) continue;   // Senka je nevidljiva (§5)
-      const m = U.dist(pos, p.pos);
+      /* Razdaljina se meri sa popustom za grešku GPS-a — vidi R.effectiveDistM.
+         Bez toga se sa pesnicama ne moze napasti niko, jer telefoni dvoje ljudi
+         koji stoje zajedno pokazuju i 25 m razlike. */
+      const raw = U.dist(pos, p.pos);
+      const m = R.effectiveDistM(raw, pos.accM, p.pos && p.pos.accM);
+      // Senka je nevidljiva na mapi, ali ne i kad joj stanes pred nos
+      if (p.classId === 'shadow' && p.allianceId !== me.allianceId && m > R.SHADOW_SEEN_M) continue;
       if (m > maxM) continue;
       const brg = U.bearing(pos, p.pos);
       const diff = heading == null ? 0 : Math.abs(U.angleDiff(heading, brg));
       if (heading != null && diff > R.PHOTO_CONE_DEG) continue;
       out.push({
-        pid, p, distM: m, bearing: brg, angleDiff: diff,
+        pid, p, distM: m, rawM: raw, bearing: brg, angleDiff: diff,
         ally: !!(p.allianceId && p.allianceId === me.allianceId),
       });
     }

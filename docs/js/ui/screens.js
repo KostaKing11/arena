@@ -565,14 +565,18 @@ const UI = (() => {
     const sp = me.startPos;
     const pos = Geo.pos;
     const dist = sp && pos ? U.dist(pos, sp) : null;
-    /* Prag ne sme da bude manji od greske GPS-a. Sa fiksnih 10 m se na ulici
-       prosto nije moglo "stici": tacnost ume da bude 15 m, pa telefon nikad ne
-       prijavi da si dovoljno blizu i partija ne krene. */
-    const near = Math.max(10, (pos && pos.accM) || 0);
-    const close = dist != null && dist <= near;
+    /* Prag ne sme da bude manji od greske GPS-a — sa fiksnih 10 m se na ulici
+       prosto nije moglo "stici". A startne tacke se biraju nasumicno u krugu,
+       bez ikakvog znanja o zgradama, pa te zna odvesti i tamo gde se ne moze
+       uci. Zato: velikodusan prag, i u poslednjih 60 s pripreme dugme radi bez
+       obzira na razdaljinu — niko ne sme da ostane zakljucan ispred tudje
+       kapije dok partija krece. */
     const meta = Store.meta();
     const left = meta.countdownAtMs ? Math.max(0, (meta.countdownAtMs - d.now) / 1000)
       : Math.max(0, ((meta.prepEndsAtMs || 0) - d.now) / 1000);
+    const near = Math.max(25, ((pos && pos.accM) || 0) * 1.5);
+    const rush = left > 0 && left <= 60;
+    const close = rush || (dist != null && dist <= near);
     const brg = sp && pos ? U.bearing(pos, sp) : 0;
     const rot = Compass.heading != null ? brg - Compass.heading : brg;
 
