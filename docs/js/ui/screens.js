@@ -565,7 +565,11 @@ const UI = (() => {
     const sp = me.startPos;
     const pos = Geo.pos;
     const dist = sp && pos ? U.dist(pos, sp) : null;
-    const close = dist != null && dist <= 10;
+    /* Prag ne sme da bude manji od greske GPS-a. Sa fiksnih 10 m se na ulici
+       prosto nije moglo "stici": tacnost ume da bude 15 m, pa telefon nikad ne
+       prijavi da si dovoljno blizu i partija ne krene. */
+    const near = Math.max(10, (pos && pos.accM) || 0);
+    const close = dist != null && dist <= near;
     const meta = Store.meta();
     const left = meta.countdownAtMs ? Math.max(0, (meta.countdownAtMs - d.now) / 1000)
       : Math.max(0, ((meta.prepEndsAtMs || 0) - d.now) / 1000);
@@ -1168,7 +1172,11 @@ const UI = (() => {
       if (holdMs) {
         ub.classList.add('holdable');
         ub.onclick = null;
-        holdFill(ub, holdMs, {}).then(async (ok) => {
+        /* repeat je OBAVEZAN: bez njega prvi kratak tap resi obecanje sa
+           false, slusaci se skidaju i dugme ostaje mrtvo zauvek. Na terenu je
+           to znacilo da se ne mozes izleciti — svako prvo pipne dugme pre nego
+           sto ga stvarno zadrzi. */
+        holdFill(ub, holdMs, { repeat: true }).then(async (ok) => {
           if (!ok) return;
           m.close(); s.close(); await Items.use(i, { holdEl: null });
         });

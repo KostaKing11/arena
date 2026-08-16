@@ -229,13 +229,22 @@ const Encounter = (() => {
     const shot = canvas.toDataURL('image/jpeg', 0.5);
     const thumb = shrink(canvas, THUMB_MAX_PX, 0.4);
 
+    /* Detektor osobe je SAVET, ne brava.
+
+       Ranije je promasaj detektora i odbijao napad i palio 15 s hladjenja — pa
+       je jedan promasaj znacio cetvrt minuta bez ijedne prilike. Na terenu je
+       promasivao stalno: po mraku, kad je meta bocno, u jakni, iza grma. Videno
+       uzivo: 90% pokusaja je zavrsilo sa "nema nikoga", dok je covek stajao
+       ispred.
+
+       Posao koji je trebalo da radi — da se ne puca kroz zid — vec radi GPS i
+       kompas: meta mora biti u konusu i u dometu oruzja da bi uopste dosla do
+       ovog koraka. Zato se rezultat detektora sada samo pamti (sawPerson) i
+       ne zaustavlja nista. */
     if (!detectorReady()) return { ok: true, photo: shot, thumb, usedDetector: false };
     const boxes = detectPersons(canvas);
-    if (boxes && boxes.length === 0) {
-      lastShotMs = now;                     // 15 s da se kamera ne koristi kao radar
-      return { ok: false, reason: 'noperson', photo: shot, thumb };
-    }
-    return { ok: true, photo: shot, thumb, usedDetector: true, boxes };
+    return { ok: true, photo: shot, thumb, usedDetector: true, boxes,
+      sawPerson: !(boxes && boxes.length === 0) };
   }
 
   /* Mala kopija snimka za bazu.
