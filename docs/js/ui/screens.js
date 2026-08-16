@@ -2395,7 +2395,7 @@ const UI = (() => {
     const cost = R.packageCost(Mentor.sent());
     const lim = Mentor.limits();
 
-    const questCard = !isMentor ? '' : q
+    const questCard = (!isMentor || p.alive === false) ? '' : q
       ? `<div class="card stack quest-live">
           <div class="card-title">${esc(T('questActive'))}</div>
           <div class="row"><span class="goldc">${icon('scroll', { size: 22 })}</span>
@@ -2428,7 +2428,7 @@ const UI = (() => {
         </div>
         <div class="vitals" style="margin-top:var(--s3)" id="mVitals"></div>
         <div class="fx-bar" style="position:static;margin-top:var(--s2)" id="mFx" hidden></div>
-        ${p.alive === false ? `<p class="dangerc center" style="margin-top:var(--s3)">${esc(T('youDied'))}</p>` : ''}
+        ${p.alive === false ? `<p class="dangerc center" style="margin-top:var(--s3)">${esc(T('watchDead'))}</p>` : ''}
       </div>
 
       ${questCard}

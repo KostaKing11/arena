@@ -231,7 +231,7 @@ const I18N = {
     mapTwoFingers: 'Pomeri mapu sa dva prsta',
     yourMentorTitle: 'Tvoj mentor', inviteMentor: 'Pozovi mentora',
     changeMentor: 'Promeni', changeMentorAsk: 'Sigurno? Sadašnji mentor gubi mesto i link postaje slobodan.',
-    mentorQrBody: 'Neka ti neko ko ne igra skenira ovaj kod. On ti gleda stanje, borbe i moze da ti salje pakete.',
+    mentorQrBody: 'Neka ti neko ko ne igra skenira ovaj kod. On ti gleda stanje, borbe i može da ti šalje pakete.',
     mentorClaimed: 'Dobio si mentora', mentorWatching: 'Gleda tvoje stanje i moze da ti posalje paket.',
     yourTribute: 'Tvoj tribut', noFavorYet: 'Još ništa — naklonost zavisi od tvog tributa.',
     favorLog: 'Odakle naklonost',
