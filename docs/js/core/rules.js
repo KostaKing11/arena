@@ -594,6 +594,69 @@
   }
 
   /* ═══════════════════ 17. MENTOR ═══════════════════ */
+  /* ═══════════════════ 17b. MENTOR v2 ═══════════════════
+     Naklonost je ranije dolazila od minigejmova na mentorovom telefonu, pa
+     mentor nikad nije ni gledao partiju — farmao je poene i slao pakete u
+     nedogled. Sada naklonost dolazi ISKLJUČIVO od toga šta uradi njegov
+     tribut. Mentor gleda, savetuje i zadaje zadatke; ne igra svoju igru. */
+  const MENTOR_FAVOR = {
+    survivedShrink: 1,   // tribut bio u zoni kad se skupila
+    landedKill: 3,       // tribut nekoga ubio
+    legendaryPick: 2,    // tribut uzeo legendarni predmet
+    finalFive: 3,        // ostalo ih je 5 ili manje, tribut među njima (jednom)
+    questDone: 2,        // ispunjen zadatak
+  };
+
+  /* Zadaci koje mentor zadaje. NIKAD slobodan tekst — samo iz ove liste;
+     inače je mentorski kanal način da se dogovara i vara.
+     `check` je čista funkcija: (igrač, snimak na početku zadatka, kontekst). */
+  const QUEST_TTL_MS = 300000;      // 5 min pa ističe
+  const QUEST_HEAL = 15;            // tribut dobija život kad ispuni
+  const QUEST_MOVE_M = 300;
+  const QUEST_FED = 80;
+  const RARE_PLUS = ['rare', 'epic', 'legendary'];
+
+  const QUESTS = {
+    weaponRare:  { check: (p) => RARE_PLUS.includes(weaponRarity(p.weapon)) },
+    cornucopia:  { check: (p, base, ctx) => !!base.cornVisited && !!ctx && !ctx.inCorn },
+    setTrap:     { check: (p, base) => (p.trapsSet || 0) > (base.trapsSet || 0) },
+    attackAny:   { check: (p, base) => (p.lastAttackAtMs || 0) > (base.atMs || 0) },
+    wellFed:     { check: (p) => (p.hunger || 0) >= QUEST_FED && (p.thirst || 0) >= QUEST_FED },
+    moveFar:     { check: (p, base) => (p.distanceWalkedM || 0) - (base.walkedM || 0) >= QUEST_MOVE_M },
+  };
+  const QUEST_IDS = Object.keys(QUESTS);
+
+  /** Retkost oružja koje igrač drži — 'fists' nema svoj predmet. */
+  function weaponRarity(w) {
+    if (!w || w === 'fists') return 'common';
+    const key = 'w' + w.charAt(0).toUpperCase() + w.slice(1);
+    return (ITEMS[key] || {}).rarity || 'common';
+  }
+
+  /** Tri ponuđena zadatka — isti seed i redni broj uvek daju istu trojku. */
+  function questOffer(seed, questNo) {
+    const rng = U.rngFor(seed, 'quest', questNo || 0);
+    return U.shuffle(rng, QUEST_IDS).slice(0, 3);
+  }
+
+  /** Da li je zadatak ispunjen. `base` je snimak napravljen pri zadavanju. */
+  function questSatisfied(id, p, base, ctx) {
+    const q = QUESTS[id];
+    if (!q || !p) return false;
+    return !!q.check(p, base || {}, ctx || {});
+  }
+  const questExpired = (q, nowMs) => !!q && nowMs >= (q.expiresAtMs || 0);
+
+  /* Koliko puta mentor uopšte sme da se umeša. Naklonost određuje ŠTA šalje,
+     ovo koliko PUTA — inače duga partija znači beskonačno paketa. */
+  function mentorLimits(durationMin) {
+    const n = Math.floor((durationMin || 30) / 15);
+    return {
+      quests: U.clamp(n, 2, 6),
+      packages: U.clamp(n, 2, 5),
+    };
+  }
+
   const PACKAGE_COSTS = [1, 3, 6, 10];          // cena raste po paketu (§17)
   const PACKAGE_COOLDOWN_MS = 300000;           // max 1 paket na 5 min po igraču
   const PACKAGE_DROP_M = 15;                    // paket pada 15 m od igrača
@@ -971,6 +1034,8 @@
     RARITY_W, CORN_RADIUS_M, EDGE_MARGIN_M, generateItems, generateArrowCaches, startPoints,
     SPARKS_PER_PLAYER, generateSparks, zoneAtPhaseSettled, SPARK_REACH_M, SPARK_ZONE_MARGIN_M, GHOST_OUTER_M,
     HALLUCINATION_MS, HALLUCINATION_POP_M, hallucinations,
+    MENTOR_FAVOR, QUESTS, QUEST_IDS, QUEST_TTL_MS, QUEST_HEAL, QUEST_MOVE_M, QUEST_FED,
+    questOffer, questSatisfied, questExpired, mentorLimits, weaponRarity,
     PACKAGE_COSTS, PACKAGE_COOLDOWN_MS, PACKAGE_DROP_M, PACKAGE_TIERS,
     CHEER_FAVOR, CHEER_COOLDOWN_MS, packageCost, canAffordTier,
     PHOTO_CONE_DEG, PHOTO_COOLDOWN_MS, AIM_SELF_MOVE_M, AIM_DODGE_M,

@@ -603,5 +603,135 @@ console.log('\n14. Duhovi ne mogu da zatrpaju partiju dogadjajima');
     (sch.events || []).every((e) => !!R.EVENTS[e.type]));
 }
 
+
+console.log('\n15. Mentor v2 — naklonost dolazi od tributa');
+{
+  /* Minigejmovi su izbaceni: mentor je mogao da farma poene ne gledajuci
+     partiju uopste. Sad svaki poen ima uzrok u areni. */
+  ok('svih pet razloga ima cenu', ['survivedShrink', 'landedKill', 'legendaryPick', 'finalFive', 'questDone']
+    .every((k) => R.MENTOR_FAVOR[k] > 0));
+  ok('ubistvo vredi najvise od pojedinacnih dela',
+    R.MENTOR_FAVOR.landedKill >= R.MENTOR_FAVOR.legendaryPick
+    && R.MENTOR_FAVOR.landedKill >= R.MENTOR_FAVOR.survivedShrink);
+
+  // sabiranje ide tacno po tabeli, bez skrivenih bonusa
+  const put = ['survivedShrink', 'survivedShrink', 'landedKill', 'questDone', 'legendaryPick'];
+  const zbir = put.reduce((n, k) => n + R.MENTOR_FAVOR[k], 0);
+  ok('naklonost se sabira tacno po tabeli', zbir === 1 + 1 + 3 + 2 + 2, String(zbir));
+
+  /* finalFive se dodeljuje JEDNOM: motor ima zastavicu, pa se isti prag ne
+     placa svake sekunde dok ih ima petoro. */
+  let dato = 0, flag = false;
+  for (let zivih = 9; zivih >= 1; zivih--) {
+    for (let tick = 0; tick < 5; tick++) {
+      if (!flag && zivih <= 5 && zivih > 0) { flag = true; dato += zivih; }
+    }
+  }
+  ok('finalFive se dodeli tacno jednom', dato === 5, `dodeljeno ${dato} puta`);
+
+  /* Regresija: prvo skupljanje je ostajalo NEPLACENO. Motor pamti poslednju
+     vidjenu fazu i placa svaki porast; ako se prvo vidjenje ne zapamti dok je
+     faza jos 0, prelaz 0 -> 1 se protumaci kao „tek sam se prikljucio". */
+  function isplate(faze) {
+    let vidjena = -1, n = 0;
+    for (const ph of faze) {
+      if (vidjena < 0) vidjena = ph;
+      else if (ph > vidjena) { n++; vidjena = ph; }
+    }
+    return n;
+  }
+  ok('prvo skupljanje se placa', isplate([0, 0, 0, 1]) === 1, String(isplate([0, 0, 0, 1])));
+  ok('svih pet skupljanja se placa',
+    isplate([0, 0, 1, 1, 2, 2, 3, 4, 4, 5]) === 5, String(isplate([0, 0, 1, 1, 2, 2, 3, 4, 4, 5])));
+  ok('ista faza se ne placa dvaput', isplate([1, 1, 1, 1]) === 0);
+  ok('domacin koji se prikljuci usred partije ne placa unazad',
+    isplate([3, 3, 4]) === 1, String(isplate([3, 3, 4])));
+
+  // limiti po duzini partije
+  const L = R.mentorLimits;
+  ok('pola sata daje 2 zadatka i 2 paketa', L(30).quests === 2 && L(30).packages === 2);
+  ok('sat vremena daje 4 i 4', L(60).quests === 4 && L(60).packages === 4);
+  ok('sat i po daje 6 i 5', L(90).quests === 6 && L(90).packages === 5);
+  ok('kratka partija ne pada ispod 2', L(10).quests === 2 && L(10).packages === 2);
+  ok('duga partija ne raste preko 6/5', L(300).quests === 6 && L(300).packages === 5);
+  ok('limiti nikad ne padaju sa trajanjem', (() => {
+    let pq = 0, pp = 0;
+    for (let m = 10; m <= 180; m += 10) {
+      const l = L(m);
+      if (l.quests < pq || l.packages < pp) return false;
+      pq = l.quests; pp = l.packages;
+    }
+    return true;
+  })());
+
+  // potrosen limit paketa blokira slanje, i pre provere naklonosti
+  const blokiran = (poslato, min) => Math.max(0, L(min).packages - poslato) <= 0;
+  ok('potrosen limit paketa blokira slanje', blokiran(2, 30) && !blokiran(1, 30));
+  ok('bogat mentor i dalje udara u limit',
+    blokiran(4, 60) && R.canAffordTier('water', 4, 999),
+    'ima naklonosti napretek, ali nema vise poteza');
+}
+
+console.log('\n15b. Zadaci koje mentor zadaje');
+{
+  ok('ima tacno sest zadataka', R.QUEST_IDS.length === 6, String(R.QUEST_IDS.length));
+  ok('svaki zadatak ima proveru', R.QUEST_IDS.every((id) => typeof R.QUESTS[id].check === 'function'));
+  ok('zadatak traje 5 minuta', R.QUEST_TTL_MS === 300000);
+
+  // ponuda je deterministicka iz seed-a i rednog broja
+  const a = R.questOffer('mz', 0), b = R.questOffer('mz', 0);
+  ok('ponuda je tri zadatka', a.length === 3, String(a.length));
+  ok('ista ponuda iz istog seed-a', a.join(',') === b.join(','));
+  ok('u ponudi nema duplikata', new Set(a).size === 3);
+  ok('sledeci redni broj daje drugu ponudu',
+    R.questOffer('mz', 1).join(',') !== a.join(','));
+  ok('drugi seed daje drugu ponudu', R.questOffer('xx', 0).join(',') !== a.join(','));
+  ok('sve ponudjeno stvarno postoji', [0, 1, 2, 3, 4].every((n) =>
+    R.questOffer('mz', n).every((id) => !!R.QUESTS[id])));
+
+  // istek oslobadja mesto za sledeci
+  const q = { id: 'setTrap', atMs: T0, expiresAtMs: T0 + R.QUEST_TTL_MS };
+  ok('zadatak ne istekne pre vremena', !R.questExpired(q, T0 + R.QUEST_TTL_MS - 1000));
+  ok('zadatak istekne posle 5 min', R.questExpired(q, T0 + R.QUEST_TTL_MS));
+  ok('istekao zadatak oslobadja mesto', (() => {
+    const aktivan = (nowMs) => (R.questExpired(q, nowMs) ? null : q);
+    return aktivan(T0 + 60000) === q && aktivan(T0 + R.QUEST_TTL_MS + 1) === null;
+  })());
+
+  /* Provere gledaju SNIMAK sa pocetka zadatka. Bez toga bi „postavi zamku"
+     bio ispunjen zamkom postavljenom deset minuta ranije. */
+  const base = { atMs: T0, trapsSet: 3, walkedM: 1200, cornVisited: false };
+  ok('stara zamka ne ispunjava zadatak',
+    !R.questSatisfied('setTrap', { trapsSet: 3 }, base));
+  ok('nova zamka ispunjava', R.questSatisfied('setTrap', { trapsSet: 4 }, base));
+
+  ok('napad pre zadatka se ne broji',
+    !R.questSatisfied('attackAny', { lastAttackAtMs: T0 - 1000 }, base));
+  ok('napad posle zadatka se broji',
+    R.questSatisfied('attackAny', { lastAttackAtMs: T0 + 1000 }, base));
+
+  ok('299 m nije dovoljno',
+    !R.questSatisfied('moveFar', { distanceWalkedM: 1200 + R.QUEST_MOVE_M - 1 }, base));
+  ok('300 m jeste', R.questSatisfied('moveFar', { distanceWalkedM: 1200 + R.QUEST_MOVE_M }, base));
+
+  ok('pesnice nisu pravo oruzje', !R.questSatisfied('weaponRare', { weapon: 'fists' }, base));
+  ok('toljaga nije dovoljno retka', !R.questSatisfied('weaponRare', { weapon: 'club' }, base));
+  ok('koplje jeste', R.questSatisfied('weaponRare', { weapon: 'spear' }, base));
+  ok('trozubac jeste', R.questSatisfied('weaponRare', { weapon: 'trident' }, base));
+  ok('retkost oruzja se cita iz predmeta',
+    R.weaponRarity('trident') === 'legendary' && R.weaponRarity('fists') === 'common');
+
+  ok('samo sit nije dovoljno', !R.questSatisfied('wellFed', { hunger: 95, thirst: 40 }, base));
+  ok('sit i napojen jeste', R.questSatisfied('wellFed', { hunger: 85, thirst: 85 }, base));
+
+  // kornukopija: udji PA izadji — nijedno samo za sebe ne vredi
+  ok('ulazak sam po sebi ne ispunjava',
+    !R.questSatisfied('cornucopia', {}, { ...base, cornVisited: true }, { inCorn: true }));
+  ok('izlazak bez ulaska ne ispunjava',
+    !R.questSatisfied('cornucopia', {}, base, { inCorn: false }));
+  ok('udji pa izadji ispunjava',
+    R.questSatisfied('cornucopia', {}, { ...base, cornVisited: true }, { inCorn: false }));
+}
+
 console.log(fail ? `\n${fail} provera palo\n` : `\nSve provere prosle\n`);
 process.exit(fail ? 1 : 0);

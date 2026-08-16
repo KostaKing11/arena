@@ -131,6 +131,27 @@
 /* ───────────────────────── gledanje jednog igrača (duh) ───────────────────────── */
 #s-watch { background: var(--ink-1); }
 .watch-map { height: 40vh; min-height: 220px; flex: none; background: var(--map-bg); position: relative; }
+/* Mentorska mapa je glavni deo tog ekrana, ne sličica uz karticu. */
+.mentor-map-wrap { position: relative; flex: none; }
+.mentor-map { height: 42vh; min-height: 240px; background: var(--map-bg); }
+#mentorFollow { position: absolute; right: var(--s3); bottom: var(--s3); z-index: 500; }
+#mentorFollow.on { border-color: var(--gold); color: var(--gold-hi); }
+
+/* Zadatak: tri ponude, pa jedan aktivan sa odbrojavačem. */
+.quest-offer { display: flex; align-items: center; gap: var(--s3); width: 100%; text-align: left;
+  min-height: 56px; padding: var(--s2) var(--s3); background: var(--ink-2);
+  border: 1px solid var(--line-2); border-radius: var(--r-md); }
+.quest-offer + .quest-offer { margin-top: var(--s2); }
+.quest-offer .nm { display: block; font-weight: 700; }
+.quest-offer .ds { display: block; font-size: var(--fs-xs); color: var(--text-3); line-height: 1.35; }
+.quest-offer:disabled { opacity: .5; }
+.quest-live { border-color: var(--gold); }
+
+/* Dnevnik naklonosti: zašto je mentor dobio svaki poen. */
+.favor-row { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) 0; font-size: var(--fs-sm); }
+.favor-row + .favor-row { border-top: 1px solid var(--line-2); }
+.favor-row b { margin-left: auto; color: var(--gold); font-variant-numeric: tabular-nums; }
+.favor-row .when { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
 
 /* Njegovi udarci: zadati su zeleni sa desne strane, primljeni crveni. */
 .hit-row {

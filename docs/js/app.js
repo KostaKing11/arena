@@ -533,6 +533,12 @@ const App = (() => {
       }
     }
     if (kind === 'died') { toast(T('youDied'), 'danger', 'skull'); Haptics.fire('death'); }
+    // zadatak od mentora: obe strane moraju da vide ishod, i uspeh i istek
+    if (kind === 'questDone') {
+      toast(`${T('questDoneMsg')} · +${R.QUEST_HEAL} ${T('hp').toLowerCase()}`, 'good', 'scroll');
+      Haptics.fire('win'); Sfx.pickup();
+    }
+    if (kind === 'questExpired') toast(T('questExpiredMsg'), 'gold', 'clock');
     if (kind === 'zoneWarn') toast(T('zoneWarn') + ' 30 s', 'danger', 'alert');
     if (kind === 'eventWarn') toast(eventName(d.type), 'gold', EVENT_ICON[d.type] || 'spark');
 

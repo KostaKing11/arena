@@ -116,6 +116,11 @@ const Engine = (() => {
     const elapsed = now - last;
     if (elapsed < 900) return;
 
+    /* Zadatak mentora ide u OVOM prolazu — ne pravi sebi zaseban otkucaj.
+       Nagradu u životu NE upisuje sam nego je vraća, pa da je `survivalTick`
+       ispod ne prepiše vrednošću koju je izračunao iz stanja PRE lečenja. */
+    const questHeal = await checkQuest(d, me);
+
     const cls = R.CLASSES[me.classId];
     const patch = R.survivalTick(me, cls, elapsed, {
       nowMs: now,
@@ -133,6 +138,7 @@ const Engine = (() => {
     // zid vatre je trenutna smrt (§15)
     if (d.inFire && !d.paused) { patch.hp = 0; patch._cause = 'fire'; }
 
+    if (questHeal) patch.hp = Math.min(me.maxHp || 100, patch.hp + questHeal);
     if (patch.hp <= 0) return die(patch._cause || causeOf(d));
     const w = { hunger: patch.hunger, thirst: patch.thirst, hp: patch.hp, lastTickMs: patch.lastTickMs };
     // Traker ose ostavljaju halucinacije još 5 minuta pošto izađeš (§15)
@@ -144,6 +150,38 @@ const Engine = (() => {
     }
     await Store.updateMe(w);
     warnLow(me, patch);
+  }
+
+  /* Zadatak od mentora: ponuda, ne naredba. Tribut ga sme ignorisati — istekne
+     za 5 minuta i mentor dobija pravo na sledeći. Proveru radi tributov telefon,
+     jer je to njegov čvor (§0.2), a nagradu (+HP njemu, +naklonost mentoru)
+     upisuje istim potezom. */
+  async function checkQuest(d, me) {
+    const q = me.quest;
+    if (!q || !q.id) return 0;
+    const now = d.now;
+
+    if (R.questExpired(q, now)) {
+      await Store.updateMe({ quest: null });
+      emit('questExpired', q);
+      return 0;
+    }
+
+    /* Kornukopija se pamti u dva koraka: uđi pa izađi živ. Bez zapamćenog
+       ulaska bi zadatak bio ispunjen time što nikad nisi ni prišao. */
+    const cfg = d.cfg || {};
+    const inCorn = !!(Geo.pos && cfg.center && U.dist(Geo.pos, cfg.center) <= R.CORN_RADIUS_M);
+    if (inCorn && !q.cornVisited) {
+      await Store.ref(`players/${Store.myId}/quest/cornVisited`).set(true);
+      return 0;                                // izlazak se broji tek sledeći otkucaj
+    }
+
+    if (!R.questSatisfied(q.id, me, q, { inCorn })) return 0;
+
+    await Store.updateMe({ quest: null, questsDone: (me.questsDone || 0) + 1 });
+    await Mentor.awardFavor(Store.myId, 'questDone');
+    emit('questDone', q);
+    return R.QUEST_HEAL;                       // život dodaje otkucaj koji ga i računa
   }
 
   function causeOf(d) {
@@ -258,6 +296,41 @@ const Engine = (() => {
     if (meta.state === 'LIVE' || meta.state === 'FINAL_TWO') {
       await maintainItems(d);
       await maintainDrops(d);
+      await mentorFavor(d, P, aliveIds);
+    }
+  }
+
+  /* ═══════════════ naklonost za mentore (§17b) ═══════════════
+     Dve stvari koje niko pojedinačno ne „uradi", pa ih broji domaćin: preživeti
+     skupljanje zone i ući u poslednjih pet. Sve ostalo (ubistvo, legendarni
+     predmet, zadatak) upisuje onaj kome se desilo, na svom telefonu.
+
+     Mora domaćin i mora JEDNOM: kad bi svaki telefon nagrađivao, ista zona bi
+     se platila onoliko puta koliko ima igrača u sobi. */
+  let favorPhase = -1, finalFiveDone = false;
+  async function mentorFavor(d, P, aliveIds) {
+    if (!d.zone) return;
+
+    /* Zona se slegla u novu fazu — nagradi svakog ko je tada unutra.
+       Prvo viđenje se samo zapamti: domaćin koji se priključi usred partije
+       zatiče fazu 3 i ne sme da isplati tri skupljanja koja nije video. Zato
+       se pamti i faza 0 — inače bi baš PRVO skupljanje ostalo neplaćeno. */
+    const ph = d.zone.phase || 0;
+    if (favorPhase < 0) favorPhase = ph;
+    else if (ph > favorPhase) {
+      for (const id of aliveIds) {
+        const p = P[id];
+        if (!p.pos) continue;
+        if (U.dist(p.pos, d.zone.center) > d.zone.radiusM) continue;
+        await Mentor.awardFavor(id, 'survivedShrink');
+      }
+      favorPhase = ph;
+    }
+
+    // poslednjih pet — jednom po partiji, svima koji su tada još živi
+    if (!finalFiveDone && aliveIds.length > 0 && aliveIds.length <= 5) {
+      finalFiveDone = true;
+      for (const id of aliveIds) await Mentor.awardFavor(id, 'finalFive');
     }
   }
 
@@ -429,6 +502,9 @@ const Engine = (() => {
   return {
     start, stop, on, derive, die, dropAll,
     get d() { return derived || derive(); },
-    resetSeen() { seen.deaths.clear(); seen.feed.clear(); seen.events.clear(); seen.myEvents.clear(); seen.zonePhase = -1; booted = false; },
+    resetSeen() {
+      seen.deaths.clear(); seen.feed.clear(); seen.events.clear(); seen.myEvents.clear();
+      seen.zonePhase = -1; favorPhase = -1; finalFiveDone = false; booted = false;
+    },
   };
 })();

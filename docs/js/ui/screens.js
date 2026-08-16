@@ -156,7 +156,10 @@ const UI = (() => {
       </div>
       <div class="card stack-lg">
         ${slider('diameterM', T('diameter'), 200, 2000, 50, cfg.diameterM, 'm', rec.diameterM)}
-        ${slider('durationMin', T('duration'), 15, 120, 5, cfg.durationMin, 'min', rec.durationMin)}
+        ${/* korak od 10 min = pun dan (5 svetlih + 5 mračnih); ranije je bio 5 */ ''}
+        ${slider('durationMin', T('duration'), 10, 120, R.DURATION_STEP_MIN, cfg.durationMin, 'min', rec.durationMin)}
+        ${/* šta trajanje zapravo znači: koliko puta duhovi i mentori smeju da uđu u igru */ ''}
+        <p class="tiny dim" id="durMeans" style="margin:0"></p>
         ${slider('itemDensityPct', T('itemDensity'), 50, 150, 10, Math.round((cfg.itemDensity || 1) * 100), '%', 100)}
         ${slider('prepMinutes', T('prepTime'), 3, 30, 1, cfg.prepMinutes, 'min', 10)}
         <div class="field"><div class="label">${esc(T('startMode'))}</div>
@@ -244,6 +247,17 @@ const UI = (() => {
       hint.textContent = (recVal ? `${T('recommended')}: ${recVal} ${sl.dataset.unit}` : '')
         + (off > 1 ? ' — ' + T('tooFarFromRecommended') : '');
     });
+
+    /* Trajanje nije samo broj minuta: iz njega ispada koliko dana i noći
+       partija ima i koliko puta duhovi i mentori uopšte smeju da se umešaju.
+       Domaćin to mora da vidi dok vuče klizač, ne da otkrije usred igre. */
+    const dm = $('#durMeans');
+    if (dm) {
+      const min = cfg.durationMin || 30;
+      const lim = R.mentorLimits(min);
+      dm.textContent = T('durMeans',
+        Math.round(min / (R.DAY_CYCLE_MS / 60000)), R.ghostEventBudget(min), lim.quests, lim.packages);
+    }
 
     if (smap && cfg.center) {
       smap.drawZone({ center: cfg.center, radiusM: cfg.diameterM / 2, shrinking: false }, cfg);
@@ -804,8 +818,27 @@ const UI = (() => {
         ${icon('users', { size: 13 })}<b>${esc(men)}</b></span>`);
     }
 
+    /* Zadatak od mentora stoji prvi, sa odbrojavačem — ponuda, ne naredba.
+       Igrač sme da ga ignoriše; istekne sam i mentor dobija pravo na sledeći. */
+    const q = (d.me || {}).quest;
+    if (q && q.id && !R.questExpired(q, d.now)) {
+      chips.unshift(`<span class="fx gold" id="fxQuest" title="${esc(questDesc(q.id))}">
+        ${icon('scroll', { size: 13 })}<b>${U.mmss(Math.max(0, (q.expiresAtMs - d.now) / 1000))}</b></span>`);
+    }
+
     bar.innerHTML = chips.join('');
     bar.hidden = !chips.length;
+    const fq = $('#fxQuest', bar);
+    if (fq) fq.onclick = () => {
+      const m = modal(`<div class="center stack">
+        <div class="goldc">${icon('scroll', { size: 44 })}</div>
+        <div class="tiny upper dim">${esc(T('questFromMentor'))}</div>
+        <h2>${esc(questName(q.id))}</h2>
+        <p class="dim">${esc(questDesc(q.id))}</p>
+        <p class="tiny goldc">+${R.QUEST_HEAL} ${esc(T('hp').toLowerCase())} · ${esc(T('questIgnorable'))}</p>
+        <button class="btn primary full" id="fqOk">${esc(T('ok'))}</button></div>`);
+      $('#fqOk', m).onclick = () => m.close();
+    };
     const fm = $('#fxMentor', bar);
     if (fm) fm.onclick = () => {
       const m = modal(`<div class="center stack">
@@ -2094,16 +2127,165 @@ const UI = (() => {
     watchShotTimer = setTimeout(() => { box.hidden = true; }, 2000);
   }
 
-  /* ═══════════════ mentor i gledalac (§17) ═══════════════ */
+  /* ═══════════════ mentor i gledalac (§17, §17b) ═══════════════
+     Mentor više ne igra svoju igru na svom telefonu. Ekran je sada MAPA sa
+     karticom tributa ispod: gleda partiju, zadaje zadatke i šalje pakete.
+
+     Mapa se pravi jednom i pamti se šta na njoj stoji; kartica se gradi jednom
+     po stanju, a otkucaj menja samo brojeve. Da se `innerHTML` prepisuje svake
+     sekunde kao ranije, mapa bi se rušila i pravila iznova pri svakom otkucaju. */
+  let mmap = null, mentorFollow = true, mentorKey = null;
+  /* Ostali živi se osvežavaju na 30 s, namerno. Mentor je van arene ali ima
+     telefon — da vidi sve uživo, zvao bi tributa i rekao mu ko mu prilazi.
+     Sa pola minuta zakašnjenja vidiš tok partije, a dojava je prekasna. */
+  const FOE_LAG_MS = 30000;
+  let foeSnap = { atMs: 0, list: [] };
+
+  function mentorMap() {
+    if (mmap) return mmap;
+    mmap = makeMap('mentorMap', { zoom: 16, noFog: true });
+    mmap.setFull(true);
+    mmap.setFollow(false);                 // mentor nema svoju poziciju u areni
+    mmap.map.on('dragstart', () => { mentorFollow = false; syncFollowBtn(); });
+    const b = $('#mentorFollow');
+    b.innerHTML = icon('crosshair', { size: 20 });
+    b.onclick = () => { mentorFollow = true; syncFollowBtn(); centerOnTribute(); };
+    syncFollowBtn();
+    setTimeout(() => mmap && mmap.refresh(), 60);
+    return mmap;
+  }
+  const syncFollowBtn = () => {
+    const b = $('#mentorFollow');
+    if (b) b.classList.toggle('on', mentorFollow);
+  };
+  function centerOnTribute() {
+    const p = Mentor.target();
+    if (mmap && p && p.pos) mmap.map.setView([p.pos.lat, p.pos.lng], mmap.map.getZoom(), { animate: true, duration: 0.4 });
+  }
+
+  /** Šta mentor vidi na mapi: tribut uživo, saveznici uživo, ostali sa kašnjenjem. */
+  function mentorMarkers(d, p) {
+    const out = [];
+    if (p.pos) out.push({ id: Mentor.targetPid, lat: p.pos.lat, lng: p.pos.lng, kind: 'me' });
+
+    const P = Store.players();
+    for (const [pid, q] of Object.entries(P)) {
+      if (pid === Mentor.targetPid || q.alive === false || !q.pos) continue;
+      if (p.allianceId && q.allianceId === p.allianceId) {
+        out.push({ id: pid, lat: q.pos.lat, lng: q.pos.lng, kind: 'ally' });
+      }
+    }
+
+    if (d.now - foeSnap.atMs > FOE_LAG_MS) {
+      foeSnap = {
+        atMs: d.now,
+        list: Object.entries(P)
+          .filter(([pid, q]) => pid !== Mentor.targetPid && q.alive !== false && q.pos
+            && !(p.allianceId && q.allianceId === p.allianceId))
+          .map(([pid, q]) => ({ id: pid, lat: q.pos.lat, lng: q.pos.lng, kind: 'foe' })),
+      };
+    }
+    return out.concat(foeSnap.list);
+  }
+
+  /** Predmeti: samo ono što i sam tribut vidi, plus legendarni sanduci globalno
+      — oni ionako svima šalju objavu kad se otvore. */
+  function mentorItems(p) {
+    const vis = R.visionFor(p, {}).itemsM;
+    const out = [];
+    for (const [id, it] of Object.entries(Store.items())) {
+      if (it.takenBy) continue;
+      const legendary = (R.ITEMS[it.type] || {}).rarity === 'legendary';
+      if (!legendary && !(p.pos && U.dist(p.pos, it) <= vis)) continue;
+      out.push({ id, ...it });
+    }
+    return out;
+  }
+
   function renderMentor(d) {
     const p = Mentor.target();
     const isMentor = Mentor.mode === 'mentor';
     $('#mentorTitle').textContent = isMentor ? T('mentorTitle') : T('spectator');
     $('#favorChip').innerHTML = `${icon('spark', { size: 16 })}<span>${Mentor.favor().toFixed(1)}</span>`;
 
-    if (!p) { $('#mentorBody').innerHTML = `<div class="card center"><p>${esc(T('loading'))}</p></div>`; return; }
-    const cost = R.packageCost(Mentor.sent());
+    if (!p) {
+      $('#mentorMap').style.display = 'none';
+      $('#mentorBody').innerHTML = `<div class="card center"><p>${esc(T('loading'))}</p></div>`;
+      return;
+    }
+    $('#mentorMap').style.display = '';
+
+    /* — mapa — */
+    const m = mentorMap();
+    if (d.zone) m.drawZone({ ...d.zone }, d.cfg);
+    m.drawFire(d.firewall);
+    m.drawWasps(d.wasps);
+    m.drawPlayers(mentorMarkers(d, p));
+    m.drawItems(mentorItems(p), null);
+    if (mentorFollow) centerOnTribute();
+
+    /* — kartica se gradi jednom po stanju, ne po otkucaju — */
+    const q = Mentor.activeQuest();
+    const key = [isMentor, p.alive !== false, q ? q.id : '', Mentor.questsLeft(),
+      Mentor.packagesLeft(), Mentor.favorLog().length].join('|');
+    if (key !== mentorKey) { mentorKey = key; buildMentorBody(d, p, isMentor, q); }
+
+    /* — otkucaj menja samo brojeve — */
     const cd = Math.max(0, ((Mentor.rec().lastPackageMs || 0) + R.PACKAGE_COOLDOWN_MS - d.now) / 1000);
+    const mv = $('#mVitals');
+    if (mv) {
+      mv.innerHTML =
+        vitalBox('hp', 'heart', p.hp || 0, p.maxHp || 100, (p.hp || 0) < 25)
+        + vitalBox('hunger', 'meat', p.hunger || 0, 100 + (p.maxHungerBonus || 0), (p.hunger || 0) < R.SURVIVAL.lowThreshold)
+        + vitalBox('thirst', 'droplet', p.thirst || 0, 100 + (p.maxThirstBonus || 0), (p.thirst || 0) < R.SURVIVAL.lowThreshold);
+    }
+    const qc = $('#mQuestLeftMs');
+    if (qc && q) qc.textContent = U.mmss(Math.max(0, (q.expiresAtMs - d.now) / 1000));
+    const pc = $('#mPkgCd');
+    if (pc) pc.textContent = cd > 0 ? `${T('packageCooldown')} ${U.mmss(cd)}` : '';
+    $$('#mentorBody [data-pkg]').forEach((b) => {
+      const tier = b.dataset.pkg;
+      b.disabled = !(R.canAffordTier(tier, Mentor.sent(), Mentor.favor())
+        && cd <= 0 && p.alive !== false && Mentor.packagesLeft() > 0);
+    });
+    const fx = $('#mFx');
+    if (fx) {
+      const eff = R.activeEffects(p, d.now);
+      fx.innerHTML = eff.map((e) => {
+        const left = e.charges != null ? `×${e.charges}` : U.mmss(Math.max(0, e.leftMs / 1000));
+        return `<span class="fx ${e.tone}">${icon(e.icon, { size: 13 })}<b>${esc(left)}</b></span>`;
+      }).join('');
+      fx.hidden = !eff.length;
+    }
+  }
+
+  function buildMentorBody(d, p, isMentor, q) {
+    const cost = R.packageCost(Mentor.sent());
+    const lim = Mentor.limits();
+
+    const questCard = !isMentor ? '' : q
+      ? `<div class="card stack quest-live">
+          <div class="card-title">${esc(T('questActive'))}</div>
+          <div class="row"><span class="goldc">${icon('scroll', { size: 22 })}</span>
+            <div class="grow"><div style="font-weight:700">${esc(questName(q.id))}</div>
+              <div class="tiny dim">${esc(questDesc(q.id))}</div></div>
+            <b class="num goldc" id="mQuestLeftMs"></b></div>
+        </div>`
+      : `<div class="card stack">
+          <div class="card-title">${esc(T('questOffer'))}
+            <span class="tiny dim">· ${Mentor.questsLeft()}/${lim.quests}</span></div>
+          ${Mentor.questsLeft() > 0 ? Mentor.offer().map((id) => `
+            <button class="quest-offer" data-quest="${id}" ${p.alive === false ? 'disabled' : ''}>
+              ${icon('scroll', { size: 22 })}
+              <span class="grow"><span class="nm">${esc(questName(id))}</span>
+                <span class="ds">${esc(questDesc(id))}</span></span>
+              <span class="chip gold">+${R.MENTOR_FAVOR.questDone}</span></button>`).join('')
+            : `<p class="dim tiny" style="margin:0">${esc(T('questNoneLeft'))}</p>`}
+          <p class="tiny dim" style="margin:0">${esc(T('questHint'))}</p>
+        </div>`;
+
+    const log = Mentor.favorLog();
+    const t0 = Store.meta().startedAtMs || 0;
 
     $('#mentorBody').innerHTML = `
       <div class="card">
@@ -2113,36 +2295,26 @@ const UI = (() => {
             <div class="big" style="font-weight:800">${esc(p.name)}</div>
             <div class="tiny dim">${p.classId ? esc(clsName(p.classId)) : '—'} · ${esc(weaponName(p.weapon || 'fists'))}</div></div>
         </div>
-        <div class="vitals" style="margin-top:var(--s3)">
-          ${vitalBox('hp', 'heart', p.hp || 0, p.maxHp || 100, (p.hp || 0) < 25)}
-          ${vitalBox('hunger', 'meat', p.hunger || 0, 100, (p.hunger || 0) < 25)}
-          ${vitalBox('thirst', 'droplet', p.thirst || 0, 100, (p.thirst || 0) < 25)}
-        </div>
+        <div class="vitals" style="margin-top:var(--s3)" id="mVitals"></div>
+        <div class="fx-bar" style="position:static;margin-top:var(--s2)" id="mFx" hidden></div>
         ${p.alive === false ? `<p class="dangerc center" style="margin-top:var(--s3)">${esc(T('youDied'))}</p>` : ''}
       </div>
 
+      ${questCard}
+
       ${isMentor ? `
       <div class="card stack">
-        <div class="card-title">${esc(T('earnFavor'))}</div>
-        <p class="tiny dim" style="margin:0">${esc(T('noFavorYet'))}</p>
-        <div class="row wrap">
-          ${Mentor.CHALLENGES.map((c) => `<button class="btn sm ghost" data-ch="${c}">
-            ${esc(T({ reaction: 'chReaction', simon: 'chSimon', targets: 'chTarget', quiz: 'chQuiz', rhythm: 'chRhythm' }[c]))}</button>`).join('')}
-        </div>
-      </div>
-
-      <div class="card stack">
-        <div class="card-title">${esc(T('packages'))}</div>
+        <div class="card-title">${esc(T('packages'))}
+          <span class="tiny dim">· ${Mentor.packagesLeft()}/${lim.packages}</span></div>
         <div class="row between"><span class="dim">${esc(T('packageNext'))}</span>
           <span class="chip gold">${icon('spark', { size: 14 })}${cost}</span></div>
-        ${cd > 0 ? `<p class="tiny goldc">${esc(T('packageCooldown'))} ${U.mmss(cd)}</p>` : ''}
+        <p class="tiny goldc" id="mPkgCd"></p>
         ${Object.keys(R.PACKAGE_TIERS).map((tier) => {
-          const okBuy = R.canAffordTier(tier, Mentor.sent(), Mentor.favor()) && cd <= 0 && p.alive !== false;
           const t = R.PACKAGE_TIERS[tier];
-          return `<button class="gm-event" data-pkg="${tier}" ${okBuy ? '' : 'disabled'}>
-            ${icon({ water: 'droplet', food: 'meat', medkit: 'bandage', backpack: 'backpack', weapon: 'swords' }[tier], { size: 24 })}
-            <div class="grow" style="text-align:left"><div style="font-weight:700">${esc(T({ water: 'pkgWater', food: 'pkgFood', medkit: 'pkgMedkit', backpack: 'pkgBackpack', weapon: 'pkgWeapon' }[tier]))}</div>
-              <div class="tiny dim">${esc(T('packageCost'))} ${Math.max(cost, t.minCost)}</div></div>
+          return `<button class="gm-event" data-pkg="${tier}">
+            <span class="ei">${icon({ water: 'bottle', food: 'can', medkit: 'bandage', backpack: 'backpack', weapon: 'swords' }[tier], { size: 24 })}</span>
+            <span class="grow"><span class="nm">${esc(T({ water: 'pkgWater', food: 'pkgFood', medkit: 'pkgMedkit', backpack: 'pkgBackpack', weapon: 'pkgWeapon' }[tier]))}</span>
+              <span class="ds">${esc(T('packageCost'))} ${Math.max(cost, t.minCost)}</span></span>
             <span class="cost">${icon('spark', { size: 14 })}${t.minCost}+</span></button>`;
         }).join('')}
       </div>` : `
@@ -2153,17 +2325,37 @@ const UI = (() => {
       </div>`}
 
       <div class="card stack">
+        <div class="card-title">${esc(T('favorLog'))}</div>
+        ${log.length ? log.map((e) => `<div class="favor-row">
+            ${icon(FAVOR_ICON[e.reason] || 'spark', { size: 16 })}
+            <span class="grow">${esc(T('favor_' + e.reason))}</span>
+            <b>+${e.amount}</b>
+            <span class="when">${t0 ? U.mmss(Math.max(0, (e.atMs - t0) / 1000)) : ''}</span>
+          </div>`).join('')
+          : `<p class="dim tiny" style="margin:0">${esc(T('noFavorYet'))}</p>`}
+      </div>
+
+      <div class="card stack">
         <div class="card-title">${esc(T('feed'))}</div>
         ${Object.entries(Store.feed()).map(([id, f]) => ({ id, ...f }))
           .filter((f) => f.scope === 'all').sort((a, b) => b.atMs - a.atMs).slice(0, 12)
-          .map((f) => `<div class="feed-item ${f.type === 'death' ? 'death' : 'event'}">${esc(feedText(f))}</div>`).join('') || '<p class="dim">—</p>'}
+          .map((f) => `<div class="feed-item ${f.type === 'death' ? 'death' : 'event'}">
+            <span class="fic">${icon(feedIcon(f), { size: 16 })}</span>
+            <span class="ft">${esc(feedText(f))}</span></div>`).join('') || '<p class="dim">—</p>'}
       </div>`;
 
-    $$('#mentorBody [data-ch]').forEach((b) => b.onclick = () => Mentor.earn(b.dataset.ch));
     $$('#mentorBody [data-pkg]').forEach((b) => b.onclick = () => Mentor.sendPackage(b.dataset.pkg));
+    $$('#mentorBody [data-quest]').forEach((b) => b.onclick = async () => {
+      if (await Mentor.giveQuest(b.dataset.quest)) { mentorKey = null; renderMentor(Engine.d); }
+    });
     const c = $('#mCheer');
     if (c) c.onclick = () => Mentor.cheer();
   }
+
+  const FAVOR_ICON = {
+    survivedShrink: 'target', landedKill: 'skull', legendaryPick: 'box',
+    finalFive: 'users', questDone: 'scroll',
+  };
 
   /* ═══════════════ kraj (§19) ═══════════════ */
   async function renderEnd() {

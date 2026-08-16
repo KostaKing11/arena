@@ -191,8 +191,17 @@ const Items = (() => {
       itemsTaken: (me.itemsTaken || 0) + 1,
     });
     await Store.ref(`items/${item.id}/takenAtMs`).set(Clock.now());
+    await creditLegendary(item.type);
     Haptics.fire('pickup'); Sfx.pickup();
     toast(itemName(item.type), 'good', ITEM_ICON[item.type] || 'box');
+  }
+
+  /* Legendarni nalaz je jedna od pet stvari koje mentoru donose naklonost —
+     ceo sistem sada visi o tome šta uradi tribut, ne o mentorovom telefonu. */
+  function creditLegendary(type) {
+    const def = R.ITEMS[type];
+    if (!def || def.rarity !== 'legendary') return Promise.resolve(0);
+    return Mentor.awardFavor(Store.myId, 'legendaryPick');
   }
 
   async function takeWeapon(item, def) {
@@ -207,6 +216,7 @@ const Items = (() => {
     }
     await Store.updateMe({ weapon: def.weapon, itemsTaken: (me.itemsTaken || 0) + 1 });
     await Store.ref(`items/${item.id}/takenAtMs`).set(Clock.now());
+    await creditLegendary(item.type);
     Haptics.fire('pickup'); Sfx.pickup();
     toast(weaponName(def.weapon), 'gold', WEAPON_ICON[def.weapon]);
     return true;
@@ -319,7 +329,11 @@ const Items = (() => {
       ownerId: Store.myId, type: def.trap, lat: pos.lat, lng: pos.lng,
       power: cls.trapPowerMul || 1, setAtMs: Clock.now(),
     });
-    await Store.updateMe({ inv: next.map((x, i) => ({ slot: i, itemType: x.itemType, qty: x.qty || 1 })) });
+    // brojač postavljenih zamki — po njemu se meri mentorov zadatak „postavi zamku"
+    await Store.updateMe({
+      inv: next.map((x, i) => ({ slot: i, itemType: x.itemType, qty: x.qty || 1 })),
+      trapsSet: (me.trapsSet || 0) + 1,
+    });
     toast(T('trapSet'), 'gold', 'trap');
   }
 

@@ -175,12 +175,10 @@ const I18N = {
 
     /* — mentor — */
     mentorTitle: 'Mentor', mentorOf: 'Mentor igrača', favor: 'Naklonost publike',
-    earnFavor: 'Zaradi naklonost', sendPackage: 'Pošalji paket', packageCost: 'Cena',
+    sendPackage: 'Pošalji paket', packageCost: 'Cena',
     packageSent: 'Paket poslat', packageCooldown: 'Sledeći paket za', spectator: 'Gledalac',
     cheer: 'Navijaj', cheered: 'Navijao si', gotPackage: 'Neko je dobio paket',
     yourPackage: 'Paket od tvog mentora',
-    chReaction: 'Tapni čim pozeleni', chSimon: 'Zapamti niz', chTarget: 'Pogodi metu',
-    chQuiz: 'Kviz', chRhythm: 'Tapkaj u ritmu',
 
     /* — kraj — */
     finalTwo: 'Ostala su dvojica', victory: 'POBEDNIK', gameOver: 'Kraj igara',
@@ -229,17 +227,26 @@ const I18N = {
     changeMentor: 'Promeni', changeMentorAsk: 'Sigurno? Sadašnji mentor gubi mesto i link postaje slobodan.',
     mentorQrBody: 'Neka ti neko ko ne igra skenira ovaj kod. On ti gleda stanje, borbe i moze da ti salje pakete.',
     mentorClaimed: 'Dobio si mentora', mentorWatching: 'Gleda tvoje stanje i moze da ti posalje paket.',
-    yourTribute: 'Tvoj tribut', noFavorYet: 'Zaradi naklonost izazovima',
-    startChallenge: 'Kreni', challengeDone: 'Zaradio si', challengeFail: 'Ništa ovaj put',
+    yourTribute: 'Tvoj tribut', noFavorYet: 'Još ništa — naklonost zavisi od tvog tributa.',
+    favorLog: 'Odakle naklonost',
+    favor_survivedShrink: 'Ostao u zoni kad se skupila',
+    favor_landedKill: 'Oborio protivnika',
+    favor_legendaryPick: 'Uzeo legendarni predmet',
+    favor_finalFive: 'Ušao u poslednjih pet',
+    favor_questDone: 'Ispunio zadatak',
+    questOffer: 'Zadaj zadatak', questActive: 'Zadatak u toku',
+    questSent: 'Zadatak poslat', questNoneLeft: 'Nemaš više zadataka',
+    questHint: 'Jedan po jedan, traje 5 minuta. Tribut sme da ga ignoriše.',
+    questFromMentor: 'Zadatak od mentora', questIgnorable: 'možeš ga ignorisati',
+    questDoneMsg: 'Zadatak ispunjen', questExpiredMsg: 'Zadatak je istekao',
+    packageNoneLeft: 'Potrošio si sve pakete za ovu partiju',
+    durMeans: (d, e, q, k) => `${d} × dan i noć · ${e} događaja · ${q} zadataka · ${k} paketa`,
     packages: 'Paketi', packageNext: 'Sledeći paket košta',
     pkgWater: 'Voda', pkgFood: 'Hrana', pkgMedkit: 'Medkit',
     pkgBackpack: 'Ranac', pkgWeapon: 'Oružje',
     notEnoughFavor: 'Nemaš dovoljno naklonosti',
     packageLanded: 'Paket je pao 15 m od tebe',
     cheerCooldown: 'Možeš da navijaš na 10 minuta',
-    tapWhenGreen: 'Tapni čim pozeleni', tooEarly: 'Prerano!',
-    repeatSequence: 'Ponovi niz', hitTargets: 'Pogodi mete', tapRhythm: 'Tapkaj u ritmu',
-    quizTitle: 'Kviz o Igrama gladi',
     detReady: 'Detektor spreman', detLoading: 'Detektor se učitava…',
     detOff: 'Bez detektora', detNoCompass: 'Nema kompasa', detRelative: '(nije pravi sever)',
     calibTurn: 'Okreni se polako u krug sa telefonom u ruci, dok se prsten ne popuni.',
@@ -437,12 +444,10 @@ const I18N = {
     watching: 'Watching',
 
     mentorTitle: 'Mentor', mentorOf: 'Mentor of', favor: 'Audience favour',
-    earnFavor: 'Earn favour', sendPackage: 'Send a package', packageCost: 'Cost',
+    sendPackage: 'Send a package', packageCost: 'Cost',
     packageSent: 'Package sent', packageCooldown: 'Next package in', spectator: 'Spectator',
     cheer: 'Cheer', cheered: 'You cheered', gotPackage: 'Someone received a package',
     yourPackage: 'A package from your mentor',
-    chReaction: 'Tap the moment it turns green', chSimon: 'Memorise the sequence', chTarget: 'Hit the target',
-    chQuiz: 'Quiz', chRhythm: 'Tap in rhythm',
 
     finalTwo: 'Two remain', victory: 'VICTOR', gameOver: 'The games are over',
     timeline: 'How each of them fell', stats: 'Statistics',
@@ -486,17 +491,26 @@ const I18N = {
     changeMentor: 'Change', changeMentorAsk: 'Are you sure? The current mentor loses their place and the link opens up.',
     mentorQrBody: 'Have someone who is not playing scan this code. They watch your state and fights, and can send you packages.',
     mentorClaimed: 'You have a mentor', mentorWatching: 'They watch your state and can send you a package.',
-    yourTribute: 'Your tribute', noFavorYet: 'Earn favour through challenges',
-    startChallenge: 'Start', challengeDone: 'You earned', challengeFail: 'Nothing this time',
+    yourTribute: 'Your tribute', noFavorYet: 'Nothing yet — favour depends on your tribute.',
+    favorLog: 'Where favour came from',
+    favor_survivedShrink: 'Stayed in the zone as it closed',
+    favor_landedKill: 'Took someone down',
+    favor_legendaryPick: 'Picked up a legendary item',
+    favor_finalFive: 'Made the final five',
+    favor_questDone: 'Completed a quest',
+    questOffer: 'Set a quest', questActive: 'Quest in progress',
+    questSent: 'Quest sent', questNoneLeft: 'No quests left',
+    questHint: 'One at a time, five minutes each. Your tribute may ignore it.',
+    questFromMentor: 'Quest from your mentor', questIgnorable: 'you may ignore it',
+    questDoneMsg: 'Quest complete', questExpiredMsg: 'The quest expired',
+    packageNoneLeft: 'You have used every package this game',
+    durMeans: (d, e, q, k) => `${d} × day and night · ${e} events · ${q} quests · ${k} packages`,
     packages: 'Packages', packageNext: 'Next package costs',
     pkgWater: 'Water', pkgFood: 'Food', pkgMedkit: 'Med kit',
     pkgBackpack: 'Backpack', pkgWeapon: 'Weapon',
     notEnoughFavor: 'Not enough favour',
     packageLanded: 'A package landed 15 m from you',
     cheerCooldown: 'You can cheer once every 10 minutes',
-    tapWhenGreen: 'Tap the moment it turns green', tooEarly: 'Too early!',
-    repeatSequence: 'Repeat the sequence', hitTargets: 'Hit the targets', tapRhythm: 'Tap in rhythm',
-    quizTitle: 'Hunger Games quiz',
     detReady: 'Detector ready', detLoading: 'Loading detector…',
     detOff: 'No detector', detNoCompass: 'No compass', detRelative: '(not true north)',
     calibTurn: 'Turn slowly in a full circle holding the phone, until the ring fills.',
@@ -563,6 +577,24 @@ const NAMES = {
     volley: ['Salva', 'Volley'], bigNet: ['Velika mreža', 'Big net'],
     secondWind: ['Drugi vetar', 'Second wind'], stash: ['Zaliha', 'Stash'],
     potion: ['Napitak', 'Potion'],
+  },
+  /* Zadaci koje mentor zadaje tributu. Iz zatvorene liste — slobodan tekst bi
+     mentorski kanal odmah pretvorio u način da se dogovara i vara. */
+  quest: {
+    weaponRare: ['Nađi pravo oružje', 'Find a real weapon'],
+    cornucopia: ['Uđi u kornukopiju i izađi živ', 'Enter the cornucopia and get out alive'],
+    setTrap: ['Postavi zamku', 'Set a trap'],
+    attackAny: ['Napadni nekoga', 'Attack someone'],
+    wellFed: ['Najedi se i napij', 'Get fed and watered'],
+    moveFar: ['Pređi 300 m', 'Cover 300 m'],
+  },
+  questDesc: {
+    weaponRare: ['Uzmi oružje retkosti retko ili bolje.', 'Pick up a weapon of rare quality or better.'],
+    cornucopia: ['Priđi kornukopiji, pa se izvuci živ odatle.', 'Walk into the cornucopia, then get out alive.'],
+    setTrap: ['Postavi bilo koju zamku, bilo gde.', 'Set any trap, anywhere.'],
+    attackAny: ['Uslikaj bilo koga — pogodak nije uslov.', 'Photograph anyone — you do not have to hit.'],
+    wellFed: ['Digni i glad i žeđ preko 80%.', 'Get both hunger and thirst above 80%.'],
+    moveFar: ['Prehodaj 300 m od trenutka kad si dobio zadatak.', 'Walk 300 m from the moment you got this.'],
   },
   /* Šta predmet zapravo RADI, jednom rečenicom. Bez ovoga je prvi put igra
      pogađanje: ime i retkost ne govore ni šta leči ni koga odaje. */
@@ -658,6 +690,8 @@ const clsDesc = (id) => nameOf('clsDesc', id);
 const weaponName = (id) => nameOf('weapon', id);
 const itemName = (id) => nameOf('item', id);
 const itemDesc = (id) => (NAMES.itemDesc[id] ? NAMES.itemDesc[id][LI()] : '');
+const questName = (id) => nameOf('quest', id);
+const questDesc = (id) => (NAMES.questDesc[id] ? NAMES.questDesc[id][LI()] : '');
 const rarityName = (id) => nameOf('rarity', id);
 const eventName = (id) => nameOf('event', id);
 const specialName = (id) => nameOf('special', id);

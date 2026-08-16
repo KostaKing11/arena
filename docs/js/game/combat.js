@@ -122,6 +122,8 @@ const Attack = (() => {
       alive: false, hp: 0, deathAtMs: Clock.now(), killedBy: Store.myId, deathCause: 'hit',
     });
     await Store.updateMe({ kills: (me.kills || 0) + 1 });
+    // mentor ne igra svoju igru — naklonost mu donosi ovo (§17b)
+    await Mentor.awardFavor(Store.myId, 'landedKill');
     await dropLoot(targetId, target);
     await Store.pushFeed({ type: 'death', subjectId: targetId, killerId: Store.myId, scope: 'all', cause: 'hit' });
   }

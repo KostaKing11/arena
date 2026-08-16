@@ -219,6 +219,12 @@
   <section class="screen" id="s-mentor">
     <div class="topbar"><div class="grow ttl" id="mentorTitle"></div>
       <div class="chip gold" id="favorChip"></div></div>
+    <!-- mapa je glavni deo: mentor gleda partiju, ne igra svoju.
+         Dugme stoji VAN mape — unutra bi ga Leaflet primio kao prevlačenje. -->
+    <div class="mentor-map-wrap">
+      <div class="mentor-map" id="mentorMap"></div>
+      <button class="iconbtn glass" id="mentorFollow" data-i-aria="center"></button>
+    </div>
     <div class="scroll"><div class="hold stack-lg" id="mentorBody"></div></div>
   </section>
 
