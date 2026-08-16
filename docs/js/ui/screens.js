@@ -1357,6 +1357,25 @@ const UI = (() => {
           </div>
         </div>
 
+        ${Store.isHost() ? `<div class="card stack">
+          <div class="card-title">${esc(T('tpWorld'))}</div>
+          <div class="row-tight wrap">
+            ${[1, 5, 10].map((m) => `<button class="btn sm ghost" data-skip="${m}">
+              ${icon('clock', { size: 14 })}<span>+${m} min</span></button>`).join('')}
+            <button class="btn sm ghost" id="tpNextZone">${icon('target', { size: 14 })}<span>${esc(T('tpNextZone'))}</span></button>
+          </div>
+          <div class="row-tight wrap">
+            ${Object.keys(R.EVENTS).map((t) => `<button class="btn sm ghost" data-ev="${t}">
+              ${icon(EVENT_ICON[t] || 'spark', { size: 14 })}<span>${esc(eventName(t))}</span></button>`).join('')}
+          </div>
+          <div class="row-tight wrap">
+            <button class="btn sm ghost" id="tpKillBot">${icon('skull', { size: 14 })}<span>${esc(T('tpKillBot'))}</span></button>
+            <button class="btn sm ghost" id="tpSparks">${icon('spark', { size: 14 })}<span>${esc(T('tpFillPool'))}</span></button>
+            <button class="btn sm ghost" id="tpItem">${icon('box', { size: 14 })}<span>${esc(T('tpDropItem'))}</span></button>
+          </div>
+          <p class="tiny dim">${esc(T('tpWorldHint'))}</p>
+        </div>` : ''}
+
         <div class="card stack">
           <div class="card-title">${esc(T('tpWeapon'))}</div>
           <div class="row-tight wrap">
@@ -1386,6 +1405,51 @@ const UI = (() => {
         await Store.updateMe({ weapon: b.dataset.w, arrows: 30 });
         toast(weaponName(b.dataset.w), 'good', WEAPON_ICON[b.dataset.w]); draw();
       });
+
+      /* — svet: pomeranje vremena i ručno puštanje događaja —
+         Partija od pola sata se ne može odigrati u sobi za pola sata, a zona,
+         dan i noć i događaji su jedino što je vredno gledati. Pošto sve stoji
+         u apsolutnim vremenima, „ubrzanje" je čisto pomeranje brojeva. */
+      $$('[data-skip]', s).forEach((b) => b.onclick = () => skipTime(+b.dataset.skip * 60000));
+      const nz = $('#tpNextZone', s);
+      if (nz) nz.onclick = () => {
+        const z = Engine.d.zone;
+        if (!z || !z.next) { toast(T('nobody'), 'gold'); return; }
+        skipTime(Math.max(1000, z.next.warnAtMs - Clock.now() - 3000));
+      };
+      $$('[data-ev]', s).forEach((b) => b.onclick = () => App.buyEvent(b.dataset.ev, { force: true }));
+      const kb = $('#tpKillBot', s);
+      if (kb) kb.onclick = async () => {
+        const [pid, p] = (Object.entries(Store.players()).find(([, q]) => q.isBot && q.alive !== false) || []);
+        if (!pid) { toast(T('nobody'), 'gold'); return; }
+        await Store.ref(`players/${pid}`).update({ alive: false, hp: 0, deathAtMs: Clock.now(), deathCause: 'zone' });
+        await Store.pushFeed({ type: 'death', subjectId: pid, scope: 'all', cause: 'zone' });
+        toast(p.name, 'danger', 'skull'); draw();
+      };
+      const sp = $('#tpSparks', s);
+      if (sp) sp.onclick = async () => { await Store.ref('sparks/pool').set(40); toast(T('tpFillPool'), 'good', 'spark'); };
+      const it = $('#tpItem', s);
+      if (it) it.onclick = async () => {
+        const pos = Geo.pos;
+        if (!pos) { toast(T('gpsGoOutside'), 'danger'); return; }
+        const type = U.pick(Math.random, R.SPAWNABLE_IDS);
+        const at = U.destPoint(pos, Math.random() * 360, 8);
+        await Store.dropItem(type, R.ITEMS[type].rarity, at.lat, at.lng, 1);
+        toast(itemName(type), 'good', ITEM_ICON[type] || 'box');
+      };
+    }
+
+    /** Pomeri ceo svet unapred: raspored unazad, a sa njim i vremena u meti. */
+    async function skipTime(byMs) {
+      const meta = Store.meta(), sch = Store.schedule();
+      if (!sch) { toast(T('nobody'), 'gold'); return; }
+      await Store.hostSet('schedule', R.shiftSchedule(sch, byMs));
+      const m = {};
+      for (const k of ['startedAtMs', 'prepEndsAtMs', 'countdownAtMs', 'lastGmEventMs']) {
+        if (meta[k]) m[k] = meta[k] - byMs;
+      }
+      await Store.hostUpdate('meta', m);
+      toast(`+${Math.round(byMs / 60000)} min`, 'gold', 'clock');
     }
   }
 

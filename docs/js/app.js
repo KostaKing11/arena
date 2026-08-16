@@ -525,7 +525,9 @@ const App = (() => {
   }
 
   /* ───────────────── događaji duhova ───────────────── */
-  async function buyEvent(type) {
+  async function buyEvent(type, opts) {
+    // `force` je samo za test panel: pusti događaj bez glasanja, kase i limita
+    const force = !!(opts && opts.force);
     const cost = R.SPARK_COSTS[type];
     const P = Store.players();
     const ghosts = Object.entries(P).filter(([, p]) => p.alive === false && !p.isBot).length;
@@ -533,15 +535,15 @@ const App = (() => {
     /* Dve granice, obe tvrde. Bez njih je pola sata igre umelo da primi pet
        talasa zaredom, i to tri puta isti zid vatre. */
     const live = Object.values((Store.room && Store.room.liveEvents) || {});
-    if (live.some((e) => e.type === type)) { toast(T('evSpent'), 'gold'); return; }
-    if (live.length >= R.ghostEventBudget(Store.config().durationMin)) {
+    if (!force && live.some((e) => e.type === type)) { toast(T('evSpent'), 'gold'); return; }
+    if (!force && live.length >= R.ghostEventBudget(Store.config().durationMin)) {
       toast(T('ghostNoEventsLeft'), 'gold', 'alert'); return;
     }
 
     /* Glasovi se čitaju SA SERVERA, ne iz lokalnog keša: keš zaostaje odmah
        posle sopstvenog upisa, pa je moj glas znao da fali u brojanju. */
     let voters = [];
-    if (ghosts > 2) {
+    if (!force && ghosts > 2) {
       await Store.voteEvent(type);
       voters = await Store.readVoters(type);
       if (voters.length < Math.ceil(ghosts / 2)) { toast(T('voteNeeded'), 'gold'); return; }
@@ -549,11 +551,12 @@ const App = (() => {
 
     /* Brava PRE trošenja: dva duha koja istovremeno pređu prag inače oba prođu
        proveru i oba skinu iskre iz iste kase. Ko prvi postavi bravu, taj kupuje. */
-    const won = await Store.commitEvent(type);
-    if (!won) { toast(T('voteNeeded'), 'gold'); return; }
-
-    const ok = await Store.spendSparks(cost);
-    if (!ok) { await Store.releaseEvent(type); toast(T('sparks'), 'danger'); return; }
+    if (!force) {
+      const won = await Store.commitEvent(type);
+      if (!won) { toast(T('voteNeeded'), 'gold'); return; }
+      const ok = await Store.spendSparks(cost);
+      if (!ok) { await Store.releaseEvent(type); toast(T('sparks'), 'danger'); return; }
+    }
 
     const cfg = Store.config(), now = Clock.now();
     const meta2 = R.EVENTS[type];

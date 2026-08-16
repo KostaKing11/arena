@@ -431,6 +431,22 @@
     return { zone, events };
   }
 
+  /* Pomeri ceo raspored unazad za `byMs` — svet time ide UNAPRED za toliko.
+     Služi samo testiranju: partija od pola sata se ne može odigrati u sobi za
+     pola sata, a zona, dan i noć i događaji su jedino što je vredno videti.
+     Pošto sve stoji u apsolutnim vremenima, dovoljno je pomeriti brojeve. */
+  function shiftSchedule(schedule, byMs) {
+    if (!schedule) return schedule;
+    const z = (schedule.zone || []).map((p) => ({
+      ...p,
+      warnAtMs: p.warnAtMs - byMs, startMs: p.startMs - byMs, atMs: p.atMs - byMs,
+    }));
+    const e = (schedule.events || []).map((ev) => ({
+      ...ev, atMs: ev.atMs - byMs, endMs: ev.endMs - byMs,
+    }));
+    return { ...schedule, zone: z, events: e };
+  }
+
   /** Stanje zone u trenutku `now` — sa postepenim skupljanjem (§14). */
   function zoneAt(schedule, cfg, nowMs) {
     const z = (schedule && schedule.zone) || [];
@@ -1046,7 +1062,7 @@
     ZONE_PHASES, ZONE_WARN_MS, EVENTS, SPARK_COSTS, GM_COOLDOWN_MS, ghostEventBudget,
     DAY_MS, NIGHT_MS, DAY_CYCLE_MS, NIGHT_VISION_M, DURATION_STEP_MIN, isNight, dayPhase,
     SURVIVAL, survivalTick,
-    buildSchedule, zoneAt, firewallAt,
+    buildSchedule, zoneAt, firewallAt, shiftSchedule,
     RARITY_W, CORN_RADIUS_M, EDGE_MARGIN_M, generateItems, generateArrowCaches, startPoints,
     SPARKS_PER_PLAYER, generateSparks, zoneAtPhaseSettled, SPARK_REACH_M, SPARK_ZONE_MARGIN_M, GHOST_OUTER_M,
     HALLUCINATION_MS, HALLUCINATION_POP_M, hallucinations,
