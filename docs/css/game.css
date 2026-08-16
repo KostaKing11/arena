@@ -22,10 +22,13 @@
   border: 1px solid var(--line-2); border-radius: var(--r-md);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
-.zonechip { display: flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: var(--fs-sm); font-weight: 600; }
+/* `nowrap` je obavezan: bez njega se „Zona · 2:00" lomi u dva reda i traka
+   naraste na dvostruku visinu čim sekunde dobiju treću cifru. */
+.zonechip { display: flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; flex: none; }
+.zonechip span { white-space: nowrap; }
 /* Klasa + doba dana, uz zonu. Skuplja se na uskim ekranima: ime klase pada,
    ikonica i sat ostaju — od njih se i živi. */
-.classchip { display: flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: var(--fs-sm); font-weight: 600; max-width: 46vw; }
+.classchip { display: flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: var(--fs-sm); font-weight: 600; max-width: 46vw; white-space: nowrap; min-width: 0; }
 .classchip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .classchip .dn { display: inline-flex; align-items: center; gap: 3px; font-style: normal; padding-left: 7px; margin-left: 1px; border-left: 1px solid var(--line-2); }
 .classchip .dn.night { color: #8FA8DA; }
