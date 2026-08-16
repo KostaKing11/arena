@@ -187,10 +187,10 @@ const I18N = {
 
     /* — kraj — */
     finalTwo: 'Ostala su dvojica', victory: 'POBEDNIK', gameOver: 'Kraj igara',
-    timeline: 'Kako je ko poginuo', stats: 'Statistika',
-    statSurvived: 'Preživeo', statWalked: 'Pređeno', statFights: 'Borbi',
+    timeline: 'Kako je ko poginuo', stats: 'Statistika', awards: 'Priznanja',
+    statSurvived: 'Preživeo', statWalked: 'Pređeno', statFights: 'Borbi', statHits: 'Pogodaka',
     statDamage: 'Šteta', statItems: 'Predmeta', statKills: 'Eliminacija',
-    awardWalker: 'Najviše pređenih metara', awardFighter: 'Najviše borbi',
+    awardWalker: 'Najviše pređenih metara', awardFighter: 'Najviše pogodaka',
     awardCoward: 'Kukavica', awardHungry: 'Najgladniji',
     awardDirtyWater: 'Najviše prljave vode', awardFirstDeath: 'Najbrže poginuo',
     playAgain: 'Igraj ponovo', backToStart: 'Nazad na početak',
@@ -460,10 +460,10 @@ const I18N = {
     yourPackage: 'A package from your mentor',
 
     finalTwo: 'Two remain', victory: 'VICTOR', gameOver: 'The games are over',
-    timeline: 'How each of them fell', stats: 'Statistics',
-    statSurvived: 'Survived', statWalked: 'Walked', statFights: 'Fights',
+    timeline: 'How each of them fell', stats: 'Statistics', awards: 'Awards',
+    statSurvived: 'Survived', statWalked: 'Walked', statFights: 'Fights', statHits: 'Hits',
     statDamage: 'Damage', statItems: 'Items', statKills: 'Kills',
-    awardWalker: 'Most metres walked', awardFighter: 'Most fights',
+    awardWalker: 'Most metres walked', awardFighter: 'Most hits landed',
     awardCoward: 'The coward', awardHungry: 'The hungriest',
     awardDirtyWater: 'Most dirty water drunk', awardFirstDeath: 'First to fall',
     playAgain: 'Play again', backToStart: 'Back to start',

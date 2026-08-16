@@ -2427,20 +2427,28 @@ const UI = (() => {
     const t0 = meta.startedAtMs || 0;
     const nm = (id) => (P[id] ? P[id].name : '?');
 
+    /* Priznanja su gledala samo ljude, pa je u test partiji jedini čovek
+       osvajao sve — uključujući „najviše pređenih metara: 3 m" dok je bot
+       prešao 972. Ako ljudi nema bar dvoje, u trku ulaze i botovi.
+
+       Priznanje sa nulom se ne prikazuje: „Najviše borbi · 0" nije podatak. */
+    const humans = Object.entries(P).filter(([, p]) => !p.isBot);
+    const pool = humans.length >= 2 ? humans : Object.entries(P);
     const awards = [
       ['awardWalker', 'run', (p) => p.distanceWalkedM || 0, true],
-      ['awardFighter', 'swords', (p) => p.fights || 0, true],
-      ['awardCoward', 'shield', (p) => p.fights || 0, false],
+      ['awardFighter', 'swords', (p) => p.attacksLanded || 0, true],
+      ['awardCoward', 'shield', (p) => p.attacksLanded || 0, false],
       ['awardHungry', 'meat', (p) => 100 - (p.hunger || 0), true],
       ['awardDirtyWater', 'droplet', (p) => p.dirtyWaterDrunk || 0, true],
     ].map(([key, ic, f, max]) => {
-      const arr = Object.entries(P).filter(([, p]) => !p.isBot);
-      if (!arr.length) return '';
-      arr.sort((a, b) => (max ? f(b[1]) - f(a[1]) : f(a[1]) - f(b[1])));
+      if (!pool.length) return '';
+      const arr = pool.slice().sort((a, b) => (max ? f(b[1]) - f(a[1]) : f(a[1]) - f(b[1])));
       const [, p] = arr[0];
+      const v = Math.round(f(p));
+      if (max && v <= 0) return '';                    // niko ništa — nije podatak
       return `<div class="award">${icon(ic, { size: 24 })}<div class="grow">
-        <div style="font-weight:700">${esc(T(key))}</div><div class="tiny dim">${esc(p.name)} · ${Math.round(f(p))}</div></div></div>`;
-    }).join('');
+        <div style="font-weight:700">${esc(T(key))}</div><div class="tiny dim">${esc(p.name)} · ${v}</div></div></div>`;
+    }).filter(Boolean).join('');
 
     $('#endBody').innerHTML = `
       <div class="winner-card">
@@ -2462,10 +2470,10 @@ const UI = (() => {
           <div class="avatar" style="width:40px;height:40px">${avatarSvg(p.avatar, 40)}</div>
           <div class="grow"><div class="name">${esc(p.name)}</div>
           <div class="tiny dim">${esc(T('statWalked'))} ${Math.round(p.distanceWalkedM || 0)} m ·
-            ${esc(T('statFights'))} ${p.fights || 0} · ${esc(T('statKills'))} ${p.kills || 0} ·
+            ${esc(T('statHits'))} ${p.attacksLanded || 0} · ${esc(T('statKills'))} ${p.kills || 0} ·
             ${esc(T('statItems'))} ${p.itemsTaken || 0}</div></div>
         </div>`).join('')}</div>
-      <div class="card stack"><div class="card-title">${esc(T('stats'))}</div>${awards}</div>
+      ${awards ? `<div class="card stack"><div class="card-title">${esc(T('awards'))}</div>${awards}</div>` : ''}
       ${Store.isHost() ? `<button class="btn primary lg full" id="btnAgain">${esc(T('playAgain'))}</button>` : ''}
       <button class="btn ghost full" id="btnHome">${esc(T('backToStart'))}</button>`;
 
