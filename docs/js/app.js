@@ -599,27 +599,14 @@ const App = (() => {
     }
 
     const cfg = Store.config(), now = Clock.now();
-    const meta2 = R.EVENTS[type];
     /* Isplatu dobijaju SVI koji su glasali, ne samo onaj ko je slučajno bacio
        poslednji glas — njihove iskre su otišle u istu kasu. `buyerId` ostaje
        radi starih zapisa. */
     const buyers = voters.length ? voters : [Store.myId];
-    /* Najava traje onoliko koliko dogadjaj trazi (R.EVENTS[type].warnMs), ne
-       pausalnih 15 s: zid vatre prelazi celu arenu i sa 15 s se ne moze izbeci.
-       Za to vreme se na mapi vidi odakle krece i kuda ide. */
-    const warn = meta2.warnMs || 15000;
-    const ev = {
-      id: U.uid('ge'), type, buyerId: Store.myId, buyerIds: buyers,
-      atMs: now + warn, warnMs: warn, endMs: now + warn + meta2.durMs,
-    };
-    if (type === 'firewall') {
-      const head = Math.random() * 360;
-      const start = U.destPoint(cfg.center, (head + 180) % 360, cfg.diameterM * 0.575);
-      Object.assign(ev, { headingDeg: head, lat: start.lat, lng: start.lng, radiusM: meta2.widthM, travelM: cfg.diameterM * 1.15 });
-    } else if (type === 'wasps') {
-      const p = U.pointInCircle(Math.random, cfg.center, cfg.diameterM * 0.35);
-      Object.assign(ev, { lat: p.lat, lng: p.lng, radiusM: meta2.radiusM });
-    }
+    /* Geometriju i vreme najave pravi R.buildLiveEvent — isti kod koji koristi
+       i arena kad sama ubaci dogadjaj, da se zid vatre ne crta na dva nacina. */
+    const ev = R.buildLiveEvent(type, cfg, now, Math.random, { buyerId: Store.myId, buyerIds: buyers });
+    if (!ev) return;
     await Store.ref(`liveEvents/${ev.id}`).set(ev);
     await Store.ref('meta/lastGmEventMs').set(now);
     await Store.pushFeed({ type: 'event', eventType: type, scope: 'all' });

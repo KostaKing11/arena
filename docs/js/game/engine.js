@@ -311,7 +311,35 @@ const Engine = (() => {
       await maintainItems(d);
       await maintainDrops(d);
       await mentorFavor(d, P, aliveIds);
+      await maintainArena(d, P);
     }
+  }
+
+  /* ═══════════════ arena se umeša ═══════════════
+     Otkad događaje puštaju samo duhovi, partija u kojoj niko ne pogine rano
+     prođe bez ijednog — a baš njoj nešto i treba, jer su se svi razišli.
+     Posle polovine partije arena sama ubaci jedan, i to prema tome kako
+     tributi stoje: gladnima pomoć, sitima nevolja. Pravila (najava, prikaz na
+     mapi, zajednički budžet) su ista kao kad kupe duhovi. */
+  async function maintainArena(d, P) {
+    const cfg = Store.config(), meta = Store.meta();
+    if (!cfg.eventsEnabled) return;
+    const live = Object.values((Store.room && Store.room.liveEvents) || {});
+    const type = R.autoEventPick({
+      nowMs: d.now,
+      startedAtMs: meta.startedAtMs,
+      durationMin: cfg.durationMin,
+      lastEventAtMs: meta.lastGmEventMs || meta.startedAtMs,
+      firedTypes: new Set(live.map((e) => e.type)),
+      mood: R.arenaMood(P),
+    });
+    if (!type) return;
+
+    const ev = R.buildLiveEvent(type, cfg, d.now, Math.random, { auto: true, buyerIds: [] });
+    if (!ev) return;
+    await Store.ref(`liveEvents/${ev.id}`).set(ev);
+    await Store.ref('meta/lastGmEventMs').set(d.now);
+    await Store.pushFeed({ type: 'event', eventType: type, auto: true, scope: 'all' });
   }
 
   /* ═══════════════ naklonost za mentore (§17b) ═══════════════

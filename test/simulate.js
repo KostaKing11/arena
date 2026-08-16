@@ -810,5 +810,88 @@ console.log('\n17. Vreme: jedan sat za sve, i pravo doba dana');
     !R.isNight(T0, T0 + 60000) && R.isNight(T0, T0 + 360000));
 }
 
+
+console.log('\n18. Arena se umesa kad partija utihne');
+{
+  /* Otkad dogadjaje puste samo duhovi, partija u kojoj niko ne pogine rano
+     prodje bez ijednog: nema mrtvih -> nema iskri -> nema niceg. A bas takva
+     partija i jeste ona kojoj nesto treba. */
+  const DUR = 30;
+  const dur = DUR * 60000;
+  const base = { nowMs: T0, startedAtMs: T0, durationMin: DUR, lastEventAtMs: T0, firedTypes: new Set() };
+  const at = (frac, extra) => R.autoEventPick({ ...base, nowMs: T0 + dur * frac, ...(extra || {}) });
+
+  ok('pre polovine partije arena cuti', at(0.1) === null && at(0.49) === null);
+  ok('posle polovine se umesa', !!at(0.75), String(at(0.75)));
+  ok('posle kraja partije vise ne', at(1.4) === null);
+
+  // budzet je ZAJEDNICKI sa duhovima — dva izvora se ne sabiraju u pet talasa
+  const bud = R.ghostEventBudget(DUR);
+  ok('potrosen budzet zaustavlja arenu',
+    at(0.8, { firedTypes: new Set(['feast', 'wasps', 'firewall', 'drought', 'supplyBox'].slice(0, bud)) }) === null);
+  ok('sa jednim slobodnim mestom jos moze',
+    bud < 2 || !!at(0.8, { firedTypes: new Set(['feast']) }));
+
+  // razmak od poslednjeg dogadjaja vazi za oba izvora
+  ok('ne ubacuje odmah posle tudjeg dogadjaja',
+    at(0.8, { lastEventAtMs: T0 + dur * 0.75 }) === null);
+  ok('posle dovoljne pauze ubacuje',
+    !!at(0.8, { lastEventAtMs: T0 + dur * 0.5 }));
+
+  /* Izbor NIJE nasumican: gladnima i prebijenima pomoc, sitima nevolja. */
+  const gladni = { fed: 20, hp: 90, thirst: 30 };
+  const prebijeni = { fed: 90, hp: 30, thirst: 90 };
+  const citavi = { fed: 95, hp: 95, thirst: 95 };
+  ok('gladnima arena salje pomoc', R.EVENTS[at(0.8, { mood: gladni })].tone === 'good');
+  ok('prebijenima takodje', R.EVENTS[at(0.8, { mood: prebijeni })].tone === 'good');
+  ok('sitima i citavima salje nevolju', R.EVENTS[at(0.8, { mood: citavi })].tone === 'bad');
+  ok('kad plivaju u vodi, prva nevolja je susa',
+    at(0.8, { mood: { fed: 95, hp: 95, thirst: 95 } }) === 'drought');
+  ok('kad su zedni, ne salje susu nego ih tera u pokret',
+    at(0.8, { mood: { fed: 60, hp: 95, thirst: 50 } }) === 'firewall');
+  ok('nikad ne ponavlja tip',
+    at(0.8, { mood: citavi, firedTypes: new Set(['drought']) }) !== 'drought');
+  ok('kad je jedna strana potrosena, uzima drugu', (() => {
+    const t = at(0.8, { mood: gladni, firedTypes: new Set(['feast', 'supplyBox']) });
+    return t === null || R.EVENTS[t].tone === 'bad';        // null ako je budzet pun
+  })());
+
+  ok('sve sto arena izabere postoji u pravilima',
+    [0.55, 0.7, 0.9].every((f) => { const t = at(f); return t === null || !!R.EVENTS[t]; }));
+
+  /* Provera KROZ VREME: tiha partija od pola sata, niko ne gine, duhovi nista
+     ne kupuju. Mora da dobije bar jedan dogadjaj, i nikad vise od budzeta. */
+  {
+    let fired = [], last = T0;
+    for (let t = 0; t <= dur; t += 10000) {
+      const type = R.autoEventPick({
+        nowMs: T0 + t, startedAtMs: T0, durationMin: DUR, lastEventAtMs: last,
+        firedTypes: new Set(fired), mood: { fed: 80, hp: 90, thirst: 80 },
+      });
+      if (type) { fired.push(type); last = T0 + t; }
+    }
+    ok('tiha partija ipak dobije dogadjaj', fired.length >= 1, fired.join(',') || 'nijedan');
+    ok('ali nikad preko budzeta', fired.length <= bud, `${fired.length} > ${bud}`);
+    ok('i nijedan tip dvaput', new Set(fired).size === fired.length, fired.join(','));
+  }
+
+  // raspolozenje se cita iz zivih, mrtvi se ne broje
+  const m = R.arenaMood({
+    a: { alive: true, hunger: 100, thirst: 100, hp: 100, maxHp: 100 },
+    b: { alive: false, hunger: 0, thirst: 0, hp: 0, maxHp: 100 },
+  });
+  ok('mrtvi ne kvare prosek', m.fed === 100 && m.hp === 100 && m.alive === 1);
+  ok('prazna arena ne rusi racun', R.arenaMood({}).alive === 0);
+
+  // geometrija je ista i za duhove i za arenu
+  const cfg2 = { center: cfg.center, diameterM: 500 };
+  const fw = R.buildLiveEvent('firewall', cfg2, T0, () => 0.5);
+  ok('zid vatre dobija pravac i putanju', fw.headingDeg != null && fw.travelM > 0 && !!fw.lat);
+  ok('najava zida vatre je 60 s, ne 15', fw.atMs - T0 === R.EVENTS.firewall.warnMs);
+  ok('gozba pada na kornukopiju',
+    R.buildLiveEvent('feast', cfg2, T0, Math.random).lat === cfg2.center.lat);
+  ok('nepoznat tip ne pravi dogadjaj', R.buildLiveEvent('nema', cfg2, T0, Math.random) === null);
+}
+
 console.log(fail ? `\n${fail} provera palo\n` : `\nSve provere prosle\n`);
 process.exit(fail ? 1 : 0);

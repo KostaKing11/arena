@@ -276,6 +276,7 @@ const I18N = {
     /* Objava kaže samo DA nekoga više nema. Kako je pao ostaje između njega i
        onoga ko ga je oborio — inače cela arena zna ko lovi, a ko gladuje. */
     fGone: (a) => `${a} — nema ga više`,
+    fArena: (a) => `Arena se umešala — ${a}`,
     fZone: (n, m) => `Zona se skuplja — faza ${n}, prečnik ${m} m`,
     fEvent: (n) => `${n} je počeo`,
     fFeast: 'Gozba je postavljena u kornukopiji',
@@ -542,6 +543,7 @@ const I18N = {
     fPrep: 'Preparation has begun — go to your starting point',
     fStart: 'GONG! The Hunger Games have begun',
     fGone: (a) => `${a} — gone`,
+    fArena: (a) => `The arena stepped in — ${a}`,
     fZone: (n, m) => `The zone is closing — phase ${n}, diameter ${m} m`,
     fEvent: (n) => `${n} has begun`,
     fFeast: 'A feast has been laid at the cornucopia',

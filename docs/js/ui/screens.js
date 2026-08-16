@@ -1270,7 +1270,9 @@ const UI = (() => {
       case 'package': return T('fPackage');
       case 'shot': return T('fShot', nm(f.subjectId), nm(f.targetId), f.hit);
       case 'special': return T('fSpecial', nm(f.subjectId), specialName(f.special));
-      case 'event': return f.eventType === 'feast' ? T('fFeast') : T('fEvent', eventName(f.eventType));
+      case 'event':
+        if (f.auto) return T('fArena', eventName(f.eventType));
+        return f.eventType === 'feast' ? T('fFeast') : T('fEvent', eventName(f.eventType));
       case 'zone': return T('fZone', f.phase || '', f.diameter || '');
       case 'alarm': return T('fAlarm');
       default: return f.text || '';

@@ -255,6 +255,93 @@
      jedna gozba. Ostatak izbora ostaje duhovima. */
   const ghostEventBudget = (durationMin) => Math.max(1, Math.round((durationMin || 30) / 20));
 
+  /* ═══════════════════ ARENA SE UMEŠA ═══════════════════
+     Otkad događaje puštaju samo duhovi, partija u kojoj niko ne pogine rano
+     prođe bez ijednog: nema mrtvih → nema iskri → nema ničega. A baš takva
+     partija i jeste ona kojoj nešto treba, jer se svi razišli i niko se ne
+     sreće.
+
+     Zato posle polovine partije arena sama ubaci jedan događaj — ali ne
+     nasumično nego prema tome KAKO tributi stoje:
+
+       · ako su izgladneli, žedni ili prebijeni → pomoć (gozba, sanduk)
+       · ako su svi siti i čitavi, a niko ne gine → nevolja koja ih tera u pokret
+
+     Sve ostalo je isto kao kad kupe duhovi: ista najava, isti prikaz na mapi i
+     isti ukupan budžet, pa se dva izvora ne mogu sabrati u pet talasa.        */
+  const AUTO_AFTER_FRAC = 0.5;      // ne pre polovine partije
+  const AUTO_GAP_FRAC = 0.2;        // i bar 20% trajanja od poslednjeg događaja
+
+  /** Prosek stanja živih — po njemu se bira strana. */
+  function arenaMood(players) {
+    const live = Object.values(players || {}).filter((p) => p && p.alive !== false);
+    if (!live.length) return { fed: 100, hp: 100, thirst: 100, alive: 0 };
+    const avg = (f) => live.reduce((n, p) => n + f(p), 0) / live.length;
+    return {
+      fed: Math.min(avg((p) => (p.hunger != null ? p.hunger : 100)), avg((p) => (p.thirst != null ? p.thirst : 100))),
+      thirst: avg((p) => (p.thirst != null ? p.thirst : 100)),
+      hp: avg((p) => ((p.hp != null ? p.hp : 100) / (p.maxHp || 100)) * 100),
+      alive: live.length,
+    };
+  }
+
+  /**
+   * Da li arena sad sama pušta događaj, i koji.
+   * Čista funkcija — testira se bez baze i bez mreže. Vraća tip ili null.
+   */
+  function autoEventPick(ctx) {
+    const { nowMs, startedAtMs, durationMin, lastEventAtMs, firedTypes, mood } = ctx;
+    if (!startedAtMs || !durationMin) return null;
+    const durMs = durationMin * 60000;
+    const elapsed = nowMs - startedAtMs;
+    if (elapsed < durMs * AUTO_AFTER_FRAC) return null;          // prerano
+    if (elapsed > durMs) return null;                            // partija istekla
+
+    const used = firedTypes instanceof Set ? firedTypes : new Set(firedTypes || []);
+    if (used.size >= ghostEventBudget(durationMin)) return null; // budžet je zajednički
+    // od poslednjeg događaja mora da prođe dovoljno — i to važi za oba izvora
+    const since = nowMs - (lastEventAtMs || startedAtMs);
+    if (since < durMs * AUTO_GAP_FRAC) return null;
+
+    const m = mood || { fed: 100, hp: 100, thirst: 100 };
+    const pick = (list) => list.find((t) => !used.has(t)) || null;
+
+    // izgladneli ili prebijeni — arena pomaže, da finale uopšte ima ko da dočeka
+    if (m.fed < 40 || m.hp < 45) return pick(['feast', 'supplyBox']) || pick(['drought', 'wasps', 'firewall']);
+
+    /* Svi siti i čitavi: treba ih pokrenuti. Suša ako plivaju u vodi, inače
+       zid vatre koji ih gura preko arene, pa tek onda ose. */
+    const bad = m.thirst > 70 ? ['drought', 'firewall', 'wasps'] : ['firewall', 'wasps', 'drought'];
+    return pick(bad) || pick(['feast', 'supplyBox']);
+  }
+
+  /* Geometrija događaja na terenu. Deli je i kupovina duhova i arena, da se
+     zid vatre ne bi crtao na dva različita načina. */
+  function buildLiveEvent(type, cfg, nowMs, rand, extra) {
+    const meta = EVENTS[type];
+    if (!meta || !cfg || !cfg.center) return null;
+    const rnd = rand || Math.random;
+    const warn = meta.warnMs || 15000;
+    const ev = {
+      id: U.uid('ge'), type, atMs: nowMs + warn, warnMs: warn,
+      endMs: nowMs + warn + meta.durMs, ...(extra || {}),
+    };
+    if (type === 'firewall') {
+      const head = rnd() * 360;
+      const start = U.destPoint(cfg.center, (head + 180) % 360, cfg.diameterM * 0.575);
+      Object.assign(ev, {
+        headingDeg: head, lat: start.lat, lng: start.lng,
+        radiusM: meta.widthM, travelM: cfg.diameterM * 1.15,
+      });
+    } else if (type === 'wasps') {
+      const p = U.pointInCircle(rnd, cfg.center, cfg.diameterM * 0.35);
+      Object.assign(ev, { lat: p.lat, lng: p.lng, radiusM: meta.radiusM });
+    } else if (type === 'feast') {
+      Object.assign(ev, { lat: cfg.center.lat, lng: cfg.center.lng, radiusM: 40 });
+    }
+    return ev;
+  }
+
   /* ═══════════════════ DAN I NOĆ ═══════════════════
      Noć je bila događaj koji duhovi kupuju, pa je partija mogla da prođe cela
      po danu — ili da noć padne dvaput za deset minuta. Sada je to ritam, ne
@@ -1038,6 +1125,7 @@
     RECOMMENDED, recommendFor, MIN_PLAYERS, MAX_PLAYERS, maxAllianceSize,
     dealClasses, classCensus,
     ZONE_PHASES, ZONE_WARN_MS, EVENTS, SPARK_COSTS, GM_COOLDOWN_MS, ghostEventBudget,
+    AUTO_AFTER_FRAC, AUTO_GAP_FRAC, arenaMood, autoEventPick, buildLiveEvent,
     DAY_MS, NIGHT_MS, DAY_CYCLE_MS, NIGHT_VISION_M, DURATION_STEP_MIN, isNight, dayPhase,
     SURVIVAL, survivalTick,
     buildSchedule, zoneAt, firewallAt, shiftSchedule,
