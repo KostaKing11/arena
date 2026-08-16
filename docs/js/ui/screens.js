@@ -2040,14 +2040,18 @@ const UI = (() => {
   function gameMenuSheet() {
     const host = Store.isHost();
     const paused = !!Store.meta().pausedAtMs;
+    /* Mrtvom se ne nudi ni izlazak iz igre ni pozivanje mentora: prvo je već
+       učinjeno, a drugo nema kome. Meni bi inače nudio da umre po drugi put. */
+    const me = Store.me() || {};
+    const alive = me.alive !== false;
     const s = sheet(T('menu'), `
       <div class="rows">
         ${host ? `<button class="rowitem" id="gmPause">${icon(paused ? 'play' : 'pause', { size: 20 })}
           <span class="lbl">${esc(paused ? T('resumeGame') : T('pauseGame'))}</span></button>` : ''}
-        <button class="rowitem" id="gmMentor">${icon('users', { size: 20 })}
-          <span class="lbl">${esc(T('inviteMentor'))}</span></button>
-        <button class="rowitem" id="gmQuit">${icon('alert', { size: 20 })}
-          <span class="lbl" style="color:var(--danger)">${esc(T('quitGame'))}</span></button>
+        ${alive ? `<button class="rowitem" id="gmMentor">${icon('users', { size: 20 })}
+          <span class="lbl">${esc(T('inviteMentor'))}</span></button>` : ''}
+        ${alive ? `<button class="rowitem" id="gmQuit">${icon('alert', { size: 20 })}
+          <span class="lbl" style="color:var(--danger)">${esc(T('quitGame'))}</span></button>` : ''}
       </div>
       <button class="rowitem" id="gmMore" style="margin-top:var(--s3)">
         ${icon('settings', { size: 18 })}
@@ -2059,8 +2063,10 @@ const UI = (() => {
       await Store.hostUpdate('meta', { pausedAtMs: paused ? null : Clock.now() });
       s.close();
     };
-    $('#gmMentor', s).onclick = () => { s.close(); mentorInviteSheet(); };
-    $('#gmQuit', s).onclick = async () => {
+    const mb = $('#gmMentor', s);
+    if (mb) mb.onclick = () => { s.close(); mentorInviteSheet(); };
+    const qb = $('#gmQuit', s);
+    if (qb) qb.onclick = async () => {
       s.close();
       if (await confirmBox(T('quitConfirm'), T('quitGame'), true)) { Engine.die('quit'); App.route(); }
     };
