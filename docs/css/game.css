@@ -564,6 +564,9 @@
 .feed-item .ft { flex: 1; font-size: var(--fs-sm); line-height: 1.4; padding-top: 5px; }
 .feed-item .fw { font-size: 11px; color: var(--text-3); padding-top: 7px; font-variant-numeric: tabular-nums; }
 
+.tl-item .by { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; color: var(--danger); font-weight: 600; }
+.tl-item .by .ic { flex: none; }
+
 /* ── kraj ── */
 .winner-card { text-align: center; padding: var(--s5) var(--s4); }
 .winner-card h1 { font-family: var(--ff-display); font-size: var(--fs-2xl); color: var(--gold-hi); }

@@ -2537,7 +2537,9 @@ const UI = (() => {
       <div class="card"><div class="card-title">${esc(T('timeline'))}</div>
         ${dead.map(([pid, p]) => `<div class="tl-item">
           <span class="when">${U.hhmm(p.deathAtMs)}</span>
-          <span class="grow">${esc(p.name)}${p.killedBy ? ` — ${esc(nm(p.killedBy))}` : ''}</span>
+          <span class="grow">${esc(p.name)}${p.killedBy
+            ? `<span class="by">${icon('swords', { size: 15 })}${esc(nm(p.killedBy))}</span>`
+            : ''}</span>
         </div>`).join('') || `<p class="dim">—</p>`}</div>
       <div class="card"><div class="card-title">${esc(T('stats'))}</div>
         ${Object.entries(P).map(([pid, p]) => `<div class="list-item">
