@@ -1,5 +1,5 @@
 /* UI kit: DOM sitnice, obaveštenja, fioke, tema. */
-const APP_VERSION = '0.15.1';
+const APP_VERSION = '0.15.2';
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const el = (tag, cls, html) => {
@@ -190,9 +190,13 @@ function holdFill(el, ms, opts) {
       if (!holding) return;
       const p = Math.min(1, (performance.now() - t0) / ms);
       bar.style.transform = `scaleX(${p})`;
-      if (opts.cancelOnMove && start && Geo.pos && U.dist(start, Geo.pos) > (opts.moveM || 6)) {
-        toast(T('pickupMoved'), 'danger');
-        return finish(false);
+      /* Prag ne sme da bude manji od greske GPS-a. Sa fiksnih 6 m je svako
+         drzanje pucalo od samog podrhtavanja signala — narocito medju zgradama,
+         gde tacnost ume da bude i 15 m. Ako se prijavljena tacnost povecala,
+         raste i prag: kaznjava se pravo pomeranje, ne sum. */
+      if (opts.cancelOnMove && start && Geo.pos) {
+        const lim = Math.max(opts.moveM || 6, (Geo.pos.accM || 0), (start.accM || 0));
+        if (U.dist(start, Geo.pos) > lim) { toast(T('pickupMoved'), 'danger'); return finish(false); }
       }
       if (p >= 1) { Haptics.fire('pickup'); return finish(true); }
       raf = requestAnimationFrame(loop);
