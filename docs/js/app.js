@@ -551,14 +551,15 @@ const App = (() => {
 
   /* ───────────────── kupljenje predmeta ───────────────── */
   let picking = false;
-  async function tryPickup(item) {
+  async function tryPickup(item, opts) {
     if (picking) return;
     const d = Engine.d;
     if (!Items.pickupAllowed(d)) { toast(T('noPickupYet'), 'gold'); return; }
     if (!item.inReach) { toast(T('tooFarItem'), 'gold'); return; }
     picking = true;
     try {
-      const ok = await Items.runPickup(item);
+      // held znaci da je drzanje vec odradjeno na samoj kartici ponude
+      const ok = (opts && opts.held) ? true : await Items.runPickup(item);
       if (ok) await Items.take(item);
     } finally { picking = false; }
   }
@@ -603,9 +604,13 @@ const App = (() => {
        poslednji glas — njihove iskre su otišle u istu kasu. `buyerId` ostaje
        radi starih zapisa. */
     const buyers = voters.length ? voters : [Store.myId];
+    /* Najava traje onoliko koliko dogadjaj trazi (R.EVENTS[type].warnMs), ne
+       pausalnih 15 s: zid vatre prelazi celu arenu i sa 15 s se ne moze izbeci.
+       Za to vreme se na mapi vidi odakle krece i kuda ide. */
+    const warn = meta2.warnMs || 15000;
     const ev = {
       id: U.uid('ge'), type, buyerId: Store.myId, buyerIds: buyers,
-      atMs: now + 15000, warnMs: 15000, endMs: now + 15000 + meta2.durMs,
+      atMs: now + warn, warnMs: warn, endMs: now + warn + meta2.durMs,
     };
     if (type === 'firewall') {
       const head = Math.random() * 360;

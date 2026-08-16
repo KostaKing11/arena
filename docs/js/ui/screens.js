@@ -656,6 +656,7 @@ const UI = (() => {
     // Duhu se krug obrće — njegov teren je VAN zone.
     if (d.zone) gmap.drawZone({ ...d.zone, peek: (me.zonePeekUntilMs || 0) > d.now }, d.cfg, { ghost });
     gmap.drawFire(d.firewall);
+    gmap.drawFireSoon(d.firewallSoon);
     gmap.drawWasps(d.wasps);
     gmap.drawSmoke(d.smoke);
     /* Duhovi umesto plena vide iskre (§16). Iskre stoje samo u prstenu van
@@ -754,9 +755,22 @@ const UI = (() => {
         <span class="pt"><span class="pn">${esc(itemName(near.type))}</span>
           <span class="pd">${esc(itemDesc(near.type) || rarityName(def.rarity))}</span></span>
         <span class="pw">${icon(pk.pickMs ? 'clock' : 'plus', { size: 18 })}<b>${esc(how)}</b></span>`;
-      act.onclick = () => App.tryPickup(near);
+      /* Vezivanje ide JEDNOM po predmetu: da se drzanje kaci na svaki otkucaj,
+         traka bi se resetovala cetiri puta u sekundi. */
+      if (act.dataset.item !== near.id) {
+        act.dataset.item = near.id;
+        if (act._holdOff) { act._holdOff(); act._holdOff = null; }
+        act.onclick = null;
+        if (pk.pickMs) {
+          holdFill(act, pk.pickMs, { cancelOnMove: pk.cancelOnMove, moveM: pk.moveM || 6, repeat: true })
+            .then((ok) => { if (ok) App.tryPickup(near, { held: true }); });
+        } else act.onclick = () => App.tryPickup(near);
+      }
       if (!act._buzzed) { act._buzzed = true; Haptics.fire('itemNear'); }
-    } else { act.hidden = true; act._buzzed = false; }
+    } else {
+      if (act._holdOff) { act._holdOff(); act._holdOff = null; }
+      act.hidden = true; act._buzzed = false; act.dataset.item = '';
+    }
 
     // donja traka
     const dockBtn = (id, ic, label, badge) => {
@@ -782,8 +796,19 @@ const UI = (() => {
       dockBtn('#btnFeed', 'scroll', T('feed'));
       dockBtn('#btnPlayers', 'handshake', T('allies'), allyCount(d) || 0);
       dockBtn('#btnGhost', 'map', T('map'));
-      $('#btnCamera').innerHTML = icon('camera', { size: 26 });
-      $('#btnCamera').classList.remove('ghosty');
+      /* Cooldown se vidi NA dugmetu: prsten se prazni, dugme je zatamnjeno i
+         ne da se pritisnuti. Ranije si saznavao da ne možeš tek pošto klikneš,
+         iz poruke — a dotle si već digao telefon i stao nasred ulice. */
+      const cam = $('#btnCamera');
+      const left = Math.max(0, (me.weaponCooldownUntilMs || 0) - d.now);
+      const total = R.cooldownFor(me) || 1;
+      const p = left > 0 ? Math.min(1, left / total) : 0;
+      cam.innerHTML = icon('camera', { size: 26 })
+        + (left > 0 ? `<span class="cd-num">${Math.ceil(left / 1000)}</span>` : '');
+      cam.classList.remove('ghosty');
+      cam.classList.toggle('cooling', left > 0);
+      cam.style.setProperty('--cd', String(p));
+      cam.disabled = left > 0;
     }
     $('#btnMenu').innerHTML = icon('settings', { size: 20 });
     $('#btnRecenter').innerHTML = icon('crosshair', { size: 20 });
@@ -1101,7 +1126,11 @@ const UI = (() => {
     else if (free) cells.push(`<div class="inv-free">${esc(T('invFree'))}: ${free}</div>`);
     const w = R.WEAPONS[me.weapon] || R.WEAPONS.fists;
     const own = R.ownsWeapon(me);
-    const s = sheet(T('inventory'), `
+    Sfx.bag();                       // ranac se otvara — čuje se rajsferšlus
+    const s = sheet(`${T('inventory')} · ${list.length}/${slots}`, `
+      <div class="cap-bar" aria-hidden="true">${
+        Array.from({ length: slots }, (_, i) => `<i class="${i < list.length ? 'on' : ''}"></i>`).join('')
+      }</div>
       <div class="weapon-slot">
         <span class="goldc">${icon(WEAPON_ICON[me.weapon] || 'hand', { size: 32 })}</span>
         <div class="grow"><div class="big" style="font-weight:800">${esc(weaponName(me.weapon))}${own ? ' +8' : ''}</div>
@@ -1126,10 +1155,26 @@ const UI = (() => {
             <span class="chip">${dw.dmg} ${esc(T('statDamage')).toLowerCase()}</span>
             <span class="chip">${dw.minM}–${dw.maxM} m</span>
             <span class="chip">${Math.round(dw.cdMs / 1000)} s</span></div>` : ''}
-          <button class="btn primary lg full" id="iUse" style="margin-top:var(--s4)">${esc(def.trap ? T('setTrap') : T('useItem'))}</button>
+          <button class="btn primary lg full" id="iUse" style="margin-top:var(--s4)">${esc(
+            def.trap ? T('setTrap')
+              : ['food', 'drink', 'heal'].includes(def.type) ? `${T('holdToUse')} ${Math.round(R.HEAL_HOLD_MS / 1000)} s`
+              : T('useItem'))}</button>
           <button class="btn ghost full" id="iDrop">${esc(T('dropItem'))}</button>
         </div>`);
-      $('#iUse', m).onclick = async () => { m.close(); s.close(); await Items.use(i); };
+      /* „Iskoristi" se DRŽI, isto kao kartica za uzimanje — dugme se puni s
+         leva na desno. Jelo, piće i lečenje traju 3 s; sve ostalo je odmah. */
+      const ub = $('#iUse', m);
+      const holdMs = ['food', 'drink', 'heal'].includes(def.type) ? R.HEAL_HOLD_MS : 0;
+      if (holdMs) {
+        ub.classList.add('holdable');
+        ub.onclick = null;
+        holdFill(ub, holdMs, {}).then(async (ok) => {
+          if (!ok) return;
+          m.close(); s.close(); await Items.use(i, { holdEl: null });
+        });
+      } else {
+        ub.onclick = async () => { m.close(); s.close(); await Items.use(i, { holdEl: null }); };
+      }
       $('#iDrop', m).onclick = async () => { m.close(); s.close(); await Items.drop(i); };
     });
   }
@@ -2491,7 +2536,7 @@ const UI = (() => {
       </div>
       <div class="card"><div class="card-title">${esc(T('timeline'))}</div>
         ${dead.map(([pid, p]) => `<div class="tl-item">
-          <span class="when">${U.mmss((p.deathAtMs - t0) / 1000)}</span>
+          <span class="when">${U.hhmm(p.deathAtMs)}</span>
           <span class="grow">${esc(p.name)}${p.killedBy ? ` — ${esc(nm(p.killedBy))}` : ''}</span>
         </div>`).join('') || `<p class="dim">—</p>`}</div>
       <div class="card"><div class="card-title">${esc(T('stats'))}</div>

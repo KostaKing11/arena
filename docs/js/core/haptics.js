@@ -84,5 +84,8 @@ const Sfx = (() => {
     tick()   { tone(1100, 1100, 0.04, 'sine', 0.12); },
     warn()   { tone(500, 700, 0.22, 'square', 0.16); tone(500, 700, 0.22, 'square', 0.16, 0.3); },
     zap()    { tone(1400, 300, 0.25, 'sawtooth', 0.2); },
+    /* Otvaranje ranca: kratak šum sa uzlaznim filtrom — rajsferšlus. Sitnica,
+       ali od nje inventar prestane da bude spisak i postane torba. */
+    bag()    { noise(0.22, 0.13); tone(240, 520, 0.2, 'sawtooth', 0.05); },
   };
 })();

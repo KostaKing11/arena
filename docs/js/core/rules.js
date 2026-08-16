@@ -397,34 +397,12 @@
       prevR = radiusM; prevC = c;
     });
 
-    /* — eventovi — */
+    /* — eventovi —
+       Raspored ih VIŠE NE BACA sam. Nasumičan zid vatre koji se prosto stvori i
+       pređe celu arenu nije igra nego kazna: nemaš od koga da ga očekuješ ni
+       zašto. Sada svaki događaj ima autora — duhove — i cenu u iskrama, pa se
+       zna ko ga je pustio i zašto. Ostaje samo dan i noć, koji idu po satu. */
     const events = [];
-    if (cfg.eventsEnabled) {
-      const types = ['wasps', 'feast', 'drought', 'firewall'];
-      const order = U.shuffle(rng, types);
-      const n = Math.max(2, Math.min(order.length, Math.round(cfg.durationMin / 15)));
-      for (let k = 0; k < n; k++) {
-        const type = order[k];
-        const meta = EVENTS[type];
-        const atMs = startedAtMs + Math.round(durMs * (0.22 + 0.62 * (k + rng() * 0.6) / n));
-        const e = { id: 'ev' + k, type, atMs, warnMs: meta.warnMs, endMs: atMs + meta.durMs };
-        if (type === 'firewall') {
-          const head = rng() * 360;
-          e.headingDeg = head;
-          const startC = U.destPoint(center, (head + 180) % 360, r0 * 1.15);
-          e.lat = startC.lat; e.lng = startC.lng;
-          e.radiusM = meta.widthM;
-          e.travelM = r0 * 2.3;
-        } else if (type === 'wasps') {
-          const c = U.pointInCircle(rng, center, r0 * 0.7);
-          e.lat = c.lat; e.lng = c.lng; e.radiusM = meta.radiusM;
-        } else if (type === 'feast') {
-          e.lat = center.lat; e.lng = center.lng; e.radiusM = 40;
-        }
-        events.push(e);
-      }
-      events.sort((a, b) => a.atMs - b.atMs);
-    }
 
     /* Nebo sa licima poginulih je izbačeno: ekran je preuzimao telefon usred
        igre i ostajao da visi. Smrt se sada javlja samo objavom. */

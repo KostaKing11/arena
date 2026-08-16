@@ -76,55 +76,16 @@ const Items = (() => {
        hold3   — oružje, zamke, ranac, trajni bonusi
        chest8  — legendarno i epska oružja: 8 s + JAVNA OBJAVA svima      */
   /** Vraća Promise<boolean> — da li je uzimanje uspelo. UI se crta ovde. */
+  /* Drzi SAMU karticu ponude — ona se puni s leva na desno. Pun ekran sa
+     prstenom je izbacen: prekidao je igru i sakrivao mapu bas u trenutku kad
+     stojis u mestu i najranjiviji si. */
   function runPickup(item) {
     const meta = R.pickupOf(item.type, Store.me(), Clock.now());
     if (!meta.pickMs) return Promise.resolve(true);
-    return holdPick(item, meta);
-  }
-
-  function holdPick(item, meta) {
-    return new Promise((res) => {
-      const startPos = Geo.pos;
-      const dur = meta.pickMs;
-      const m = modal(`
-        <div class="center stack-lg">
-          <div class="chip rar-${item.rarity}" style="color:var(--rc);border-color:var(--rc)">
-            <span class="rar-dot"></span>${esc(rarityName(item.rarity))}</div>
-          <h2>${esc(itemName(item.type))}</h2>
-          <div class="holdring" id="hr">${ring(0, 180)}
-            <div style="position:absolute" class="display" id="hrN">${Math.ceil(dur / 1000)}</div>
-          </div>
-          <p class="dim">${esc(meta.cancelOnMove ? T('pickupHold') + ' — ' + T('pickupMoved') : T('pickupHold'))}</p>
-          <button class="btn ghost full" id="hrCancel">${esc(T('cancel'))}</button>
-        </div>`, { dismissible: false });
-
-      let t0 = 0, raf = 0, holding = false, done = false;
-      const ringEl = $('#hr svg', m), numEl = $('#hrN', m);
-      const finish = (ok) => {
-        if (done) return; done = true;
-        cancelAnimationFrame(raf); m.close(); res(ok);
-      };
-      function loop() {
-        if (!holding) return;
-        const p = (performance.now() - t0) / dur;
-        setRing(ringEl, p);
-        numEl.textContent = Math.max(0, Math.ceil((dur - (performance.now() - t0)) / 1000));
-        if (meta.cancelOnMove && startPos && Geo.pos && U.dist(startPos, Geo.pos) > (meta.moveM || 6)) {
-          toast(T('pickupMoved'), 'danger'); return finish(false);
-        }
-        if (p >= 1) { Haptics.fire('pickup'); return finish(true); }
-        raf = requestAnimationFrame(loop);
-      }
-      const down = (e) => { e.preventDefault(); if (holding || done) return; holding = true; t0 = performance.now(); Haptics.fire('tap'); loop(); };
-      const up = () => { if (!holding || done) return; holding = false; cancelAnimationFrame(raf); setRing(ringEl, 0); };
-      const hr = $('#hr', m);
-      hr.addEventListener('pointerdown', down);
-      window.addEventListener('pointerup', up);
-      window.addEventListener('pointercancel', up);
-      $('#hrCancel', m).onclick = () => finish(false);
-      m.addEventListener('remove', () => window.removeEventListener('pointerup', up));
-      // sanduk: svima ide objava da ga neko otvara (§1)
-      if (meta.announce) Store.pushFeed({ type: 'legendary', scope: 'all' });
+    // sanduk: svima ide objava da ga neko otvara (§1)
+    if (meta.announce) Store.pushFeed({ type: 'legendary', scope: 'all' });
+    return holdFill($('#actionBtn'), meta.pickMs, {
+      cancelOnMove: meta.cancelOnMove, moveM: meta.moveM || 6,
     });
   }
 
@@ -248,7 +209,7 @@ const Items = (() => {
   }
 
   /** Iskoristi predmet iz inventara. */
-  async function use(index) {
+  async function use(index, opts) {
     const me = Store.me();
     const list = inv(me);
     const s = list[index];
@@ -262,12 +223,14 @@ const Items = (() => {
     /* Borba v4 §9: nema više stanja borbe, pa je lečenje i jelo uvek dostupno —
        ali traje 3 s stajanja u mestu i prekida se ako se pomeriš preko 5 m.
        Tu je cena: dok jedeš, ranjiv si i ne bežiš. */
+    /* Jelo, pice i lecenje traju 3 s drzanja dugmeta „Iskoristi" — ali se vise
+       NE prekidaju hodanjem. Voda koja se ne moze popiti u pokretu je bila
+       kazna bez pokrica: igra se na ulici i stalno se ide negde. */
     if (def.type === 'food' || def.type === 'drink' || def.type === 'heal') {
-      const okHold = await holdPick(
-        { type: s.itemType, rarity: def.rarity },
-        { pickMs: R.HEAL_HOLD_MS, cancelOnMove: true, moveM: R.HEAL_MOVE_M }
-      );
-      if (!okHold) return;
+      if (opts && opts.holdEl) {
+        const okHold = await holdFill(opts.holdEl, R.HEAL_HOLD_MS, {});
+        if (!okHold) return;
+      }
     }
 
     const now = Clock.now();

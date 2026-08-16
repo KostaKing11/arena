@@ -1,5 +1,5 @@
 /* UI kit: DOM sitnice, obaveštenja, fioke, tema. */
-const APP_VERSION = '0.14.3';
+const APP_VERSION = '0.15.1';
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const el = (tag, cls, html) => {
@@ -157,6 +157,68 @@ const Screens = {
    lokalnom serveru vodili u 404, a iz /arena/test bi ispao /arena/test?room=. */
 function appBase() {
   return location.origin + location.pathname.replace(/[^/]*$/, '');
+}
+
+/* ───────────────────────── držanje ─────────────────────────
+   Držiš SAM element — karticu predmeta ili dugme „Iskoristi" — i on se puni
+   s leva na desno. Ranije je za svako uzimanje iskakao pun ekran sa prstenom:
+   prekidao je igru, sakrivao mapu i nikom se nije dopadao.
+
+   Vraća `true` ako si izdržao do kraja, `false` ako si pustio ili se pomerio.  */
+function holdFill(el, ms, opts) {
+  opts = opts || {};
+  return new Promise((res) => {
+    if (!el) return res(false);
+    if (!ms) return res(true);
+    const bar = el.querySelector('.hold-fill') || el.appendChild(el.ownerDocument.createElement('i'));
+    bar.className = 'hold-fill';
+    const start = opts.from || (Geo && Geo.pos) || null;
+
+    let t0 = 0, raf = 0, holding = false, done = false;
+    const finish = (ok) => {
+      if (done) return; done = true;
+      cancelAnimationFrame(raf);
+      bar.style.transform = 'scaleX(0)';
+      el.classList.remove('holding');
+      el.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      if (opts.onEnd) opts.onEnd(ok);
+      res(ok);
+    };
+    function loop() {
+      if (!holding) return;
+      const p = Math.min(1, (performance.now() - t0) / ms);
+      bar.style.transform = `scaleX(${p})`;
+      if (opts.cancelOnMove && start && Geo.pos && U.dist(start, Geo.pos) > (opts.moveM || 6)) {
+        toast(T('pickupMoved'), 'danger');
+        return finish(false);
+      }
+      if (p >= 1) { Haptics.fire('pickup'); return finish(true); }
+      raf = requestAnimationFrame(loop);
+    }
+    function down(e) {
+      if (holding || done) return;
+      e.preventDefault();
+      holding = true; t0 = performance.now();
+      el.classList.add('holding');
+      Haptics.fire('tap');
+      loop();
+    }
+    function up() {
+      if (!holding || done) return;
+      holding = false;
+      cancelAnimationFrame(raf);
+      bar.style.transform = 'scaleX(0)';
+      el.classList.remove('holding');
+      if (!opts.repeat) finish(false);      // jednokratno: pustio si, gotovo
+    }
+    el.addEventListener('pointerdown', down);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    // onaj ko je pokrenuo drzanje mora moci i da ga otkaze spolja
+    el._holdOff = () => finish(false);
+  });
 }
 
 /* ───────────────────────── razno ───────────────────────── */

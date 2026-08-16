@@ -163,6 +163,18 @@ function makeMap(elId, opts) {
     if (!L_.fire) L_.fire = L.polyline(pts, { color: '#FF3B00', weight: 14, opacity: .75, interactive: false }).addTo(map);
     else L_.fire.setLatLngs(pts);
   }
+  /* Najava zida vatre — isprekidana linija tamo odakle krece. Bez ovoga se
+     zid prosto stvori preko pola arene i nema se sta izbeci. */
+  function drawFireSoon(fw) {
+    if (!fw) { if (L_.fireSoon) { map.removeLayer(L_.fireSoon); L_.fireSoon = null; } return; }
+    const pts = [[fw.a.lat, fw.a.lng], [fw.b.lat, fw.b.lng]];
+    if (!L_.fireSoon) {
+      L_.fireSoon = L.polyline(pts, {
+        color: '#FF3B00', weight: 5, opacity: .85, dashArray: '10 12', interactive: false,
+      }).addTo(map);
+    } else L_.fireSoon.setLatLngs(pts);
+  }
+
   function drawWasps(w) {
     if (!w) { if (L_.wasps) { map.removeLayer(L_.wasps); L_.wasps = null; } return; }
     if (!L_.wasps) L_.wasps = L.circle([w.lat, w.lng], { radius: w.radiusM, color: '#A855F7', weight: 2, fillColor: '#A855F7', fillOpacity: .18, interactive: false }).addTo(map);
@@ -251,7 +263,7 @@ function makeMap(elId, opts) {
   const closePopup = () => map.closePopup();
 
   return {
-    map, setMe, recenter, drawZone, drawFire, drawWasps, drawSmoke, drawItems, drawPlayers, drawTraps, setStart, drawFog,
+    map, setMe, recenter, drawZone, drawFire, drawFireSoon, drawWasps, drawSmoke, drawItems, drawPlayers, drawTraps, setStart, drawFog,
     popupAt, closePopup,
     setVision(v) { if (v === visionM) return; visionM = v; autoZoom(); drawFog(); },
     setFull(v) { if (v === fullMap) return; fullMap = v; drawFog(); },

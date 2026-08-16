@@ -69,6 +69,13 @@ const Engine = (() => {
         if (ev.type === 'wasps') out.wasps = ev;
         if (ev.type === 'firewall') out.firewall = R.firewallAt(ev, cfg, now);
       }
+      /* Zid vatre pre nego sto krene: linija na startnoj poziciji, da se vidi
+         odakle dolazi i na koju stranu treba bezati. */
+      for (const ev of Object.values(live)) {
+        if (ev.type !== 'firewall' || now >= ev.atMs || now < ev.atMs - (ev.warnMs || 0)) continue;
+        out.firewallSoon = R.firewallAt({ ...ev, atMs: now, endMs: now + 1 }, cfg, now);
+        out.firewallInMs = ev.atMs - now;
+      }
     }
 
     const pos = Geo.pos;
