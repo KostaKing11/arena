@@ -371,6 +371,11 @@ const Engine = (() => {
   }
 
   async function endGame(winnerId) {
+    /* Pobednik se bira iz snimka „ko je još živ", a zona ume da pokosi i njega
+       u istom otkucaju. Zato se pred upis još jednom proveri: mrtav pobednik
+       se ne upisuje, partija onda nema pobednika. */
+    const cand = winnerId && Store.players()[winnerId];
+    if (cand && cand.alive === false) winnerId = null;
     await Store.hostUpdate('meta', { state: 'END', endedAtMs: Clock.now(), winnerId: winnerId || null });
     await Store.pushFeed({ type: 'end', subjectId: winnerId || null, scope: 'all' });
     Store.wipeFaces();                 // §21 — slike lica se brišu na kraju

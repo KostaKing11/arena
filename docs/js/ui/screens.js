@@ -2424,7 +2424,11 @@ const UI = (() => {
   /* ═══════════════ kraj (§19) ═══════════════ */
   async function renderEnd() {
     const P = Store.players(), meta = Store.meta();
-    const w = meta.winnerId ? P[meta.winnerId] : null;
+    /* Domaćin bira pobednika iz snimka „ko je još živ", pa kad zona pokosi sve
+       u istom otkucaju proglasi onog ko je umro poslednji. Mrtav pobednik nije
+       pobednik — tada partija prosto nema pobednika. */
+    const wRec = meta.winnerId ? P[meta.winnerId] : null;
+    const w = wRec && wRec.alive !== false ? wRec : null;
     const dead = Object.entries(P).filter(([, p]) => p.alive === false && p.deathAtMs)
       .sort((a, b) => a[1].deathAtMs - b[1].deathAtMs);
     const t0 = meta.startedAtMs || 0;
