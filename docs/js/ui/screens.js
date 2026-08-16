@@ -730,18 +730,30 @@ const UI = (() => {
     // glavna akcija
     const act = $('#actionBtn');
     const near = Items.nearest(d);
+    /* Ponuda za uzimanje. Ranije je pisalo samo ime predmeta, a dugme je gurало
+       celu traku nadole. Sada lebdi iznad trake i kaže i ŠTA predmet radi i
+       KAKO se uzima — ta dva podatka su jedina koja odlučuju hoćeš li stati. */
     if (ghost) {
-      // jedina akcija duha na terenu je iskra pod nogama; sve ostalo je u traci
       const sp = drawn.find((s) => s.inReach);
       act.hidden = !sp;
       if (sp) {
-        act.disabled = false; act.className = 'action-btn gold';
-        act.innerHTML = `${icon('spark', { size: 24 })}<span>${esc(T('collectSpark'))}</span>`;
+        act.disabled = false; act.className = 'pickup-card spark';
+        act.innerHTML = `<span class="pi">${icon('spark', { size: 24 })}</span>
+          <span class="pt"><span class="pn">${esc(T('collectSpark'))}</span>
+            <span class="pd">${esc(T('sparksHelp'))}</span></span>
+          <span class="pw">${icon('plus', { size: 18 })}</span>`;
         act.onclick = () => Items.collectSpark(sp.id);
       }
     } else if (near && Items.pickupAllowed(d)) {
-      act.hidden = false; act.disabled = false; act.className = 'action-btn';
-      act.innerHTML = `${icon(ITEM_ICON[near.type] || 'box', { size: 24 })}<span>${esc(itemName(near.type))}</span>`;
+      const def = R.ITEMS[near.type] || {};
+      const pk = R.pickupOf(near.type, me, d.now);
+      const how = pk.pickMs ? `${T('pickupHold')} ${Math.round(pk.pickMs / 1000)} s` : T('pickupTap');
+      act.hidden = false; act.disabled = false;
+      act.className = `pickup-card rar-${def.rarity || 'common'}`;
+      act.innerHTML = `<span class="pi">${icon(ITEM_ICON[near.type] || 'box', { size: 24 })}</span>
+        <span class="pt"><span class="pn">${esc(itemName(near.type))}</span>
+          <span class="pd">${esc(itemDesc(near.type) || rarityName(def.rarity))}</span></span>
+        <span class="pw">${icon(pk.pickMs ? 'clock' : 'plus', { size: 18 })}<b>${esc(how)}</b></span>`;
       act.onclick = () => App.tryPickup(near);
       if (!act._buzzed) { act._buzzed = true; Haptics.fire('itemNear'); }
     } else { act.hidden = true; act._buzzed = false; }
@@ -1073,16 +1085,20 @@ const UI = (() => {
     const me = Store.me();
     const list = Items.inv(me);
     const slots = R.slotsOf(me);
-    const cells = [];
-    for (let i = 0; i < slots; i++) {
-      const s = list[i];
-      if (!s) { cells.push(`<div class="inv-slot empty"><span class="dim tiny">${esc(T('emptySlot'))}</span></div>`); continue; }
+    /* Spisak, ne rešetka: uz svaki predmet stoji i šta radi, pa se ne mora
+       pamtiti šta je „Blic-folija". Prazna mesta se broje u jednom redu
+       umesto da se nabrajaju kao prazne pločice. */
+    const cells = list.map((s, i) => {
       const def = R.ITEMS[s.itemType];
-      cells.push(`<button class="inv-slot has rar-${def.rarity}" data-i="${i}">
-        ${icon(ITEM_ICON[s.itemType] || 'box', { size: 30 })}
-        <div class="nm">${esc(itemName(s.itemType))}</div>
-        ${(s.qty || 1) > 1 ? `<div class="qty">${s.qty}</div>` : ''}</button>`);
-    }
+      return `<button class="inv-slot has rar-${def.rarity}" data-i="${i}">
+        <span class="ii">${icon(ITEM_ICON[s.itemType] || 'box', { size: 24 })}</span>
+        <span class="it"><span class="nm">${esc(itemName(s.itemType))}</span>
+          <span class="ds">${esc(itemDesc(s.itemType) || rarityName(def.rarity))}</span></span>
+        ${(s.qty || 1) > 1 ? `<span class="qty">${s.qty}</span>` : ''}</button>`;
+    });
+    const free = Math.max(0, slots - list.length);
+    if (!list.length) cells.push(`<div class="inv-slot empty">${esc(T('invEmpty'))}</div>`);
+    else if (free) cells.push(`<div class="inv-free">${esc(T('invFree'))}: ${free}</div>`);
     const w = R.WEAPONS[me.weapon] || R.WEAPONS.fists;
     const own = R.ownsWeapon(me);
     const s = sheet(T('inventory'), `

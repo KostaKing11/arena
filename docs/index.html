@@ -17,11 +17,11 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="css/tokens.css?v=0.13.7">
-<link rel="stylesheet" href="css/base.css?v=0.13.7">
-<link rel="stylesheet" href="css/components.css?v=0.13.7">
-<link rel="stylesheet" href="css/screens.css?v=0.13.7">
-<link rel="stylesheet" href="css/game.css?v=0.13.7">
+<link rel="stylesheet" href="css/tokens.css?v=0.14.0">
+<link rel="stylesheet" href="css/base.css?v=0.14.0">
+<link rel="stylesheet" href="css/components.css?v=0.14.0">
+<link rel="stylesheet" href="css/screens.css?v=0.14.0">
+<link rel="stylesheet" href="css/game.css?v=0.14.0">
 </head>
 <body>
 <div id="app">
@@ -113,28 +113,33 @@
     <div class="ghost-banner" id="ghostBanner" hidden></div>
     <div class="zone-flash" id="zoneFlash" aria-hidden="true"></div>
 
+    <!-- Gornji HUD je KOLONA: red sa kontekstom, pa kompas ispod njega.
+         Kao dva sloja jedan preko drugog su se doticali na uskim telefonima. -->
     <div class="hud-top">
-      <div class="zonechip glass" id="zoneChip"></div>
-      <!-- svoju klasu vidiš dvaput u životu: na deljenju i kad je zaboraviš -->
-      <button class="classchip glass" id="classChip" hidden></button>
-      <div class="sp"></div>
-      <button class="iconbtn glass" id="btnRecenter" data-i-aria="center"></button>
-      <button class="iconbtn glass" id="btnMenu" data-i-aria="menu"></button>
-    </div>
-
-    <div class="hud-bottom">
-      <!-- Kompas stoji DOLE, uz palac. Gore se sudarao sa trakom zone, a i
-           gleda se u isto vreme kad i vitalni — ne kad i sat do skupljanja. -->
+      <div class="hud-row">
+        <div class="zonechip glass" id="zoneChip"></div>
+        <!-- svoju klasu vidiš dvaput u životu: na deljenju i kad je zaboraviš -->
+        <button class="classchip glass" id="classChip" hidden></button>
+        <div class="sp"></div>
+        <button class="iconbtn glass" id="btnRecenter" data-i-aria="center"></button>
+        <button class="iconbtn glass" id="btnMenu" data-i-aria="menu"></button>
+      </div>
       <div class="compass glass" id="compass">
         <div class="strip" id="compassStrip"><div class="ticks" id="compassTicks"></div></div>
         <div class="marks" id="compassMarks"></div>
         <div class="center"></div>
       </div>
+    </div>
+
+    <div class="hud-bottom">
+      <!-- Ponuda za uzimanje LEBDI iznad trake, ne stoji u njenoj koloni:
+           dok je bila u koloni, život, glad i žeđ su poskakivali svaki put kad
+           se naiđe na predmet. -->
+      <button class="pickup-card" id="actionBtn" hidden></button>
       <!-- efekti sa trajanjem: bez ovoga igrač ne može da planira oko nečega
            što ne vidi (baklje, ogrtač, dim, adrenalin, durbin, otrov…) -->
       <div class="fx-bar" id="fxBar" aria-live="polite"></div>
       <div class="vitals" id="vitals"></div>
-      <button class="action-btn" id="actionBtn" hidden></button>
       <div class="dock">
         <button class="dockbtn" id="btnInv"></button>
         <button class="dockbtn" id="btnFeed"></button>
@@ -243,26 +248,26 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 
-<script src="js/firebase-config.js?v=0.13.7"></script>
-<script src="js/core/util.js?v=0.13.7"></script>
-<script src="js/core/rules.js?v=0.13.7"></script>
-<script src="js/core/i18n.js?v=0.13.7"></script>
-<script src="js/core/icons.js?v=0.13.7"></script>
-<script src="js/core/haptics.js?v=0.13.7"></script>
-<script src="js/net/clock.js?v=0.13.7"></script>
-<script src="js/net/store.js?v=0.13.7"></script>
-<script src="js/ui/kit.js?v=0.13.7"></script>
-<script src="js/ui/avatar.js?v=0.13.7"></script>
-<script src="js/ui/nav.js?v=0.13.7"></script>
-<script src="js/ui/sensors.js?v=0.13.7"></script>
-<script src="js/ui/map.js?v=0.13.7"></script>
-<script src="js/game/engine.js?v=0.13.7"></script>
-<script src="js/game/items.js?v=0.13.7"></script>
-<script src="js/game/combat.js?v=0.13.7"></script>
-<script src="js/game/encounter.js?v=0.13.7"></script>
-<script src="js/game/mentor.js?v=0.13.7"></script>
-<script src="js/game/bots.js?v=0.13.7"></script>
-<script src="js/ui/screens.js?v=0.13.7"></script>
-<script src="js/app.js?v=0.13.7"></script>
+<script src="js/firebase-config.js?v=0.14.0"></script>
+<script src="js/core/util.js?v=0.14.0"></script>
+<script src="js/core/rules.js?v=0.14.0"></script>
+<script src="js/core/i18n.js?v=0.14.0"></script>
+<script src="js/core/icons.js?v=0.14.0"></script>
+<script src="js/core/haptics.js?v=0.14.0"></script>
+<script src="js/net/clock.js?v=0.14.0"></script>
+<script src="js/net/store.js?v=0.14.0"></script>
+<script src="js/ui/kit.js?v=0.14.0"></script>
+<script src="js/ui/avatar.js?v=0.14.0"></script>
+<script src="js/ui/nav.js?v=0.14.0"></script>
+<script src="js/ui/sensors.js?v=0.14.0"></script>
+<script src="js/ui/map.js?v=0.14.0"></script>
+<script src="js/game/engine.js?v=0.14.0"></script>
+<script src="js/game/items.js?v=0.14.0"></script>
+<script src="js/game/combat.js?v=0.14.0"></script>
+<script src="js/game/encounter.js?v=0.14.0"></script>
+<script src="js/game/mentor.js?v=0.14.0"></script>
+<script src="js/game/bots.js?v=0.14.0"></script>
+<script src="js/ui/screens.js?v=0.14.0"></script>
+<script src="js/app.js?v=0.14.0"></script>
 </body>
 </html>

@@ -12,10 +12,11 @@
 /* ── gornji red: tanak, samo kontekst ── */
 .hud-top {
   position: absolute; top: 0; left: 0; right: 0; z-index: 500;
-  display: flex; align-items: center; gap: var(--s2);
+  display: flex; flex-direction: column; gap: var(--s2);
   padding: calc(var(--s2) + var(--safe-t)) var(--s2) 0;
   pointer-events: none;
 }
+.hud-row { display: flex; align-items: center; gap: var(--s2); }
 .hud-top > * { pointer-events: auto; }
 .glass {
   background: color-mix(in srgb, var(--ink-1) 82%, transparent);
@@ -44,9 +45,9 @@
 .hud-top .iconbtn { width: 38px; height: 38px; flex: none; }
 
 /* ── kompas: prava traka sa crticama i stranama sveta ── */
-/* Kompas je u donjoj koloni, iznad efekata i vitalnih. Gore je delio red sa
-   trakom zone i klasom, pa su se na uskim telefonima doticali; a i gleda se
-   zajedno sa životom i gladi, ne sa satom do skupljanja zone. */
+/* Kompas je gore, ali kao ZASEBAN RED ispod trake sa zonom i klasom — ne kao
+   drugi apsolutni sloj preko nje. Tako se ne mogu dodirnuti ni na najuzem
+   telefonu, a dole ostaje mesta za ono sto se stvarno tapka. */
 .compass {
   position: relative; flex: none; z-index: 1;
   height: 46px; overflow: hidden; border-radius: var(--r-sm);
@@ -129,15 +130,44 @@
 .vitalbox.crit .vn { color: var(--danger-hi); }
 :root[data-theme="day"] .vitalbox.crit .vn { color: var(--danger); }
 
-.action-btn {
-  width: 100%; min-height: var(--tap-lg); border-radius: var(--r-md);
-  display: flex; align-items: center; justify-content: center; gap: var(--s2);
-  background: var(--ember); color: var(--on-accent);
-  font-size: var(--fs-lg); font-weight: 700;
+/* ── ponuda za uzimanje ──
+   Ranije obicno dugme u koloni: pojavi se i celu traku gurne nadole, pa su
+   zivot, glad i zed poskakivali svaki put kad naidjes na predmet. Sada lebdi
+   IZNAD trake (bottom:100%), pa se ispod nje nista ne pomera.
+
+   I govori vise: kruzic u boji retkosti, ime, jedna recenica sta radi, i
+   nacin uzimanja. Do sada je pisalo samo ime. */
+.pickup-card {
+  position: absolute; left: var(--s3); right: var(--s3); bottom: 100%;
+  margin-bottom: var(--s2);
+  display: flex; align-items: center; gap: var(--s3); text-align: left;
+  padding: var(--s2) var(--s3); border-radius: var(--r-lg);
+  background: var(--ink-1); border: 1px solid var(--rc, var(--gold));
+  box-shadow: 0 10px 28px rgba(0,0,0,.55);
+  animation: pickIn .18s var(--ease-out) both;
 }
-.action-btn.gold { background: var(--gold); }
-.action-btn:active { transform: scale(.99); }
-.action-btn:disabled { opacity: .4; }
+.pickup-card[hidden] { display: none; }
+@keyframes pickIn { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) { .pickup-card { animation: none; } }
+.pickup-card .pi {
+  flex: none; width: 46px; height: 46px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--rc, var(--gold));
+  background: color-mix(in srgb, var(--rc, var(--gold)) 15%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--rc, var(--gold)) 55%, transparent);
+}
+.pickup-card .pt { flex: 1; min-width: 0; }
+.pickup-card .pn { font-size: var(--fs-md); font-weight: 800; line-height: 1.2; }
+.pickup-card .pd { font-size: var(--fs-xs); color: var(--text-2); line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pickup-card .pw {
+  flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  color: var(--rc, var(--gold)); font-size: 10px; font-weight: 700; letter-spacing: .04em;
+}
+.pickup-card:active { transform: scale(.99); }
+.pickup-card:disabled { opacity: .5; }
+
+/* duh sakuplja iskre istim dugmetom, samo je uvek zlatan */
+.pickup-card.spark { border-color: var(--gold); --rc: var(--gold); }
 
 .dock { display: grid; grid-template-columns: 1fr 1fr 72px 1fr 1fr; gap: 6px; align-items: center; }
 .dockbtn {
@@ -181,18 +211,39 @@
 .mk-blip { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--gold); opacity: .7; }
 
 /* ── inventar ── */
-.inv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s2); }
+/* ── inventar ──
+   Bila je resetka 4x4 sa sicusnim imenima ispod ikonice: na 84 px se ime lomi
+   u tri reda i nista se ne procita. Sada je SPISAK: krupna ikonica u boji
+   retkosti, ime, i jedna recenica sta predmet radi — isto sto pise i na ponudi
+   za uzimanje, pa se uci jednom. */
+.inv-grid { display: flex; flex-direction: column; gap: var(--s2); }
 .inv-slot {
-  aspect-ratio: 1; border-radius: var(--r-md); border: 1px solid var(--line-2);
-  background: var(--ink-2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  position: relative; padding: 4px;
+  display: flex; align-items: center; gap: var(--s3); width: 100%; text-align: left;
+  padding: var(--s2) var(--s3); border-radius: var(--r-md);
+  border: 1px solid var(--line-2); background: var(--ink-2); position: relative;
 }
-.inv-slot.has { border-color: var(--rc); }
-.inv-slot .ic { color: var(--rc, var(--text-3)); }
-.inv-slot .nm { font-size: 10px; text-align: center; line-height: 1.15; color: var(--text-2); }
-.inv-slot .qty { position: absolute; top: 3px; right: 5px; font-size: 11px; font-weight: 700; color: var(--text); }
-.inv-slot.empty { border-style: dashed; opacity: .4; }
+.inv-slot.has { border-color: color-mix(in srgb, var(--rc) 55%, transparent); }
+.inv-slot .ii {
+  flex: none; width: 42px; height: 42px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--rc, var(--text-3));
+  background: color-mix(in srgb, var(--rc, var(--text-3)) 14%, transparent);
+}
+.inv-slot .it { flex: 1; min-width: 0; }
+.inv-slot .nm { font-size: var(--fs-sm); font-weight: 700; line-height: 1.2; }
+.inv-slot .ds { font-size: var(--fs-xs); color: var(--text-3); line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.inv-slot .qty {
+  flex: none; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 13px;
+  display: grid; place-items: center; font-size: var(--fs-sm); font-weight: 800;
+  background: var(--ink-3); border: 1px solid var(--line-2); color: var(--text);
+}
+.inv-slot.empty {
+  border-style: dashed; opacity: .45; justify-content: center;
+  font-size: var(--fs-xs); color: var(--text-3); min-height: 44px;
+}
 .weapon-slot { display: flex; align-items: center; gap: var(--s3); padding: var(--s3); border-radius: var(--r-md); background: var(--ink-2); border: 1px solid var(--line-hi); }
+/* Prazna mesta se ne nabrajaju pojedinacno — jedan red kaze koliko ih ima. */
+.inv-free { text-align: center; font-size: var(--fs-xs); color: var(--text-3); padding: var(--s2) 0; }
 
 /* ══════════════ NIŠANJENJE ══════════════
    Najvažniji ekran u igri. Kamera preko celog ekrana, nišan u sredini, velika

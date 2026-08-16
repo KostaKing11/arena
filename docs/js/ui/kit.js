@@ -1,5 +1,5 @@
 /* UI kit: DOM sitnice, obaveštenja, fioke, tema. */
-const APP_VERSION = '0.13.7';
+const APP_VERSION = '0.14.0';
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const el = (tag, cls, html) => {
