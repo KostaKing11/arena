@@ -1,3 +1,6 @@
+> 🗄️ **Istorijski fajl — sve iz njega je odradjeno.** Ostavljen je jer objasnjava zasto neke
+> stvari izgledaju kako izgledaju. Za trenutno stanje idi na [`STANJE.md`](STANJE.md).
+
 # ARENA — promptovi za Claude Code
 
 Pet celina, poređanih po tome koliko vrede za uloženo vreme. **Šalji jedan po jedan** i

@@ -1,3 +1,6 @@
+> 🗄️ **Istorijski fajl — sve iz njega je odradjeno.** Ostavljen je jer objasnjava zasto neke
+> stvari izgledaju kako izgledaju. Za trenutno stanje idi na [`STANJE.md`](STANJE.md).
+
 # ARENA — plan za sledeću rundu
 
 Ovaj fajl je **radni nalog za sledeću sesiju**. Merodavna pravila igre su u

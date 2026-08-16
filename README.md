@@ -3,8 +3,9 @@
 GPS igra u stvarnom svetu. Telefon je mapa, inventar i oružje. Implementacija prati
 [`SPEC.md`](SPEC.md) — ta specifikacija je merodavna, ovaj fajl je uputstvo za pokretanje.
 
-> **Šta je trenutno pokvareno i šta je sledeće: [`TODO.md`](TODO.md).**
-> Tu su i utvrđeni uzroci bagova, da se ne traže dvaput.
+> **Ako počinješ iz čista mira, čitaj [`STANJE.md`](STANJE.md) prvo.** Tamo je gde smo sada,
+> šta je od SPEC-a prevaziđeno, kako se objavljuje i kako se testira na telefonu.
+> Spisak posla: [`TODO.md`](TODO.md). Ideje za dalje: [`IDEJE.md`](IDEJE.md).
 
 Statični sajt (GitHub Pages) + Firebase Realtime Database. **Nema servera.**
 
@@ -27,8 +28,9 @@ Tri pravila iz §0 drže sve na okupu:
 3. **Sat je zajednički** — `.info/serverTimeOffset`. Telefoni znaju da se razlikuju i po
    nekoliko minuta, pa se lokalni `Date.now()` nikad ne koristi za pravila igre.
 
-Borbu presuđuje `resolveRound` — čista funkcija koju oba telefona izvrše nezavisno i dobiju
-isti rezultat. Transakcija na `fights/{fid}` sprečava da se runda odigra dvaput.
+Borba više nema runde ni `fights/` — vidi [`BORBA-V4.md`](BORBA-V4.md). Napad je jedan udarac:
+nišaniš kamerom, držiš dugme koliko oružje traži, i pogodak se upisuje u `hits/`. Štetu računa
+čista funkcija `R.attackDamage`, pa je isti rezultat na svakom telefonu.
 
 ---
 
@@ -47,19 +49,35 @@ npm run test:live
 
 ## Objavljivanje
 
+**Uvek preko `bump.js`** — nikad ručno menjanje verzije:
+
+```bash
+node tools/bump.js 1.1.1
+```
+
+Upisuje verziju u `kit.js`, `sw.js`, `version.json` i u svih 26 adresa u `index.html`
+(`js/app.js?v=1.1.1`). Bez toga telefon ostaje na starom kodu i po deset minuta, jer Pages
+šalje `max-age=600`, a na hladnom startu stranica se učita pre nego što je servisni radnik
+preuzme. Detaljno objašnjenje u [`STANJE.md`](STANJE.md).
+
 ```bash
 git add -A && git commit -m "opis" && git push
 ```
 
-Pages servira granu `main`, folder `/docs`. Za minut-dva je živo.
+Pages servira granu `main`, folder `/docs`. Sačekaj da se stvarno objavi:
+
+```bash
+until curl -s "https://kostaking11.github.io/arena/version.json?cb=$RANDOM" | grep -q "1.1.1"; do sleep 8; done
+```
 
 ---
 
 ## Testiranje
 
-**Pravila igre** — 80+ provera: determinizam sveta, špil klasa, 5 faza zone, spawn predmeta,
-borba sa dometima i specijalima, glad i žeđ iz proteklog vremena, bekstvo, konzumiranje.
-Bez mreže i browsera:
+**Pravila igre** — 296 provera u 25 sekcija: determinizam sveta, špil klasa, 5 faza zone, spawn
+predmeta, borba v4 sa dometima i specijalima, glad i žeđ iz proteklog vremena, iskre duhova kroz
+vreme, dan i noć, mentorski zadaci i limiti, nesvest dok je ekran ugašen, arena koja se sama
+umeša. Bez mreže i browsera:
 
 ```bash
 npm test

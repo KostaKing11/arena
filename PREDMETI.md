@@ -1,3 +1,7 @@
+> ℹ️ Spisak od 41 predmeta je i dalje tacan, ali OPISI vise ne zive ovde nego u kodu:
+> `docs/js/core/i18n.js`, u `NAMES.itemDesc`. Tamo se menjaju, jer ih aplikacija prikazuje
+> na kartici za uzimanje i u inventaru.
+
 # ARENA — PREDMETI (v5)
 
 Pisano za **borbu v4**: nema stanja borbe, nema rundi, nema bekstva — napadaš tako što

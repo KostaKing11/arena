@@ -1,3 +1,6 @@
+> 🗄️ **Istorijski fajl — sve iz njega je odradjeno.** Ostavljen je jer objasnjava zasto neke
+> stvari izgledaju kako izgledaju. Za trenutno stanje idi na [`STANJE.md`](STANJE.md).
+
 # ARENA — popravke posle prvih 5 promptova
 
 Kod prolazi `npm test` (172 provere) i sintaksa je čista. Sve što sledi su stvari koje

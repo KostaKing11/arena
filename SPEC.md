@@ -1,3 +1,8 @@
+> ⚠️ **Ova specifikacija je delimično prevaziđena.** Sekcije 7, 8 i 9 (borba) zamenjuje
+> [`BORBA-V4.md`](BORBA-V4.md). Dan i noć, događaji, nebo, mentor, duhovi i savezi rade
+> drugačije nego što ovde piše — tačan spisak razlika je u [`STANJE.md`](STANJE.md).
+> Sve ostalo iz ovog fajla i dalje važi.
+
 # ARENA — kompletna specifikacija v3
 
 IRL Igre gladi. Web aplikacija (PWA), Firebase Realtime Database, bez servera.
