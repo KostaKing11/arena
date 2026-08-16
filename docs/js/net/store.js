@@ -20,11 +20,27 @@ const Store = (() => {
   const on = (t, f) => { (handlers[t] = handlers[t] || []).push(f); return API; };
 
   const EMU = new URLSearchParams(location.search).get('emu') === '1';
+  /* Zapis o partiji u kojoj si. Igra se na ulici: ekran se gasi, prođe pet
+     minuta, upališ ga — i moraš da nastaviš tamo gde si stao, bez lobija i bez
+     pitanja. `atMs` je tu da se vidi koliko je zapis star. */
+  const SESS_KEY = 'arena.session';
   const sess = {
-    get code() { return localStorage.getItem('arena.code'); },
-    get pid() { return localStorage.getItem('arena.pid'); },
-    save(c, p) { localStorage.setItem('arena.code', c); localStorage.setItem('arena.pid', p); },
-    clear() { localStorage.removeItem('arena.code'); localStorage.removeItem('arena.pid'); },
+    get all() {
+      try { return JSON.parse(localStorage.getItem(SESS_KEY) || 'null'); } catch { return null; }
+    },
+    get code() { return (sess.all || {}).room || null; },
+    get pid() { return (sess.all || {}).pid || null; },
+    get atMs() { return (sess.all || {}).atMs || 0; },
+    save(c, p) {
+      try { localStorage.setItem(SESS_KEY, JSON.stringify({ room: c, pid: p, atMs: Clock.now() })); } catch {}
+    },
+    /** Upiši samo ako fali ili se razlikuje — zove se iz petlje prikaza. */
+    ensure(c, p) {
+      if (!c || !p) return;
+      if (sess.code === c && sess.pid === p) return;
+      sess.save(c, p);
+    },
+    clear() { try { localStorage.removeItem(SESS_KEY); } catch {} },
   };
 
   const ref = (p) => db.ref(p ? `rooms/${code}/${p}` : `rooms/${code}`);
@@ -130,6 +146,22 @@ const Store = (() => {
     return attach();
   }
 
+  /* Povratak posle ugašenog ekrana. Slušalac se sam oporavi kad se veza vrati,
+     ali to traje — a igrač u međuvremenu gleda sliku od pre pet minuta i po
+     njoj donosi odluke. Zato se pre prvog crtanja povuče svež snimak sa
+     servera. Sat se sinhronizuje sam, preko `.info/serverTimeOffset`. */
+  async function resync() {
+    if (!roomRef) return false;
+    try {
+      const s = await roomRef.get();
+      const v = s.val();
+      if (!v) { emit('roomGone'); return false; }
+      room = v;
+      emit('room', room);
+      return true;
+    } catch { return false; }
+  }
+
   /** Gledanje sobe bez igranja — mentor i gledalac nemaju svoj players/{pid}. */
   async function watchRoom(c) {
     c = String(c || '').toUpperCase().trim();
@@ -146,17 +178,25 @@ const Store = (() => {
     return true;
   }
 
+  /* Vraća tek kad stigne PRVI snimak sobe. Ranije je vraćalo odmah, pa je
+     pozivalac koji odmah pita `state()` dobijao podrazumevani 'LOBBY' — zbog
+     toga je povratak u partiju koja traje i dalje pitao „vrati se u arenu?". */
   function attach() {
     sess.save(code, myId);
     roomRef = db.ref(`rooms/${code}`);
-    roomRef.on('value', (s) => {
-      room = s.val() || null;
-      if (!room) { emit('roomGone'); return; }
-      emit('room', room);
+    return new Promise((res) => {
+      let first = true;
+      const done = () => { if (first) { first = false; res(true); } };
+      roomRef.on('value', (s) => {
+        room = s.val() || null;
+        done();
+        if (!room) { emit('roomGone'); return; }
+        emit('room', room);
+      });
+      presence();
+      emit('joined', { code, myId });
+      setTimeout(done, 4000);              // slaba veza ne sme da zaglavi ulazak
     });
-    presence();
-    emit('joined', { code, myId });
-    return true;
   }
 
   /** Izlazak iz sobe: obriši i sebe iz baze ako igra još nije počela. */
@@ -315,7 +355,7 @@ const Store = (() => {
 
   const API = {
     connect, on, sess,
-    createRoom, joinRoom, rejoin, attach, leave, watchRoom,
+    createRoom, joinRoom, rejoin, attach, leave, watchRoom, resync,
     get ready() { return ready; }, get code() { return code; }, get myId() { return myId; },
     get room() { return room; }, get db() { return db; },
     meta, config, schedule, players, me, isHost, state, items, traps, feed,

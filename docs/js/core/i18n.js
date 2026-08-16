@@ -169,6 +169,8 @@ const I18N = {
     cooldown: 'Odmor', send: 'Pošalji', dayTime: 'Dan', nightTime: 'Noć',
     // naslov ekrana i dva čitača ekrana — ranije je pisalo bukvalno "settings"
     settings: 'Podešavanja', center: 'Centriraj',
+    noWakeLockTitle: 'Ekran će se gasiti',
+    noWakeLockBody: 'Tvoj telefon ne dozvoljava aplikaciji da drži ekran budnim. Pre izlaska podesi da se ekran ne gasi bar 10 minuta — inače ćeš propustiti napade i upozorenja o zoni.',
     sparks: 'Iskre', sparkPool: 'Zajednička kasa', buyEvent: 'Kupi događaj',
     voteNeeded: 'Treba većina glasova', gmCooldown: 'Sačekaj do sledećeg događaja',
     watching: 'Gledaš',
@@ -439,6 +441,8 @@ const I18N = {
     allyNoPos: 'Position unknown', allyAllGone: 'Nobody left who is not already with you.',
     cooldown: 'Cooldown', send: 'Send', dayTime: 'Day', nightTime: 'Night',
     settings: 'Settings', center: 'Recenter',
+    noWakeLockTitle: 'Your screen will turn off',
+    noWakeLockBody: 'This phone does not let the app keep the screen awake. Before you head out, set the screen timeout to at least 10 minutes — otherwise you will miss attacks and zone warnings.',
     sparks: 'Sparks', sparkPool: 'Shared pool', buyEvent: 'Buy event',
     voteNeeded: 'A majority vote is needed', gmCooldown: 'Wait until the next event',
     watching: 'Watching',

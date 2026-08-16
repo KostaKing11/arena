@@ -69,13 +69,24 @@ const App = (() => {
       Mentor.clearSession();          // soba više ne postoji
     }
 
-    // Povratak u sobu se NE dešava sam — pitamo (§ traženo posle testiranja)
+    /* Povratak u sobu.
+
+       Ako partija TRAJE, ne pita se ništa — igrač stoji na ulici, ugasio mu se
+       ekran ili je aplikacija ispala iz memorije, i mora nazad pravo u igru.
+       Pitanje bi značilo da svaki pogrešan tap izbacuje iz partije.
+
+       Ako partija NE traje (lobi ili kraj), pitanje ostaje: tu se stiže i
+       slučajno, a ulazak u tuđi lobi nije bezazlen. */
     if (Store.sess.code && Store.sess.pid) {
-      const want = await askRejoin(Store.sess.code);
-      if (want) {
-        const okr = await Store.rejoin(Store.sess.code, Store.sess.pid);
-        if (okr) { booted = true; Engine.start(); route(); return; }
-        toast(T('roomNotFound'), 'danger');
+      const okr = await Store.rejoin(Store.sess.code, Store.sess.pid);
+      if (okr) {
+        const s = Store.state();
+        if (s === 'PREP' || s === 'LIVE' || s === 'FINAL_TWO') {
+          booted = true; Engine.start(); route();
+          return;
+        }
+        if (await askRejoin(Store.sess.code)) { booted = true; Engine.start(); route(); return; }
+        await Store.leave();
       }
       Store.sess.clear();          // "Ne" briše sesiju, pa se više ne pita
     }
@@ -102,6 +113,7 @@ const App = (() => {
   /** Nazad na početak, ali bez gubljenja `test`/`emu` — inače te izlazak iz
       sobe u test režimu izbaci iz test režima. */
   function goHome() {
+    Wake.off();                              // van partije ekran sme da se gasi
     const keep = new URLSearchParams();
     for (const k of ['test', 'emu']) if (params.get(k)) keep.set(k, params.get(k));
     const q = keep.toString();
@@ -157,6 +169,42 @@ const App = (() => {
       const s = Store.state();
       if (s === 'LIVE' || s === 'FINAL_TWO') { e.preventDefault(); e.returnValue = T('leaveWarning'); }
     });
+    document.addEventListener('visibilitychange', onVisibility);
+  }
+
+  /* ───────────────── odlazak i povratak iz pozadine ─────────────────
+     Ekran se gasi, prođe pet minuta, upališ ga. Dve stvari moraju da rade:
+
+     1. Telefon pri odlasku prijavi `hiddenAtMs`. Dok to stoji, brojač nesvesti
+        kod domaćina miruje — inače bi svako zaključavanje ekrana obaralo
+        igrača u nesvest, jer skrivena aplikacija ne piše ništa.
+     2. Pri povratku se pre prvog crtanja povlači svež snimak sobe. Slušalac se
+        i sam oporavi kad se veza vrati, ali to traje, a igrač u međuvremenu
+        gleda zamrznutu sliku od pre pet minuta i po njoj donosi odluke. */
+  let hiddenAtMs = 0;
+  async function onVisibility() {
+    if (!Store.room || !Store.myId) return;
+    const playing = ['PREP', 'LIVE', 'FINAL_TWO'].includes(Store.state());
+
+    if (document.visibilityState === 'hidden') {
+      if (!playing) return;
+      hiddenAtMs = Clock.now();
+      try { await Store.updateMe({ hiddenAtMs }); } catch {}
+      return;
+    }
+
+    // vratili smo se
+    hiddenAtMs = 0;
+    try { await Store.updateMe({ hiddenAtMs: null, lastSeenMs: Store.SV() }); } catch {}
+    await Store.resync();
+    if (playing) Wake.on();
+    route();
+    const s = Screens.cur;
+    if (s === 'game') UI.renderGame(Engine.d);
+    else if (s === 'ghost') UI.renderGhost(Engine.d);
+    else if (s === 'watch') UI.renderWatch(Engine.d);
+    else if (s === 'mentor') UI.renderMentor(Engine.d);
+    else if (s === 'deploy') UI.renderDeploy(Engine.d);
   }
 
   /** Pun ekran — bez statusne trake i navigacionih dugmadi. */
@@ -315,18 +363,42 @@ const App = (() => {
     if (s === 'LOBBY') {
       // Dozvole i slika su odrađene pre ulaska; ovde ostaje samo živa provera
       // kompasa i GPS-a, i to se traži jednom po sobi.
+      // nova partija u istoj sobi vraća zapis, da povratak opet radi
+      Store.sess.ensure(Store.code, Store.myId);
       if (!me.ready) { Screens.go('prep'); UI.renderPrep(); }
-      else { Screens.go('lobby'); UI.renderLobby(); }
+      else { Screens.go('lobby'); UI.renderLobby(); warnNoWakeLock(); }
       return;
     }
     if (s === 'PREP') { Screens.go('deploy'); return; }
     if (Screens.cur === 'settings') return;                  // podešavanja se ne prekidaju
-    if (s === 'END') { Screens.go('end'); UI.renderEnd(); return; }
+    if (s === 'END') {
+      // partija je gotova: nema više čega da se vraćaš automatski
+      Store.sess.clear(); Wake.off();
+      Screens.go('end'); UI.renderEnd(); return;
+    }
 
     // nisanjenje je ekran koji se otvara namerno i sam se zatvara
     if (Screens.cur === 'aim' || Screens.cur === 'ghost' || Screens.cur === 'watch'
         || Screens.cur === 'mentor') return;
     Screens.go('game');
+  }
+
+  /* Stariji iPhone nema Wake Lock API. Tamo aplikacija ne može ništa — ali
+     igrač mora da zna pre nego što izađe napolje, da mu se ekran ne gasi nasred
+     susreta. Kaže se jednom po telefonu, u lobiju, dok još ima vremena da uđe u
+     podešavanja. */
+  const WAKE_WARNED = 'arena.wakeWarned';
+  function warnNoWakeLock() {
+    if (Wake.supported || localStorage.getItem(WAKE_WARNED)) return;
+    localStorage.setItem(WAKE_WARNED, '1');
+    const m = modal(`
+      <div class="center stack-lg">
+        <div class="goldc">${icon('alert', { size: 44 })}</div>
+        <h2>${esc(T('noWakeLockTitle'))}</h2>
+        <p class="dim">${esc(T('noWakeLockBody'))}</p>
+        <button class="btn primary lg full" id="wlOk">${esc(T('ok'))}</button>
+      </div>`);
+    $('#wlOk', m).onclick = () => m.close();
   }
 
   /* ───────────────── dozvole (§3) ─────────────────
@@ -523,16 +595,21 @@ const App = (() => {
       else if (s === 'watch') UI.renderWatch(d);
       else if (s === 'mentor') UI.renderMentor(d);
       else if (s === 'lobby') { /* lobi se osvežava na promenu sobe */ }
-      // §16 — obavezno wake lock dok igra traje
+      // §16 — obavezno wake lock dok igra traje, i otpusti ga čim se završi
       if (d.state === 'LIVE' || d.state === 'FINAL_TWO' || d.state === 'PREP') {
         Wake.on();
         // Model za detekciju osoba se povlači ~20 s. Ako bismo čekali prvo
         // otvaranje kamere, prvi susret bi prošao bez tog filtera — zato ga
         // vučemo unapred, čim krene priprema.
         if (Encounter.detectorState === 'idle') Encounter.loadDetector();
-      }
+      } else Wake.off();
     }
-    if (kind === 'died') { toast(T('youDied'), 'danger', 'skull'); Haptics.fire('death'); }
+    if (kind === 'died') {
+      toast(T('youDied'), 'danger', 'skull'); Haptics.fire('death');
+      // mrtvom ekran više ne mora da gori, a zapis o partiji nema šta da čuva
+      Wake.off();
+      Store.sess.clear();
+    }
     // zadatak od mentora: obe strane moraju da vide ishod, i uspeh i istek
     if (kind === 'questDone') {
       toast(`${T('questDoneMsg')} · +${R.QUEST_HEAL} ${T('hp').toLowerCase()}`, 'good', 'scroll');

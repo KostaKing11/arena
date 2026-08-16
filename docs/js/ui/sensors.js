@@ -149,14 +149,36 @@ const Compass = (() => {
 })();
 
 /* ───────────────────────── ekran da ne zaspi (§21) ───────────────────────── */
+/* Ekran ne sme da se gasi dok partija traje: telefon je u ruci, na ulici, i
+   svako gašenje znači promašen napad ili propušteno upozorenje o zoni.
+
+   Zaključavanje se GUBI svaki put kad korisnik prebaci aplikaciju, pa se mora
+   tražiti iznova pri povratku — ali samo ako je i dalje potrebno. Zato `wanted`:
+   bez njega bi se zaključavanje uzimalo i kad se vratiš na početni ekran.
+
+   `supported` je za stariji iOS koji API nema — tamo se igraču jednom kaže da
+   ekran mora sam da drži budnim. Nijedna greška ne sme da obori aplikaciju. */
 const Wake = (() => {
-  let lock = null;
+  let lock = null, wanted = false;
+  const supported = 'wakeLock' in navigator;
+
   async function on() {
-    try { if ('wakeLock' in navigator && !lock) { lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', () => { lock = null; }); } } catch {}
+    wanted = true;
+    if (!supported || lock || document.visibilityState !== 'visible') return;
+    try {
+      lock = await navigator.wakeLock.request('screen');
+      lock.addEventListener('release', () => { lock = null; });
+    } catch { lock = null; }
   }
-  function off() { try { if (lock) lock.release(); } catch {} lock = null; }
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && lock === null) on(); });
-  return { on, off, get active() { return !!lock; } };
+  function off() {
+    wanted = false;
+    try { if (lock) lock.release(); } catch {}
+    lock = null;
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && wanted && !lock) on();
+  });
+  return { on, off, get active() { return !!lock; }, get supported() { return supported; } };
 })();
 
 /* ───────────────────────── hodanje tapom (samo test) ─────────────────────────

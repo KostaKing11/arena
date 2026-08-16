@@ -594,6 +594,22 @@
   }
 
   /* ═══════════════════ 17. MENTOR ═══════════════════ */
+  /* ═══════════════════ 21. NESVEST ═══════════════════
+     Ko tri minuta ne javi ništa, pada u nesvest — i time se otkrije svima na
+     mapi. To je kazna za onog ko je izgubio vezu ili otišao kući.
+
+     Ali igra se na ulici i ekran se gasi sam. Dok je aplikacija skrivena GPS ne
+     radi i telefon ne piše ništa, pa bi svako zaključavanje ekrana obaralo
+     igrača u nesvest. Zato telefon pri odlasku u pozadinu prijavi `hiddenAtMs`
+     i dok to stoji, brojač miruje. Nije rupa: nesvest nije zaklon nego kazna,
+     pa nema razloga da je iko traži. */
+  const UNCONSCIOUS_MS = 180000;
+  function isUnconscious(p, nowMs) {
+    if (!p || p.isBot) return false;
+    if (p.hiddenAtMs) return false;                       // brojač stoji
+    return !!(p.lastSeenMs && nowMs - p.lastSeenMs > UNCONSCIOUS_MS);
+  }
+
   /* ═══════════════════ 17b. MENTOR v2 ═══════════════════
      Naklonost je ranije dolazila od minigejmova na mentorovom telefonu, pa
      mentor nikad nije ni gledao partiju — farmao je poene i slao pakete u
@@ -1034,6 +1050,7 @@
     RARITY_W, CORN_RADIUS_M, EDGE_MARGIN_M, generateItems, generateArrowCaches, startPoints,
     SPARKS_PER_PLAYER, generateSparks, zoneAtPhaseSettled, SPARK_REACH_M, SPARK_ZONE_MARGIN_M, GHOST_OUTER_M,
     HALLUCINATION_MS, HALLUCINATION_POP_M, hallucinations,
+    UNCONSCIOUS_MS, isUnconscious,
     MENTOR_FAVOR, QUESTS, QUEST_IDS, QUEST_TTL_MS, QUEST_HEAL, QUEST_MOVE_M, QUEST_FED,
     questOffer, questSatisfied, questExpired, mentorLimits, weaponRarity,
     PACKAGE_COSTS, PACKAGE_COOLDOWN_MS, PACKAGE_DROP_M, PACKAGE_TIERS,

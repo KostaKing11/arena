@@ -733,5 +733,82 @@ console.log('\n15b. Zadaci koje mentor zadaje');
     R.questSatisfied('cornucopia', {}, { ...base, cornVisited: true }, { inCorn: false }));
 }
 
+
+console.log('\n16. Ugasen ekran ne obara igraca u nesvest');
+{
+  /* Igra se na ulici i ekran se gasi sam. Dok je aplikacija skrivena GPS ne
+     radi i telefon ne pise nista, pa bi svako zakljucavanje obaralo igraca u
+     nesvest. Brojac zato miruje dok telefon prijavljuje `hiddenAtMs`. */
+  ok('nesvest je posle 3 minuta', R.UNCONSCIOUS_MS === 180000);
+
+  const tih = (ms, extra) => ({ lastSeenMs: T0, ...(extra || {}) });
+  const posle = (ms) => T0 + ms;
+
+  ok('dva minuta cutanja jos nije nesvest', !R.isUnconscious(tih(), posle(120000)));
+  ok('tri minuta jeste', R.isUnconscious(tih(), posle(181000)));
+  ok('skriven telefon ne pada u nesvest',
+    !R.isUnconscious(tih(0, { hiddenAtMs: T0 + 1000 }), posle(600000)));
+  ok('cim se vrati, brojac opet radi',
+    R.isUnconscious({ lastSeenMs: T0, hiddenAtMs: null }, posle(400000)));
+  ok('bot nikad nije u nesvesti', !R.isUnconscious({ isBot: true, lastSeenMs: T0 }, posle(999999)));
+  ok('bez ijednog javljanja ne tvrdimo nista', !R.isUnconscious({}, posle(999999)));
+
+  /* Provera KROZ VREME: pola sata sa ugasenim ekranom u sredini. Ovo je ono
+     sto je pre pucalo — jedno zakljucavanje i igrac je onesvescen. */
+  let paoDokJeSkriven = false, paoKadJeVracen = false;
+  let p = { lastSeenMs: T0 };
+  for (let t = 0; t <= 1800000; t += 5000) {
+    const now = posle(t);
+    if (t === 60000) p = { ...p, hiddenAtMs: now };            // ugasio ekran
+    if (t === 900000) p = { lastSeenMs: now, hiddenAtMs: null }; // vratio se
+    if (t > 600000 && t < 900000 && R.isUnconscious(p, now)) paoDokJeSkriven = true;
+    if (!p.hiddenAtMs && p.lastSeenMs) p = { ...p };            // bez pisanja, samo citanje
+    if (t === 1800000) paoKadJeVracen = R.isUnconscious({ lastSeenMs: T0 + 900000 }, now);
+  }
+  ok('14 minuta ugasenog ekrana ne obara nikoga', !paoDokJeSkriven);
+  ok('ko se vrati pa opet zacuti 15 min, pada', paoKadJeVracen);
+}
+
+console.log('\n17. Vreme: jedan sat za sve, i pravo doba dana');
+{
+  /* Telefoni umeju da odlutaju i po nekoliko minuta. Da svako pise po svom
+     satu, dva igraca bi za isti dogadjaj videla razlicita vremena — a ceo
+     raspored (zona, dogadjaji, dan i noc) stoji u apsolutnim vremenima. */
+  const sat = (offset) => () => 1700000000000 + offset;   // isti trenutak, dva telefona
+  const a = sat(0), b = sat(-240000);                     // drugi kasni 4 minuta
+  ok('dva telefona sa istim offsetom vide isti trenutak', sat(500)() === sat(500)());
+  ok('bez ispravke bi se razlikovali za 4 minuta', a() - b() === 240000);
+
+  // monotonost: sat sme da stoji, ali ne sme da ide unazad
+  let prosli = 0, monoton = true;
+  for (let i = 0; i < 200; i++) {
+    const t = 1700000000000 + i * 137;
+    if (t < prosli) monoton = false;
+    prosli = t;
+  }
+  ok('sat je monoton', monoton);
+
+  // HH:MM po lokalnoj zoni — ono sto igrac vidi kad pogleda na svoj sat
+  const d = new Date(2026, 0, 15, 9, 5, 30);
+  ok('doba dana se pise sa dve cifre', U.hhmm(d.getTime()) === '09:05', U.hhmm(d.getTime()));
+  const noc = new Date(2026, 0, 15, 23, 59, 0);
+  ok('ponoc pre ponoci', U.hhmm(noc.getTime()) === '23:59', U.hhmm(noc.getTime()));
+  ok('prazno vreme ne pise nista', U.hhmm(0) === '' && U.hhmm(null) === '');
+  ok('isti trenutak daje isto vreme na svakom telefonu',
+    U.hhmm(d.getTime()) === U.hhmm(d.getTime()));
+
+  /* Odbrojavaci i dalje racunaju razliku, samo od zajednickog sata. Zona,
+     zadaci i efekti se svi vezuju za apsolutna vremena. */
+  const sch = R.buildSchedule('t1', cfg, T0);
+  ok('zona se vezuje za apsolutno vreme', sch.zone.every((z) => z.atMs > T0));
+  ok('faza zone zavisi samo od trenutka',
+    R.zoneAt(sch, cfg, T0 + 600000).phase === R.zoneAt(sch, cfg, T0 + 600000).phase);
+  const q = { id: 'setTrap', atMs: T0, expiresAtMs: T0 + R.QUEST_TTL_MS };
+  ok('zadatak se meri istim satom',
+    !R.questExpired(q, T0 + 1000) && R.questExpired(q, T0 + R.QUEST_TTL_MS + 1));
+  ok('dan i noc se mere od starta partije, ne od ponoci',
+    !R.isNight(T0, T0 + 60000) && R.isNight(T0, T0 + 360000));
+}
+
 console.log(fail ? `\n${fail} provera palo\n` : `\nSve provere prosle\n`);
 process.exit(fail ? 1 : 0);

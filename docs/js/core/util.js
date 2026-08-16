@@ -125,6 +125,16 @@
     const h = Math.floor(sec / 3600);
     return h > 0 ? `${h}:${String(Math.floor(sec / 60) % 60).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}` : mmss(sec);
   }
+  /* Doba dana, HH:MM, po lokalnoj zoni telefona.
+     Igrači stoje napolju i gledaju na sat — „12:41" im govori više nego
+     „18:04 od starta". Ulaz je APSOLUTNO vreme sa servera (Clock.now), pa svi
+     vide isti trenutak i kad im telefoni odlutaju. */
+  function hhmm(atMs) {
+    if (!atMs) return '';
+    const d = new Date(atMs);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
   const CODE_A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const roomCode = () => Array.from({ length: 5 }, () => CODE_A[Math.floor(Math.random() * CODE_A.length)]).join('');
 
@@ -140,6 +150,6 @@
   return {
     hash32, mulberry32, rngFor, pick, shuffle, weighted,
     R_E, toRad, toDeg, dist, bearing, destPoint, pointInCircle, angleDiff, distToLine, scatter,
-    clamp, lerp, lerpPoint, uid, mmss, hhmmss, roomCode, smoothPos,
+    clamp, lerp, lerpPoint, uid, mmss, hhmmss, hhmm, roomCode, smoothPos,
   };
 });

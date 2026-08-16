@@ -284,11 +284,18 @@ const Engine = (() => {
     }
     if (meta.state === 'FINAL_TWO' && aliveIds.length <= 1) await endGame(aliveIds[0]);
 
-    // onesvešćeni posle 3 min bez veze (§21)
+    /* Onesvešćen posle 3 min bez veze (§21) — ali NE i onaj kome se prosto
+       ugasio ekran. Dok je aplikacija skrivena GPS ne radi i telefon ne piše,
+       pa bi svako zaključavanje ekrana obaralo igrača u nesvest. Igrač zato pri
+       odlasku u pozadinu sam prijavi `hiddenAtMs`, i dok to stoji brojač miruje.
+
+       Nije rupa: nesvest je kazna (otkriva te svima na mapi), ne zaklon —
+       niko neće skrivati aplikaciju da bi je izbegao. Ostaje kazna za onog ko
+       je stvarno izgubio vezu ili otišao kući. */
     for (const id of aliveIds) {
       const p = P[id];
       if (p.isBot) continue;
-      const gone = p.lastSeenMs && now - p.lastSeenMs > 180000;
+      const gone = R.isUnconscious(p, now);
       if (gone && !p.unconscious) await Store.ref(`players/${id}/unconscious`).set(true);
       if (!gone && p.unconscious) await Store.ref(`players/${id}/unconscious`).remove();
     }

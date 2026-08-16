@@ -1225,12 +1225,11 @@ const UI = (() => {
       .filter((f) => f.scope !== 'ghosts' || ghost)
       .filter((f) => f.scope !== 'self' || f.subjectId === Store.myId)
       .sort((a, b) => b.atMs - a.atMs).slice(0, 60);
-    const t0 = Store.meta().startedAtMs || 0;
     sheet(T('feed'), `<div>${list.map((f) => `
       <div class="feed-item ${f.type === 'death' ? 'death' : f.type === 'zone' ? 'zone' : 'event'}">
         <span class="fic">${icon(feedIcon(f), { size: 16 })}</span>
         <span class="ft">${esc(feedText(f))}</span>
-        <span class="fw">${t0 ? U.mmss(Math.max(0, (f.atMs - t0) / 1000)) : ''}</span>
+        <span class="fw">${U.hhmm(f.atMs)}</span>
       </div>`).join('') || `<p class="dim center">—</p>`}</div>`);
   }
 
@@ -1770,7 +1769,6 @@ const UI = (() => {
     ghostKey = key;
 
     const P = Store.players();
-    const t0 = Store.meta().startedAtMs || 0;
     $('#ghostBody').innerHTML = msgs.length
       ? `<div class="chat">${msgs.map((m) => {
           const mine = m.by === Store.myId;
@@ -1778,7 +1776,7 @@ const UI = (() => {
           return `<div class="msg ${mine ? 'mine' : ''}">
             ${mine ? '' : `<span class="who">${esc(who)}</span>`}
             <span class="tx">${esc(m.text)}</span>
-            <span class="at">${t0 ? U.mmss(Math.max(0, (m.atMs - t0) / 1000)) : ''}</span>
+            <span class="at">${U.hhmm(m.atMs)}</span>
           </div>`;
         }).join('')}</div>`
       : `<div class="card center stack">
@@ -2285,7 +2283,6 @@ const UI = (() => {
         </div>`;
 
     const log = Mentor.favorLog();
-    const t0 = Store.meta().startedAtMs || 0;
 
     $('#mentorBody').innerHTML = `
       <div class="card">
@@ -2330,7 +2327,7 @@ const UI = (() => {
             ${icon(FAVOR_ICON[e.reason] || 'spark', { size: 16 })}
             <span class="grow">${esc(T('favor_' + e.reason))}</span>
             <b>+${e.amount}</b>
-            <span class="when">${t0 ? U.mmss(Math.max(0, (e.atMs - t0) / 1000)) : ''}</span>
+            <span class="when">${U.hhmm(e.atMs)}</span>
           </div>`).join('')
           : `<p class="dim tiny" style="margin:0">${esc(T('noFavorYet'))}</p>`}
       </div>
