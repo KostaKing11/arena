@@ -3,12 +3,12 @@
    keš prvo za CDN biblioteke. Baza, prijava i pločice mape se NE keširaju.
    Kad menjaš kod, podigni VERSION. */
 
-const VERSION = 'arena-v29';
+const VERSION = 'arena-v30';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
 const PRECACHE = [
-  './', 'index.html', 'manifest.json',
+  './', 'index.html', 'manifest.json', 'version.json',
   'css/tokens.css', 'css/base.css', 'css/components.css', 'css/screens.css', 'css/game.css',
   'js/firebase-config.js',
   'js/core/util.js', 'js/core/rules.js', 'js/core/i18n.js', 'js/core/icons.js', 'js/core/haptics.js',

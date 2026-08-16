@@ -17,6 +17,7 @@ const App = (() => {
     wireStatic();
     wireBack();
     registerSW();
+    checkVersion();
     Nav.init();
     Screens.go('home');
     // Ponuda za instalaciju tek kad korisnik vidi ekran — ranije je iskakala
@@ -195,6 +196,7 @@ const App = (() => {
 
     // vratili smo se
     hiddenAtMs = 0;
+    checkVersion();
     try { await Store.updateMe({ hiddenAtMs: null, lastSeenMs: Store.SV() }); } catch {}
     await Store.resync();
     if (playing) Wake.on();
@@ -246,14 +248,43 @@ const App = (() => {
   function registerSW() {
     if (!('serviceWorker' in navigator)) return;
     navigator.serviceWorker.register('/arena/sw.js', { scope: '/arena/', updateViaCache: 'none' })
-      .then((reg) => reg.addEventListener('updatefound', () => {
-        const sw = reg.installing;
-        if (!sw) return;
-        sw.addEventListener('statechange', () => {
-          if (sw.state === 'installed' && navigator.serviceWorker.controller) sw.postMessage('SKIP_WAITING');
+      .then((reg) => {
+        reg.update().catch(() => {});
+        reg.addEventListener('updatefound', () => {
+          const sw = reg.installing;
+          if (!sw) return;
+          sw.addEventListener('statechange', () => {
+            if (sw.state === 'installed' && navigator.serviceWorker.controller) sw.postMessage('SKIP_WAITING');
+          });
         });
-      }))
+      })
       .catch(() => {});
+  }
+
+  /* ───────────────── provera verzije ─────────────────
+     Na hladnom startu stranica ume da se učita PRE nego što je servisni radnik
+     preuzme, pa fajlove servira HTTP keš pregledača — a GitHub Pages šalje
+     `max-age=600`, što znači do deset minuta starog koda.
+
+     U igri u kojoj svi telefoni izvode isti svet iz istih pravila to nije
+     kozmetika: dva igrača na dve verzije vide dve različite zone. Zato se na
+     startu i pri svakom povratku iz pozadine pita `version.json` (bez keša) i,
+     ako se razlikuje, stranica se JEDNOM osveži. Zastavica u `sessionStorage`
+     drži da se ne uđe u petlju ako objava zapne na pola. */
+  const RELOADED = 'arena.reloadedFor';
+  async function checkVersion() {
+    try {
+      const r = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (!r.ok) return;
+      const live = (await r.json()).v;
+      if (!live || live === APP_VERSION) { sessionStorage.removeItem(RELOADED); return; }
+      if (sessionStorage.getItem(RELOADED) === live) return;   // već smo probali
+      sessionStorage.setItem(RELOADED, live);
+      const s = Store.state();
+      // usred partije ne rušimo ekran bez najave — ali ni ne ostajemo na starom
+      if (s === 'LIVE' || s === 'FINAL_TWO') toast(T('updating'), 'gold', 'refresh');
+      setTimeout(() => location.reload(), s === 'LIVE' || s === 'FINAL_TWO' ? 1200 : 0);
+    } catch { /* bez mreže se ne osvežava */ }
   }
 
   const myName = () => {
