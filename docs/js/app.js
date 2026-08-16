@@ -116,7 +116,7 @@ const App = (() => {
   function goHome() {
     Wake.off();                              // van partije ekran sme da se gasi
     const keep = new URLSearchParams();
-    for (const k of ['test', 'emu']) if (params.get(k)) keep.set(k, params.get(k));
+    for (const k of ['test', 'emu', 'v']) if (params.get(k)) keep.set(k, params.get(k));
     const q = keep.toString();
     location.href = location.pathname + (q ? '?' + q : '');
   }
@@ -280,10 +280,18 @@ const App = (() => {
       if (!live || live === APP_VERSION) { sessionStorage.removeItem(RELOADED); return; }
       if (sessionStorage.getItem(RELOADED) === live) return;   // već smo probali
       sessionStorage.setItem(RELOADED, live);
+
+      /* Obično `location.reload()` NIJE dovoljno: index.html sam dolazi iz
+         HTTP keša pregledača, pa se ponovo učita ista stara stranica sa istim
+         starim adresama i verzija se nikad ne pomeri. Zato se ide na adresu sa
+         `?v=`, koju keš ne poznaje — tek tada stigne nov index.html, a sa njim
+         i nove adrese ostalih fajlova. */
+      const u = new URL(location.href);
+      u.searchParams.set('v', live);
       const s = Store.state();
       // usred partije ne rušimo ekran bez najave — ali ni ne ostajemo na starom
       if (s === 'LIVE' || s === 'FINAL_TWO') toast(T('updating'), 'gold', 'refresh');
-      setTimeout(() => location.reload(), s === 'LIVE' || s === 'FINAL_TWO' ? 1200 : 0);
+      setTimeout(() => location.replace(u.toString()), s === 'LIVE' || s === 'FINAL_TWO' ? 1200 : 0);
     } catch { /* bez mreže se ne osvežava */ }
   }
 
